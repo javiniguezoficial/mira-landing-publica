@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Menu, X, ChevronRight, User, Play, TrendingUp, TrendingDown, ArrowRight, Facebook, Instagram, Linkedin, Youtube } from 'lucide-react';
+import { Menu, X, ChevronRight, User, Play, TrendingUp, TrendingDown, ArrowRight, Facebook, Instagram, Linkedin, Youtube, Mail, Phone } from 'lucide-react';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -24,8 +24,8 @@ const MiraLogo = ({ className }: { className?: string }) => (
   />
 );
 
-const Button = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'outline' | 'ghost', size?: 'sm' | 'md' | 'lg' }>(
-  ({ className, variant = 'primary', size = 'md', ...props }, ref) => {
+const Button = React.forwardRef<HTMLButtonElement | HTMLAnchorElement, any>(
+  ({ className, variant = 'primary', size = 'md', href, ...props }, ref) => {
     const variants = {
       primary: 'bg-mira-primary text-white hover:bg-mira-secondary shadow-lg shadow-mira-primary/20 hover:shadow-mira-secondary/30 rounded-lg',
       secondary: 'bg-gradient-to-r from-mira-secondary to-mira-accent text-white hover:opacity-90 shadow-md rounded-lg',
@@ -37,15 +37,22 @@ const Button = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HT
       md: 'h-10 px-5 text-sm',
       lg: 'h-12 px-8 text-base',
     };
+    const classes = cn(
+      'inline-flex items-center justify-center font-bold tracking-wide transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mira-primary disabled:pointer-events-none disabled:opacity-50 active:scale-95',
+      variants[variant as keyof typeof variants],
+      sizes[size as keyof typeof sizes],
+      className
+    );
+
+    if (href) {
+      return (
+        <a ref={ref as any} href={href} className={classes} {...props} />
+      );
+    }
     return (
       <button
-        ref={ref}
-        className={cn(
-          'inline-flex items-center justify-center font-bold tracking-wide transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mira-primary disabled:pointer-events-none disabled:opacity-50 active:scale-95',
-          variants[variant],
-          sizes[size],
-          className
-        )}
+        ref={ref as any}
+        className={classes}
         {...props}
       />
     );
@@ -81,7 +88,7 @@ const Navbar = ({ onLoginClick, onSignupClick, onHomeClick }: { onLoginClick?: (
 
         {/* Desktop Nav */}
         <nav className="hidden md:flex items-center gap-8">
-          {['Mercados', 'Soluciones', 'Insights', 'Precios'].map((item) => (
+          {['Mercados', 'Soluciones', 'Precios'].map((item) => (
             <a key={item} href={`#${item.toLowerCase()}`} className="text-sm font-body font-semibold text-slate-600 hover:text-mira-primary transition-colors relative group">
               {item}
               <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-mira-primary transition-all duration-300 group-hover:w-full" />
@@ -91,10 +98,10 @@ const Navbar = ({ onLoginClick, onSignupClick, onHomeClick }: { onLoginClick?: (
 
         {/* Actions */}
         <div className="hidden md:flex items-center gap-4">
-          <button onClick={onLoginClick} className="text-sm font-body font-semibold text-slate-600 hover:text-mira-primary transition-colors">
+          <a href="#contacto" onClick={onLoginClick as any} className="text-sm font-body font-semibold text-slate-600 hover:text-mira-primary transition-colors">
             Iniciar sesión
-          </button>
-          <Button variant="primary" size="sm" onClick={onSignupClick}>
+          </a>
+          <Button variant="primary" size="sm" href="#contacto" onClick={onSignupClick as any}>
             Empezar prueba gratuita
           </Button>
         </div>
@@ -115,7 +122,7 @@ const Navbar = ({ onLoginClick, onSignupClick, onHomeClick }: { onLoginClick?: (
             className="absolute top-full left-0 right-0 bg-white/95 backdrop-blur-xl border-b border-slate-200 p-4 shadow-lg md:hidden overflow-hidden"
           >
             <nav className="flex flex-col gap-4">
-              {['Mercados', 'Soluciones', 'Insights', 'Precios'].map((item) => (
+              {['Mercados', 'Soluciones', 'Precios'].map((item) => (
                 <a
                   key={item}
                   href={`#${item.toLowerCase()}`}
@@ -126,10 +133,10 @@ const Navbar = ({ onLoginClick, onSignupClick, onHomeClick }: { onLoginClick?: (
                 </a>
               ))}
               <hr className="border-slate-100" />
-              <button onClick={() => { setIsMobileMenuOpen(false); onLoginClick?.(); }} className="text-left text-base font-body font-semibold text-slate-600 hover:text-mira-primary">
+              <a href="#contacto" onClick={(e) => { setIsMobileMenuOpen(false); onLoginClick?.(e as any); }} className="text-left text-base font-body font-semibold text-slate-600 hover:text-mira-primary">
                 Iniciar sesión
-              </button>
-              <Button className="w-full" onClick={() => { setIsMobileMenuOpen(false); onSignupClick?.(); }}>Empezar prueba gratuita</Button>
+              </a>
+              <Button href="#contacto" className="w-full" onClick={(e: any) => { setIsMobileMenuOpen(false); onSignupClick?.(e); }}>Empezar prueba gratuita</Button>
             </nav>
           </motion.div>
         )}
@@ -181,8 +188,8 @@ const Footer = ({
             <ul className="space-y-3 text-sm font-body text-slate-600">
               <li><button onClick={onSobreNosotrosClick} className="hover:text-mira-primary transition-colors">Sobre nosotros</button></li>
               <li><button onClick={onContactarVentasClick} className="hover:text-mira-primary transition-colors">Contactar con ventas</button></li>
-              <li><button onClick={onLoginClick} className="hover:text-mira-primary transition-colors">Iniciar sesión</button></li>
-              <li><button onClick={onSignupClick} className="hover:text-mira-primary transition-colors">Prueba gratuita</button></li>
+              <li><a href="#contacto" onClick={onLoginClick as any} className="hover:text-mira-primary transition-colors">Iniciar sesión</a></li>
+              <li><a href="#contacto" onClick={onSignupClick as any} className="hover:text-mira-primary transition-colors">Prueba gratuita</a></li>
             </ul>
           </div>
 
@@ -495,14 +502,8 @@ const Hero = ({ onSignupClick }: { onSignupClick?: () => void }) => {
               transition={{ duration: 0.6, delay: 0.2 }}
               className="flex flex-col sm:flex-row gap-5"
             >
-              <Button size="lg" className="w-full sm:w-auto px-10 text-lg shadow-xl shadow-mira-primary/20" onClick={onSignupClick}>
+              <Button href="#contacto" size="lg" className="w-full sm:w-auto px-10 text-lg shadow-xl shadow-mira-primary/20" onClick={onSignupClick as any}>
                 Empezar prueba gratuita
-              </Button>
-              <Button variant="outline" size="lg" className="w-full sm:w-auto gap-3 group border-slate-300 hover:border-mira-primary/30" onClick={() => setIsDemoOpen(true)}>
-                <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center group-hover:bg-mira-primary group-hover:text-white transition-colors">
-                  <Play size={12} className="fill-current ml-0.5" />
-                </div>
-                <span className="font-bold">Ver demo interactiva</span>
               </Button>
             </motion.div>
 
@@ -1216,7 +1217,7 @@ const Pricing = ({ onSignupClick, onEnterpriseClick }: { onSignupClick?: () => v
             <div className="mb-8">
               <span className="text-5xl font-display font-bold text-slate-900">0€</span>
             </div>
-            <Button variant="outline" className="w-full mb-10 border-slate-300" onClick={onSignupClick}>Crear cuenta gratis</Button>
+            <Button href="#contacto" variant="outline" className="w-full mb-10 border-slate-300" onClick={onSignupClick as any}>Crear cuenta gratis</Button>
             <ul className="space-y-4 text-sm text-slate-600 font-body">
               <li className="flex items-center gap-3"><div className="w-2 h-2 rounded-full bg-slate-300" /> Disposición de todos los mercados</li>
               <li className="flex items-center gap-3"><div className="w-2 h-2 rounded-full bg-slate-300" /> Actualización mensual</li>
@@ -1240,7 +1241,7 @@ const Pricing = ({ onSignupClick, onEnterpriseClick }: { onSignupClick?: () => v
                 <span className="bg-mira-mint/20 text-emerald-700 px-2 py-0.5 rounded font-bold">15% descuento anual</span>
               )}
             </p>
-            <Button variant="primary" size="lg" className="w-full mb-10 shadow-xl shadow-mira-primary/30" onClick={onSignupClick}>Empezar prueba gratuita</Button>
+            <Button href="#contacto" variant="primary" size="lg" className="w-full mb-10 shadow-xl shadow-mira-primary/30" onClick={onSignupClick as any}>Empezar prueba gratuita</Button>
             <ul className="space-y-5 text-sm text-slate-700 font-body font-medium">
               <li className="flex items-center gap-3"><div className="w-6 h-6 rounded-full bg-mira-primary/10 text-mira-primary flex items-center justify-center text-xs font-bold">✓</div> <strong>Todo lo incluido en Starter</strong></li>
               <li className="flex items-center gap-3"><div className="w-6 h-6 rounded-full bg-mira-primary/10 text-mira-primary flex items-center justify-center text-xs font-bold">✓</div> Histórico ilimitado</li>
@@ -1293,7 +1294,7 @@ const FAQContact = ({ onContactarVentasClick }: { onContactarVentasClick?: () =>
           ))}
         </div>
 
-        <div className="bg-gradient-to-br from-slate-50 to-indigo-50/50 rounded-3xl p-10 md:p-16 text-center border border-slate-100 shadow-inner">
+        <div id="contacto" className="bg-gradient-to-br from-slate-50 to-indigo-50/50 rounded-3xl p-10 md:p-16 text-center border border-slate-100 shadow-inner">
           <h3 className="text-3xl font-heading font-bold text-slate-900 mb-6">¿Prefieres hablar con un humano?</h3>
           <p className="text-slate-600 font-body mb-10 text-lg max-w-xl mx-auto">Nuestro equipo de soporte está disponible para resolver tus dudas específicas.</p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
@@ -1383,7 +1384,7 @@ const LoginPage = ({ onHomeClick, onSignupClick }: { onHomeClick: () => void, on
 
             <div className="mt-8 text-center">
               <p className="text-sm text-slate-600">
-                ¿No tienes cuenta? <button onClick={onSignupClick} className="font-bold text-mira-primary hover:text-mira-secondary transition-colors">Empieza tu prueba gratuita</button>
+                ¿No tienes cuenta? <a href="#contacto" onClick={onSignupClick as any} className="font-bold text-mira-primary hover:text-mira-secondary transition-colors">Empieza tu prueba gratuita</a>
               </p>
             </div>
           </motion.div>
@@ -1545,7 +1546,7 @@ const SignupPage = ({ onHomeClick, onLoginClick }: { onHomeClick: () => void, on
 
             <div className="mt-8 text-center pt-6 border-t border-slate-100">
               <p className="text-sm text-slate-600">
-                ¿Ya tienes cuenta? <button onClick={onLoginClick} className="font-bold text-mira-primary hover:text-mira-secondary transition-colors">Iniciar sesión</button>
+                ¿Ya tienes cuenta? <a href="#contacto" onClick={onLoginClick as any} className="font-bold text-mira-primary hover:text-mira-secondary transition-colors">Iniciar sesión</a>
               </p>
             </div>
           </motion.div>
@@ -1645,92 +1646,54 @@ const EnterprisePage = ({ onHomeClick, onLoginClick, onSignupClick, onAvisoLegal
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-20 items-start max-w-6xl mx-auto">
             
-            {/* Contact Form Card */}
+            {/* Contact Options Card */}
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="lg:col-span-7 bg-white p-8 md:p-10 rounded-3xl border border-slate-200 shadow-2xl shadow-slate-200/50"
+              className="lg:col-span-7 bg-white p-8 md:p-10 rounded-3xl border border-slate-200 shadow-2xl shadow-slate-200/50 flex flex-col justify-center"
             >
-              <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Nombre</label>
-                    <input 
-                      type="text" 
-                      placeholder="Tu nombre completo" 
-                      className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-mira-primary focus:ring-2 focus:ring-mira-primary/20 outline-none transition-all text-sm text-slate-900"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Email profesional</label>
-                    <input 
-                      type="email" 
-                      placeholder="tu@empresa.com" 
-                      className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-mira-primary focus:ring-2 focus:ring-mira-primary/20 outline-none transition-all text-sm text-slate-900"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Empresa</label>
-                    <input 
-                      type="text" 
-                      placeholder="Nombre de tu empresa" 
-                      className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-mira-primary focus:ring-2 focus:ring-mira-primary/20 outline-none transition-all text-sm text-slate-900"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Cargo / Rol</label>
-                    <input 
-                      type="text" 
-                      placeholder="Ej. Director de Compras" 
-                      className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-mira-primary focus:ring-2 focus:ring-mira-primary/20 outline-none transition-all text-sm text-slate-900"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Número de empleados</label>
-                    <select className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-mira-primary focus:ring-2 focus:ring-mira-primary/20 outline-none transition-all text-sm text-slate-900 appearance-none">
-                      <option value="">Selecciona una opción</option>
-                      <option value="1-50">1 - 50</option>
-                      <option value="51-200">51 - 200</option>
-                      <option value="201-500">201 - 500</option>
-                      <option value="500+">Más de 500</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Mercados de interés</label>
-                    <select className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-mira-primary focus:ring-2 focus:ring-mira-primary/20 outline-none transition-all text-sm text-slate-900 appearance-none">
-                      <option value="">Selecciona una opción</option>
-                      <option value="agricola">Agrícola</option>
-                      <option value="ganadero">Ganadero</option>
-                      <option value="industrial">Industrial</option>
-                      <option value="varios">Varios mercados</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Mensaje</label>
-                  <textarea 
-                    rows={4}
-                    placeholder="¿En qué podemos ayudarte?" 
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-mira-primary focus:ring-2 focus:ring-mira-primary/20 outline-none transition-all text-sm text-slate-900 resize-none"
-                  ></textarea>
-                </div>
-
-                <div className="pt-4">
-                  <Button type="submit" className="w-full" size="lg">
-                    Solicitar demo
-                  </Button>
-                  <p className="text-[11px] text-slate-500 text-center mt-4 font-medium">
-                    Nuestro equipo suele responder en menos de 24 horas.
+              <div className="space-y-8">
+                <div className="text-center md:text-left mb-8">
+                  <h3 className="text-2xl font-heading font-bold text-slate-900 mb-3">Contacto directo</h3>
+                  <p className="text-slate-600 font-body text-sm">
+                    Nuestro equipo te responderá lo antes posible para ayudarte con tu caso.
                   </p>
                 </div>
-              </form>
+
+                <div className="space-y-4">
+                  <a 
+                    href="https://wa.me/34654800807" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-3 w-full bg-[#25D366] hover:bg-[#128C7E] text-white font-bold py-4 px-6 rounded-xl shadow-lg shadow-green-200 transition-all duration-300 hover:-translate-y-1"
+                  >
+                    <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+                    Hablar por WhatsApp
+                  </a>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
+                    <a 
+                      href="mailto:hola@miraintelligence.com" 
+                      className="flex flex-col items-center justify-center gap-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 p-6 rounded-xl transition-colors group"
+                    >
+                      <div className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-mira-primary group-hover:scale-110 transition-transform">
+                        <Mail size={20} />
+                      </div>
+                      <span className="text-sm font-bold text-slate-700">hola@miraintelligence.com</span>
+                    </a>
+
+                    <a 
+                      href="tel:+34654800807" 
+                      className="flex flex-col items-center justify-center gap-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 p-6 rounded-xl transition-colors group"
+                    >
+                      <div className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-mira-primary group-hover:scale-110 transition-transform">
+                        <Phone size={20} />
+                      </div>
+                      <span className="text-sm font-bold text-slate-700">+34 654 800 807</span>
+                    </a>
+                  </div>
+                </div>
+              </div>
             </motion.div>
 
             {/* Value Proposition Area */}
@@ -2335,6 +2298,16 @@ const SobreNosotrosPage = ({ onHomeClick, onLoginClick, onSignupClick, onAvisoLe
 export default function App() {
   const [currentPage, setCurrentPage] = useState<'home' | 'login' | 'signup' | 'enterprise' | 'aviso-legal' | 'politica-cookies' | 'terminos-condiciones' | 'politica-privacidad' | 'sobre-nosotros'>('home');
 
+  const handleContactRedirect = (e?: React.MouseEvent) => {
+    if (currentPage !== 'home') {
+      e?.preventDefault();
+      setCurrentPage('home');
+      setTimeout(() => {
+        document.getElementById('contacto')?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    }
+  };
+
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [currentPage]);
@@ -2342,7 +2315,7 @@ export default function App() {
   if (currentPage === 'login') {
     return (
       <>
-        <LoginPage onHomeClick={() => setCurrentPage('home')} onSignupClick={() => setCurrentPage('signup')} />
+        <LoginPage onHomeClick={() => setCurrentPage('home')} onSignupClick={handleContactRedirect as any} />
         <DataAnchor isFloating={true} currentPage={currentPage} />
       </>
     );
@@ -2351,7 +2324,7 @@ export default function App() {
   if (currentPage === 'signup') {
     return (
       <>
-        <SignupPage onHomeClick={() => setCurrentPage('home')} onLoginClick={() => setCurrentPage('login')} />
+        <SignupPage onHomeClick={() => setCurrentPage('home')} onLoginClick={handleContactRedirect as any} />
         <DataAnchor isFloating={true} currentPage={currentPage} />
       </>
     );
@@ -2414,18 +2387,18 @@ export default function App() {
   return (
     <>
       <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-mira-primary/20 selection:text-mira-primary">
-        <Navbar onLoginClick={() => setCurrentPage('login')} onSignupClick={() => setCurrentPage('signup')} onHomeClick={() => setCurrentPage('home')} />
+        <Navbar onLoginClick={handleContactRedirect as any} onSignupClick={handleContactRedirect as any} onHomeClick={() => setCurrentPage('home')} />
         <main>
-          <Hero onSignupClick={() => setCurrentPage('signup')} />
+          <Hero onSignupClick={handleContactRedirect as any} />
           <TrustedSources />
           <MarketIntelligence />
           <SolutionsByRole />
           <AIPrediction />
-          <NewsInsights />
-          <Pricing onSignupClick={() => setCurrentPage('signup')} onEnterpriseClick={() => setCurrentPage('enterprise')} />
+          {/* <NewsInsights /> */}
+          <Pricing onSignupClick={handleContactRedirect as any} onEnterpriseClick={() => setCurrentPage('enterprise')} />
           <FAQContact onContactarVentasClick={() => setCurrentPage('enterprise')} />
         </main>
-        <Footer onHomeClick={() => setCurrentPage('home')} onAvisoLegalClick={() => setCurrentPage('aviso-legal')} onPoliticaCookiesClick={() => setCurrentPage('politica-cookies')} onTerminosClick={() => setCurrentPage('terminos-condiciones')} onPoliticaPrivacidadClick={() => setCurrentPage('politica-privacidad')} onSobreNosotrosClick={() => setCurrentPage('sobre-nosotros')} onContactarVentasClick={() => setCurrentPage('enterprise')} onLoginClick={() => setCurrentPage('login')} onSignupClick={() => setCurrentPage('signup')} />
+        <Footer onHomeClick={() => setCurrentPage('home')} onAvisoLegalClick={() => setCurrentPage('aviso-legal')} onPoliticaCookiesClick={() => setCurrentPage('politica-cookies')} onTerminosClick={() => setCurrentPage('terminos-condiciones')} onPoliticaPrivacidadClick={() => setCurrentPage('politica-privacidad')} onSobreNosotrosClick={() => setCurrentPage('sobre-nosotros')} onContactarVentasClick={() => setCurrentPage('enterprise')} onLoginClick={handleContactRedirect as any} onSignupClick={handleContactRedirect as any} />
       </div>
       <DataAnchor isFloating={true} currentPage={currentPage} />
     </>
