@@ -1,0 +1,87 @@
+@import url('https://fonts.googleapis.com/css2?family=Comfortaa:wght@300;400;500;600;700&family=Open+Sans:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-mira-primary: #8F2E6D;
+  --color-mira-secondary: #9974E2;
+  --color-mira-accent: #CB6CE6;
+  --color-mira-highlight: #FFDE59;
+  --color-mira-cyan: #5CE1E6;
+  --color-mira-mint: #93EDA1;
+  --color-mira-dark: #1A1A2E;
+  --color-mira-charcoal: #16213E;
+
+  --font-display: "Comfortaa", "Open Sans", sans-serif; /* Fallback for Cy Grotesk Key */
+  --font-heading: "Comfortaa", sans-serif;
+  --font-body: "Open Sans", sans-serif;
+}
+
+/* Placeholder for Cy Grotesk Key @font-face */
+/* 
+@font-face {
+  font-family: 'Cy Grotesk Key';
+  src: url('/fonts/CyGroteskKey-Regular.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+}
+*/
+
+/* Custom Utilities for MIRA Visual Style */
+.bg-mesh-gradient {
+  background-color: #ffffff;
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(143, 46, 109, 0.08) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(203, 108, 230, 0.08) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(153, 116, 226, 0.05) 0px, transparent 50%),
+    radial-gradient(at 0% 50%, rgba(147, 237, 161, 0.03) 0px, transparent 50%);
+  background-attachment: fixed;
+}
+
+.bg-noise {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.04'/%3E%3C/svg%3E");
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
+}
+
+.glass-card-dark {
+  background: rgba(26, 26, 46, 0.8);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
+}
+
+.bg-agri-pattern {
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(143, 46, 109, 0.03) 0px,
+    rgba(143, 46, 109, 0.03) 1px,
+    transparent 1px,
+    transparent 12px
+  ), repeating-linear-gradient(
+    135deg,
+    rgba(143, 46, 109, 0.02) 0px,
+    rgba(143, 46, 109, 0.02) 1px,
+    transparent 1px,
+    transparent 16px
+  );
+  opacity: 1;
+}
+
+.text-gradient {
+  background: linear-gradient(135deg, #8F2E6D 0%, #6D2152 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.text-gradient-light {
+  background: linear-gradient(135deg, #CB6CE6 0%, #9974E2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
