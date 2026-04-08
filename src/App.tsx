@@ -19,7 +19,7 @@ export function cn(...inputs: ClassValue[]) {
 const MiraLogo = ({ className }: { className?: string }) => (
   <img 
     src="https://entornodev.com/descargas/Logo-Mira-Header.webp" 
-    alt="MIRA Intelligence" 
+    alt="MIRA pricing" 
     className={cn("object-contain", className)} 
   />
 );
@@ -215,7 +215,7 @@ const Footer = ({
         </div>
         
         <div className="border-t border-slate-200/60 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs font-body text-slate-500">
-          <p>&copy; {new Date().getFullYear()} MIRA Intelligence. Todos los derechos reservados.</p>
+          <p>&copy; {new Date().getFullYear()} MIRA pricing. Todos los derechos reservados.</p>
           <div className="flex gap-6">
             <span>Hecho en Europa</span>
           </div>
@@ -1673,7 +1673,7 @@ const EnterprisePage = ({ onHomeClick, onLoginClick, onSignupClick, onAvisoLegal
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
                     <a 
-                      href="mailto:hola@miraintelligence.com" 
+                      href="mailto:clientes@mirapricing.com" 
                       className="flex flex-col items-center justify-center gap-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 p-6 rounded-xl transition-colors group"
                     >
                       <div className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-mira-primary group-hover:scale-110 transition-transform">
