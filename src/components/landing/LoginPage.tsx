@@ -1,11 +1,44 @@
 'use client'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { TrendingUp } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { MiraLogo } from './MiraLogo'
 import { Button } from './Button'
 import { DataAnchor } from './DataAnchor'
+import { createClient } from '@/lib/supabase/client'
 
 export const LoginPage = () => {
+  const router = useRouter()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setLoading(true)
+
+    const supabase = createClient()
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+
+    if (signInError) {
+      setLoading(false)
+      setError('Email o contraseña incorrectos. Inténtalo de nuevo.')
+      return
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .single()
+
+    const destination = profile?.role === 'platform_admin' ? '/admin/dashboard' : '/app/dashboard'
+    router.push(destination)
+    router.refresh()
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col relative overflow-hidden">
       <div className="absolute top-0 left-0 w-full h-full bg-agri-pattern opacity-30 pointer-events-none" />
@@ -44,7 +77,7 @@ export const LoginPage = () => {
               </p>
             </div>
 
-            <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
+            <form className="space-y-5" onSubmit={handleSubmit}>
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                   Email
@@ -52,6 +85,9 @@ export const LoginPage = () => {
                 <input
                   type="email"
                   placeholder="tu@empresa.com"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-mira-primary focus:ring-2 focus:ring-mira-primary/20 outline-none transition-all text-sm text-slate-900"
                 />
               </div>
@@ -61,7 +97,7 @@ export const LoginPage = () => {
                     Contraseña
                   </label>
                   <a
-                    href="#"
+                    href="/recuperar-password"
                     className="text-xs font-bold text-mira-primary hover:text-mira-secondary transition-colors"
                   >
                     ¿Has olvidado tu contraseña?
@@ -70,11 +106,21 @@ export const LoginPage = () => {
                 <input
                   type="password"
                   placeholder="••••••••"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  required
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-mira-primary focus:ring-2 focus:ring-mira-primary/20 outline-none transition-all text-sm text-slate-900"
                 />
               </div>
-              <Button type="submit" className="w-full mt-6" size="lg">
-                Iniciar sesión
+
+              {error && (
+                <div className="px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700 font-medium">
+                  {error}
+                </div>
+              )}
+
+              <Button type="submit" className="w-full mt-6" size="lg" disabled={loading}>
+                {loading ? 'Iniciando sesión…' : 'Iniciar sesión'}
               </Button>
             </form>
 

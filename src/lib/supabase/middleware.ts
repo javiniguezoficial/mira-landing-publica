@@ -31,10 +31,10 @@ export async function updateSession(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname
 
-  // Rutas privadas que requieren autenticación
   const isAppRoute = pathname.startsWith('/app')
   const isAdminRoute = pathname.startsWith('/admin')
 
+  // Rutas privadas: usuario no autenticado → /login
   if ((isAppRoute || isAdminRoute) && !user) {
     const loginUrl = request.nextUrl.clone()
     loginUrl.pathname = '/login'
@@ -42,7 +42,23 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
-  // Si el usuario está autenticado e intenta acceder a login/registro, redirigir al dashboard
+  // Rutas privadas: usuario autenticado → verificar rol
+  if ((isAppRoute || isAdminRoute) && user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    // Cliente intentando entrar a /admin/* → /app/dashboard
+    if (isAdminRoute && profile?.role !== 'platform_admin') {
+      const redirectUrl = request.nextUrl.clone()
+      redirectUrl.pathname = '/app/dashboard'
+      return NextResponse.redirect(redirectUrl)
+    }
+  }
+
+  // Usuario autenticado en /login o /registro → redirigir a su dashboard
   const isAuthRoute = pathname === '/login' || pathname === '/registro'
   if (isAuthRoute && user) {
     const { data: profile } = await supabase

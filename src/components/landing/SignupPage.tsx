@@ -1,11 +1,67 @@
 'use client'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { TrendingUp } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { MiraLogo } from './MiraLogo'
 import { Button } from './Button'
 import { DataAnchor } from './DataAnchor'
+import { createClient } from '@/lib/supabase/client'
 
 export const SignupPage = () => {
+  const router = useRouter()
+  const [nombre, setNombre] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [empresa, setEmpresa] = useState('')
+  const [terms, setTerms] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+
+    if (!terms) {
+      setError('Debes aceptar los términos y condiciones para continuar.')
+      return
+    }
+    if (password.length < 6) {
+      setError('La contraseña debe tener al menos 6 caracteres.')
+      return
+    }
+
+    setLoading(true)
+
+    const parts = nombre.trim().split(' ')
+    const first_name = parts[0] ?? ''
+    const last_name = parts.slice(1).join(' ') || null
+
+    const supabase = createClient()
+    const { error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { first_name, last_name, company: empresa || null },
+      },
+    })
+
+    setLoading(false)
+
+    if (signUpError) {
+      if (signUpError.message.includes('already registered')) {
+        setError('Este email ya tiene una cuenta. Prueba a iniciar sesión.')
+      } else {
+        setError(signUpError.message)
+      }
+      return
+    }
+
+    setSuccess(true)
+    setTimeout(() => router.push('/app/dashboard'), 2000)
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col relative overflow-hidden">
       <div className="absolute top-0 left-0 w-full h-full bg-agri-pattern opacity-30 pointer-events-none" />
@@ -44,7 +100,22 @@ export const SignupPage = () => {
               </p>
             </div>
 
-            <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
+            {success ? (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="py-8 text-center"
+              >
+                <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-7 h-7 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-heading font-bold text-slate-900 mb-2">¡Cuenta creada!</h3>
+                <p className="text-sm text-slate-500">Redirigiendo a tu panel…</p>
+              </motion.div>
+            ) : (
+            <form className="space-y-5" onSubmit={handleSubmit}>
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                   Nombre
@@ -52,6 +123,9 @@ export const SignupPage = () => {
                 <input
                   type="text"
                   placeholder="Tu nombre completo"
+                  value={nombre}
+                  onChange={e => setNombre(e.target.value)}
+                  required
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-mira-primary focus:ring-2 focus:ring-mira-primary/20 outline-none transition-all text-sm text-slate-900"
                 />
               </div>
@@ -62,6 +136,9 @@ export const SignupPage = () => {
                 <input
                   type="email"
                   placeholder="tu@empresa.com"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-mira-primary focus:ring-2 focus:ring-mira-primary/20 outline-none transition-all text-sm text-slate-900"
                 />
               </div>
@@ -72,6 +149,9 @@ export const SignupPage = () => {
                 <input
                   type="password"
                   placeholder="••••••••"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  required
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-mira-primary focus:ring-2 focus:ring-mira-primary/20 outline-none transition-all text-sm text-slate-900"
                 />
               </div>
@@ -83,6 +163,8 @@ export const SignupPage = () => {
                 <input
                   type="text"
                   placeholder="Nombre de tu empresa"
+                  value={empresa}
+                  onChange={e => setEmpresa(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-mira-primary focus:ring-2 focus:ring-mira-primary/20 outline-none transition-all text-sm text-slate-900"
                 />
               </div>
@@ -90,6 +172,8 @@ export const SignupPage = () => {
                 <input
                   type="checkbox"
                   id="terms"
+                  checked={terms}
+                  onChange={e => setTerms(e.target.checked)}
                   className="mt-1 w-4 h-4 rounded border-slate-300 text-mira-primary focus:ring-mira-primary"
                 />
                 <label htmlFor="terms" className="text-xs text-slate-600 leading-relaxed">
@@ -110,15 +194,23 @@ export const SignupPage = () => {
                   .
                 </label>
               </div>
+
+              {error && (
+                <div className="px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700 font-medium">
+                  {error}
+                </div>
+              )}
+
               <div className="pt-2">
-                <Button type="submit" className="w-full" size="lg">
-                  Crear cuenta y empezar prueba
+                <Button type="submit" className="w-full" size="lg" disabled={loading}>
+                  {loading ? 'Creando cuenta…' : 'Crear cuenta y empezar prueba'}
                 </Button>
                 <p className="text-[11px] text-slate-500 text-center mt-3 font-medium">
                   14 días de prueba gratuita · Sin tarjeta de crédito
                 </p>
               </div>
             </form>
+            )}
 
             <div className="mt-8 text-center pt-6 border-t border-slate-100">
               <p className="text-sm text-slate-600">

@@ -1,5 +1,6 @@
 'use client'
-import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import {
   LayoutDashboard,
@@ -7,11 +8,12 @@ import {
   FileText,
   MapPin,
   Newspaper,
-  Package,
   Users,
   Settings,
   HelpCircle,
+  LogOut,
 } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
 const nav = [
   { href: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -26,6 +28,28 @@ const nav = [
 
 export const AppSidebar = () => {
   const pathname = usePathname()
+  const router = useRouter()
+  const [userName, setUserName] = useState('Usuario')
+  const [userEmail, setUserEmail] = useState('')
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      setUserEmail(user.email ?? '')
+      supabase.from('profiles').select('first_name, last_name').eq('id', user.id).single()
+        .then(({ data }) => {
+          if (data?.first_name) setUserName([data.first_name, data.last_name].filter(Boolean).join(' '))
+        })
+    })
+  }, [])
+
+  const handleLogout = async () => {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push('/login')
+    router.refresh()
+  }
 
   return (
     <aside className="w-64 bg-white border-r border-slate-200 flex flex-col h-screen sticky top-0">
@@ -62,16 +86,23 @@ export const AppSidebar = () => {
       </nav>
 
       {/* User area */}
-      <div className="px-4 py-4 border-t border-slate-100">
+      <div className="px-4 py-4 border-t border-slate-100 space-y-2">
         <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50">
-          <div className="w-8 h-8 rounded-full bg-mira-primary/20 flex items-center justify-center text-mira-primary font-bold text-sm">
-            U
+          <div className="w-8 h-8 rounded-full bg-mira-primary/20 flex items-center justify-center text-mira-primary font-bold text-sm shrink-0">
+            {userName.charAt(0).toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold text-slate-900 truncate">Usuario</p>
-            <p className="text-[10px] text-slate-500 truncate">cliente</p>
+            <p className="text-xs font-bold text-slate-900 truncate">{userName}</p>
+            <p className="text-[10px] text-slate-500 truncate">{userEmail}</p>
           </div>
         </div>
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-slate-500 hover:bg-red-50 hover:text-red-600 transition-colors"
+        >
+          <LogOut size={14} />
+          Cerrar sesión
+        </button>
       </div>
     </aside>
   )
