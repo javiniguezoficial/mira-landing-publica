@@ -2,7 +2,10 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ChevronLeft, Pencil, Building2, Mail, Phone, Globe, MapPin, Users } from 'lucide-react'
 import { getOrganizationById } from '@/lib/actions/organizations'
+import { getOrganizationMembers, getProfiles } from '@/lib/actions/users'
 import { ClientStatusBadge } from '@/components/admin/clients/ClientStatusBadge'
+import { MembersTable } from '@/components/admin/users/MembersTable'
+import { AddMemberModal } from '@/components/admin/users/AddMemberModal'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,8 +22,14 @@ function DetailRow({ label, value }: { label: string; value?: string | null }) {
 
 export default async function ClienteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const org = await getOrganizationById(id)
+  const [org, members, allUsers] = await Promise.all([
+    getOrganizationById(id),
+    getOrganizationMembers(id),
+    getProfiles(),
+  ])
   if (!org) notFound()
+
+  const existingMemberIds = members.map((m) => m.user_id)
 
   const createdAt = new Date(org.created_at).toLocaleDateString('es-ES', {
     day: '2-digit', month: 'long', year: 'numeric',
@@ -137,15 +146,18 @@ export default async function ClienteDetailPage({ params }: { params: Promise<{ 
           </div>
         </section>
 
-        {/* Miembros — stub */}
-        <section className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-          <div className="flex items-center gap-2 mb-4">
-            <Users size={16} className="text-slate-400" />
-            <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Miembros</h2>
+        {/* Miembros */}
+        <section className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <Users size={15} className="text-slate-400" />
+              <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                Miembros ({members.length})
+              </h2>
+            </div>
+            <AddMemberModal orgId={org.id} existingMemberIds={existingMemberIds} allUsers={allUsers} />
           </div>
-          <p className="text-sm text-slate-400 font-body text-center py-6">
-            La gestión de miembros se implementará en la siguiente fase.
-          </p>
+          <MembersTable members={members} orgId={org.id} />
         </section>
       </div>
     </div>

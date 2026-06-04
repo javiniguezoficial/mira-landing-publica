@@ -23,7 +23,7 @@ import { createClient } from '@/lib/supabase/client'
 const nav = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/clientes', label: 'Clientes', icon: Building2 },
-  { href: '/admin/users', label: 'Usuarios', icon: Users },
+  { href: '/admin/usuarios', label: 'Usuarios', icon: Users },
   { href: '/admin/markets', label: 'Mercados', icon: TrendingUp },
   { href: '/admin/products', label: 'Productos', icon: Package },
   { href: '/admin/prices', label: 'Precios', icon: DollarSign },
