@@ -29,9 +29,11 @@ export const LoginPage = () => {
       return
     }
 
+    const { data: { user } } = await supabase.auth.getUser()
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
+      .eq('id', user?.id ?? '')
       .single()
 
     const destination = profile?.role === 'platform_admin' ? '/admin/dashboard' : '/app/dashboard'
