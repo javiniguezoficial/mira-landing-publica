@@ -26,7 +26,7 @@ const nav = [
   { href: '/admin/usuarios', label: 'Usuarios', icon: Users },
   { href: '/admin/mercados', label: 'Mercados', icon: TrendingUp },
   { href: '/admin/products', label: 'Productos', icon: Package },
-  { href: '/admin/prices', label: 'Precios', icon: DollarSign },
+  { href: '/admin/precios/importar', label: 'Importar precios', icon: DollarSign },
   { href: '/admin/sources', label: 'Fuentes', icon: Database },
   { href: '/admin/suppliers', label: 'Proveedores', icon: Truck },
   { href: '/admin/rfq', label: 'RFQs', icon: FileText },
