@@ -29,7 +29,7 @@ const nav = [
   { href: '/admin/precios/importar', label: 'Importar precios', icon: DollarSign },
   { href: '/admin/sources', label: 'Fuentes', icon: Database },
   { href: '/admin/suppliers', label: 'Proveedores', icon: Truck },
-  { href: '/admin/rfq', label: 'RFQs', icon: FileText },
+  { href: '/admin/rfqs', label: 'RFQs', icon: FileText },
   { href: '/admin/news', label: 'Noticias', icon: Newspaper },
   { href: '/admin/subscriptions', label: 'Suscripciones', icon: CreditCard },
   { href: '/admin/audit', label: 'Auditoría', icon: Activity },
