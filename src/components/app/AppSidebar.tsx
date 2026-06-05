@@ -17,7 +17,7 @@ import { createClient } from '@/lib/supabase/client'
 
 const nav = [
   { href: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/app/markets', label: 'Market Intelligence', icon: TrendingUp },
+  { href: '/app/market-intelligent', label: 'Market Intelligence', icon: TrendingUp },
   { href: '/app/rfq', label: 'Cotizaciones', icon: FileText },
   { href: '/app/suppliers', label: 'Proveedores', icon: MapPin },
   { href: '/app/news', label: 'Noticias', icon: Newspaper },

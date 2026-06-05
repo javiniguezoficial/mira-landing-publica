@@ -24,7 +24,7 @@ const nav = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/clientes', label: 'Clientes', icon: Building2 },
   { href: '/admin/usuarios', label: 'Usuarios', icon: Users },
-  { href: '/admin/markets', label: 'Mercados', icon: TrendingUp },
+  { href: '/admin/mercados', label: 'Mercados', icon: TrendingUp },
   { href: '/admin/products', label: 'Productos', icon: Package },
   { href: '/admin/prices', label: 'Precios', icon: DollarSign },
   { href: '/admin/sources', label: 'Fuentes', icon: Database },
