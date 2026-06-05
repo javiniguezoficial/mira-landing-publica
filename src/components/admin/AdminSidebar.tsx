@@ -33,7 +33,7 @@ const nav = [
   { href: '/admin/noticias', label: 'Noticias', icon: Newspaper },
   { href: '/admin/subscriptions', label: 'Suscripciones', icon: CreditCard },
   { href: '/admin/audit', label: 'Auditoría', icon: Activity },
-  { href: '/admin/settings', label: 'Configuración', icon: Settings },
+  { href: '/admin/configuracion', label: 'Configuración', icon: Settings },
 ]
 
 export const AdminSidebar = () => {
