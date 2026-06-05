@@ -30,7 +30,7 @@ const nav = [
   { href: '/admin/sources', label: 'Fuentes', icon: Database },
   { href: '/admin/proveedores', label: 'Proveedores', icon: Truck },
   { href: '/admin/rfqs', label: 'RFQs', icon: FileText },
-  { href: '/admin/news', label: 'Noticias', icon: Newspaper },
+  { href: '/admin/noticias', label: 'Noticias', icon: Newspaper },
   { href: '/admin/subscriptions', label: 'Suscripciones', icon: CreditCard },
   { href: '/admin/audit', label: 'Auditoría', icon: Activity },
   { href: '/admin/settings', label: 'Configuración', icon: Settings },
