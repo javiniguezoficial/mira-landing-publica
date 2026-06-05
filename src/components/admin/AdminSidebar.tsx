@@ -15,6 +15,7 @@ import {
   Newspaper,
   CreditCard,
   Activity,
+  LifeBuoy,
   Settings,
   LogOut,
 } from 'lucide-react'
@@ -31,6 +32,7 @@ const nav = [
   { href: '/admin/proveedores', label: 'Proveedores', icon: Truck },
   { href: '/admin/rfqs', label: 'RFQs', icon: FileText },
   { href: '/admin/noticias', label: 'Noticias', icon: Newspaper },
+  { href: '/admin/soporte', label: 'Soporte', icon: LifeBuoy },
   { href: '/admin/subscriptions', label: 'Suscripciones', icon: CreditCard },
   { href: '/admin/audit', label: 'Auditoría', icon: Activity },
   { href: '/admin/configuracion', label: 'Configuración', icon: Settings },

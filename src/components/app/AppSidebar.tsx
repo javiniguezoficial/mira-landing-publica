@@ -23,7 +23,7 @@ const nav = [
   { href: '/app/noticias', label: 'Noticias', icon: Newspaper },
   { href: '/app/mi-organizacion', label: 'Mi organización', icon: Users },
   { href: '/app/configuracion', label: 'Configuración', icon: Settings },
-  { href: '#', label: 'Ayuda', icon: HelpCircle },
+  { href: '/app/ayuda', label: 'Ayuda', icon: HelpCircle },
 ]
 
 export const AppSidebar = () => {
