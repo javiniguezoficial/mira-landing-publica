@@ -21,7 +21,7 @@ const nav = [
   { href: '/app/rfqs', label: 'Cotizaciones', icon: FileText },
   { href: '/app/proveedores', label: 'Proveedores', icon: MapPin },
   { href: '/app/noticias', label: 'Noticias', icon: Newspaper },
-  { href: '/app/organization', label: 'Mi organización', icon: Users },
+  { href: '/app/mi-organizacion', label: 'Mi organización', icon: Users },
   { href: '/app/settings', label: 'Configuración', icon: Settings },
   { href: '#', label: 'Ayuda', icon: HelpCircle },
 ]
