@@ -22,7 +22,7 @@ const nav = [
   { href: '/app/proveedores', label: 'Proveedores', icon: MapPin },
   { href: '/app/noticias', label: 'Noticias', icon: Newspaper },
   { href: '/app/mi-organizacion', label: 'Mi organización', icon: Users },
-  { href: '/app/settings', label: 'Configuración', icon: Settings },
+  { href: '/app/configuracion', label: 'Configuración', icon: Settings },
   { href: '#', label: 'Ayuda', icon: HelpCircle },
 ]
 

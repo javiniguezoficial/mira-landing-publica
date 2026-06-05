@@ -2,8 +2,8 @@
 
 import { useActionState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { updateAdminProfile } from '@/lib/actions/admin-settings'
-import type { ActionResult } from '@/lib/actions/admin-settings'
+import { updateClientProfile } from '@/lib/actions/client-settings'
+import type { ActionResult } from '@/lib/actions/client-settings'
 
 interface Props {
   defaultValues: {
@@ -11,15 +11,14 @@ interface Props {
     first_name: string | null
     last_name: string | null
     phone: string | null
-    avatar_url: string | null
   }
 }
 
 const initial: ActionResult = {}
 
-export function AdminProfileForm({ defaultValues }: Props) {
+export function ClientProfileForm({ defaultValues }: Props) {
   const router = useRouter()
-  const [state, formAction, pending] = useActionState(updateAdminProfile, initial)
+  const [state, formAction, pending] = useActionState(updateClientProfile, initial)
 
   useEffect(() => {
     if (state.success) router.refresh()
@@ -52,7 +51,7 @@ export function AdminProfileForm({ defaultValues }: Props) {
           type="text"
           required
           defaultValue={defaultValues.first_name ?? ''}
-          placeholder="Nombre"
+          placeholder="Tu nombre"
           className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30 focus:border-mira-primary transition-colors"
         />
       </div>
@@ -67,7 +66,7 @@ export function AdminProfileForm({ defaultValues }: Props) {
           name="last_name"
           type="text"
           defaultValue={defaultValues.last_name ?? ''}
-          placeholder="Apellidos"
+          placeholder="Tus apellidos"
           className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30 focus:border-mira-primary transition-colors"
         />
       </div>

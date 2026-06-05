@@ -1,6 +1,7 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { updatePlatformSettings } from '@/lib/actions/admin-settings'
 import type { ActionResult } from '@/lib/actions/admin-settings'
 
@@ -17,7 +18,12 @@ interface Props {
 const initial: ActionResult = {}
 
 export function PlatformSettingsForm({ defaultValues }: Props) {
+  const router = useRouter()
   const [state, formAction, pending] = useActionState(updatePlatformSettings, initial)
+
+  useEffect(() => {
+    if (state.success) router.refresh()
+  }, [state.success])
 
   return (
     <form action={formAction} className="space-y-5">
