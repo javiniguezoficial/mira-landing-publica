@@ -14,7 +14,7 @@ export const ROUTES = {
   appDashboard: '/app/dashboard',
   appMarkets: '/app/markets',
   appRfq: '/app/rfq',
-  appSuppliers: '/app/suppliers',
+  appSuppliers: '/app/proveedores',
   appNews: '/app/news',
   appOrganization: '/app/organization',
   appSettings: '/app/settings',

@@ -19,7 +19,7 @@ const nav = [
   { href: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/app/market-intelligent', label: 'Market Intelligence', icon: TrendingUp },
   { href: '/app/rfqs', label: 'Cotizaciones', icon: FileText },
-  { href: '/app/suppliers', label: 'Proveedores', icon: MapPin },
+  { href: '/app/proveedores', label: 'Proveedores', icon: MapPin },
   { href: '/app/news', label: 'Noticias', icon: Newspaper },
   { href: '/app/organization', label: 'Mi organización', icon: Users },
   { href: '/app/settings', label: 'Configuración', icon: Settings },
