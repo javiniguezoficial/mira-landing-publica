@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { TrendingUp, Package } from 'lucide-react'
 import { getCategoriesWithMarkets } from '@/lib/queries/markets'
 
@@ -59,14 +60,15 @@ export default async function MarketIntelligentPage() {
                     {market.products.length > 0 && (
                       <div className="flex flex-wrap gap-2 pl-5">
                         {market.products.map(product => (
-                          <div
+                          <Link
                             key={product.id}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg"
+                            href={`/app/market-intelligent/${market.slug}/${product.slug}`}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg hover:bg-mira-primary/5 hover:border-mira-primary/30 transition-colors group"
                           >
-                            <Package size={12} className="text-slate-400" />
-                            <span className="text-xs font-semibold text-slate-700">{product.name}</span>
+                            <Package size={12} className="text-slate-400 group-hover:text-mira-primary transition-colors" />
+                            <span className="text-xs font-semibold text-slate-700 group-hover:text-mira-primary transition-colors">{product.name}</span>
                             <span className="text-[10px] font-bold text-slate-400 ml-0.5">/ {product.unit}</span>
-                          </div>
+                          </Link>
                         ))}
                       </div>
                     )}

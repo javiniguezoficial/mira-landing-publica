@@ -64,7 +64,7 @@ export default async function MercadoDetailPage({ params }: { params: Promise<{ 
                 <th className="text-left px-6 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Slug</th>
                 <th className="text-left px-6 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Descripción</th>
                 <th className="px-6 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider text-right">Activo</th>
-                <th className="px-6 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider text-right">Editar</th>
+                <th className="px-6 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider text-right">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -82,12 +82,20 @@ export default async function MercadoDetailPage({ params }: { params: Promise<{ 
                     <ToggleButton id={product.id} isActive={product.is_active} onToggle={toggleProduct} />
                   </td>
                   <td className="px-6 py-3 text-right">
-                    <Link
-                      href={`/admin/mercados/${id}/productos/${product.id}/editar`}
-                      className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors inline-flex"
-                    >
-                      <Pencil size={14} />
-                    </Link>
+                    <div className="flex items-center justify-end gap-2">
+                      <Link
+                        href={`/admin/mercados/${id}/productos/${product.id}/precios`}
+                        className="text-xs font-bold text-blue-600 hover:underline"
+                      >
+                        Precios
+                      </Link>
+                      <Link
+                        href={`/admin/mercados/${id}/productos/${product.id}/editar`}
+                        className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors inline-flex"
+                      >
+                        <Pencil size={14} />
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ))}
