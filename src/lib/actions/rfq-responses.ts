@@ -28,6 +28,7 @@ export interface RfqResponseFormData {
   supplier_name: string
   supplier_email?: string
   supplier_phone?: string
+  supplier_id?: string
   price: number
   unit: string
   currency?: string
@@ -92,17 +93,18 @@ export async function createRfqResponse(
   const { data, error } = await supabase
     .from('rfq_responses')
     .insert({
-      rfq_id: rfqId,
-      supplier_name: formData.supplier_name.trim(),
+      rfq_id:         rfqId,
+      supplier_id:    formData.supplier_id?.trim() || null,
+      supplier_name:  formData.supplier_name.trim(),
       supplier_email: formData.supplier_email?.trim() || null,
       supplier_phone: formData.supplier_phone?.trim() || null,
-      price: formData.price,
-      unit: formData.unit.trim(),
-      currency: formData.currency?.trim() || 'EUR',
-      delivery_date: formData.delivery_date || null,
-      payment_terms: formData.payment_terms?.trim() || null,
-      notes: formData.notes?.trim() || null,
-      status: formData.status ?? 'received',
+      price:          formData.price,
+      unit:           formData.unit.trim(),
+      currency:       formData.currency?.trim() || 'EUR',
+      delivery_date:  formData.delivery_date || null,
+      payment_terms:  formData.payment_terms?.trim() || null,
+      notes:          formData.notes?.trim() || null,
+      status:         formData.status ?? 'received',
     })
     .select('id')
     .single()
@@ -125,16 +127,17 @@ export async function updateRfqResponse(
   const { error } = await supabase
     .from('rfq_responses')
     .update({
-      supplier_name: formData.supplier_name.trim(),
+      supplier_id:    formData.supplier_id?.trim() || null,
+      supplier_name:  formData.supplier_name.trim(),
       supplier_email: formData.supplier_email?.trim() || null,
       supplier_phone: formData.supplier_phone?.trim() || null,
-      price: formData.price,
-      unit: formData.unit.trim(),
-      currency: formData.currency?.trim() || 'EUR',
-      delivery_date: formData.delivery_date || null,
-      payment_terms: formData.payment_terms?.trim() || null,
-      notes: formData.notes?.trim() || null,
-      status: formData.status ?? 'received',
+      price:          formData.price,
+      unit:           formData.unit.trim(),
+      currency:       formData.currency?.trim() || 'EUR',
+      delivery_date:  formData.delivery_date || null,
+      payment_terms:  formData.payment_terms?.trim() || null,
+      notes:          formData.notes?.trim() || null,
+      status:         formData.status ?? 'received',
     })
     .eq('id', responseId)
 

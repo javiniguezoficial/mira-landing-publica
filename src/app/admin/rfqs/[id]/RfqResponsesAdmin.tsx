@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useTransition } from 'react'
-import { Plus, Pencil, X, Check } from 'lucide-react'
+import { Plus, Pencil } from 'lucide-react'
 import {
   listRfqResponses,
   createRfqResponse,
@@ -11,12 +11,13 @@ import {
   type RfqResponseFormData,
   type RfqResponseStatus,
 } from '@/lib/actions/rfq-responses'
+import { listSuppliers, type Supplier } from '@/lib/actions/suppliers'
 
 const STATUS_OPTIONS: { value: RfqResponseStatus; label: string; color: string }[] = [
-  { value: 'received',    label: 'Recibida',     color: 'bg-slate-100 text-slate-700' },
+  { value: 'received',    label: 'Recibida',        color: 'bg-slate-100 text-slate-700' },
   { value: 'shortlisted', label: 'Preseleccionada', color: 'bg-blue-100 text-blue-700' },
-  { value: 'rejected',    label: 'Rechazada',    color: 'bg-red-100 text-red-700' },
-  { value: 'accepted',    label: 'Aceptada',     color: 'bg-green-100 text-green-700' },
+  { value: 'rejected',    label: 'Rechazada',       color: 'bg-red-100 text-red-700' },
+  { value: 'accepted',    label: 'Aceptada',        color: 'bg-green-100 text-green-700' },
 ]
 
 function statusLabel(s: RfqResponseStatus) {
@@ -31,36 +32,58 @@ function formatDate(d: string | null) {
   return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-const EMPTY_FORM: RfqResponseFormData = {
-  supplier_name: '',
+const EMPTY_FORM: RfqResponseFormData & { supplier_id?: string } = {
+  supplier_name:  '',
   supplier_email: '',
   supplier_phone: '',
-  price: 0,
-  unit: '',
-  currency: 'EUR',
-  delivery_date: '',
-  payment_terms: '',
-  notes: '',
-  status: 'received',
+  price:          0,
+  unit:           '',
+  currency:       'EUR',
+  delivery_date:  '',
+  payment_terms:  '',
+  notes:          '',
+  status:         'received',
+  supplier_id:    '',
 }
+
+const inputCls = 'w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary'
 
 function ResponseForm({
   initial,
+  suppliers,
   onSave,
   onCancel,
   saving,
   error,
 }: {
-  initial: RfqResponseFormData
-  onSave: (data: RfqResponseFormData) => void
+  initial: RfqResponseFormData & { supplier_id?: string }
+  suppliers: Supplier[]
+  onSave: (data: RfqResponseFormData & { supplier_id?: string }) => void
   onCancel: () => void
   saving: boolean
   error: string | null
 }) {
-  const [form, setForm] = useState<RfqResponseFormData>(initial)
+  const [form, setForm] = useState({ ...initial })
 
-  function set(field: keyof RfqResponseFormData, value: string | number) {
+  function set(field: string, value: string | number) {
     setForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  function handleSupplierSelect(supplierId: string) {
+    if (!supplierId) {
+      setForm((prev) => ({ ...prev, supplier_id: '' }))
+      return
+    }
+    const s = suppliers.find((s) => s.id === supplierId)
+    if (!s) return
+    // Autocompleta el snapshot pero deja al usuario editarlo
+    setForm((prev) => ({
+      ...prev,
+      supplier_id:    s.id,
+      supplier_name:  s.name,
+      supplier_email: s.email ?? '',
+      supplier_phone: s.phone ?? '',
+    }))
   }
 
   return (
@@ -70,6 +93,27 @@ function ResponseForm({
       )}
 
       <div className="grid grid-cols-2 gap-4">
+        {/* Selector de proveedor del catálogo */}
+        {suppliers.length > 0 && (
+          <div className="col-span-2">
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+              Seleccionar del catálogo <span className="font-normal normal-case text-slate-400">(opcional — autocompleta los campos)</span>
+            </label>
+            <select
+              value={form.supplier_id ?? ''}
+              onChange={(e) => handleSupplierSelect(e.target.value)}
+              className={`${inputCls} bg-white`}
+            >
+              <option value="">— Respuesta manual sin catálogo —</option>
+              {suppliers.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}{s.city ? ` · ${s.city}` : ''}{s.category ? ` (${s.category})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <div className="col-span-2">
           <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
             Proveedor *
@@ -77,7 +121,7 @@ function ResponseForm({
           <input
             value={form.supplier_name}
             onChange={(e) => set('supplier_name', e.target.value)}
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary"
+            className={inputCls}
             placeholder="Nombre del proveedor"
           />
         </div>
@@ -88,7 +132,7 @@ function ResponseForm({
             type="email"
             value={form.supplier_email ?? ''}
             onChange={(e) => set('supplier_email', e.target.value)}
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary"
+            className={inputCls}
             placeholder="correo@proveedor.com"
           />
         </div>
@@ -98,34 +142,28 @@ function ResponseForm({
           <input
             value={form.supplier_phone ?? ''}
             onChange={(e) => set('supplier_phone', e.target.value)}
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary"
+            className={inputCls}
             placeholder="+34 600 000 000"
           />
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-            Precio *
-          </label>
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Precio *</label>
           <input
-            type="number"
-            min="0.01"
-            step="0.01"
+            type="number" min="0.01" step="0.01"
             value={form.price || ''}
             onChange={(e) => set('price', parseFloat(e.target.value) || 0)}
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary"
+            className={inputCls}
             placeholder="0.00"
           />
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-            Unidad *
-          </label>
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Unidad *</label>
           <input
             value={form.unit}
             onChange={(e) => set('unit', e.target.value)}
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary"
+            className={inputCls}
             placeholder="kg, t, ud…"
           />
         </div>
@@ -135,7 +173,7 @@ function ResponseForm({
           <select
             value={form.currency ?? 'EUR'}
             onChange={(e) => set('currency', e.target.value)}
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary bg-white"
+            className={`${inputCls} bg-white`}
           >
             <option value="EUR">EUR</option>
             <option value="USD">USD</option>
@@ -144,25 +182,21 @@ function ResponseForm({
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-            Fecha de entrega
-          </label>
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Fecha de entrega</label>
           <input
             type="date"
             value={form.delivery_date ?? ''}
             onChange={(e) => set('delivery_date', e.target.value)}
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary"
+            className={inputCls}
           />
         </div>
 
         <div className="col-span-2">
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-            Condiciones de pago
-          </label>
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Condiciones de pago</label>
           <input
             value={form.payment_terms ?? ''}
             onChange={(e) => set('payment_terms', e.target.value)}
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary"
+            className={inputCls}
             placeholder="30 días, contado, etc."
           />
         </div>
@@ -173,7 +207,7 @@ function ResponseForm({
             value={form.notes ?? ''}
             onChange={(e) => set('notes', e.target.value)}
             rows={2}
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary resize-none"
+            className={`${inputCls} resize-none`}
             placeholder="Observaciones adicionales"
           />
         </div>
@@ -183,7 +217,7 @@ function ResponseForm({
           <select
             value={form.status ?? 'received'}
             onChange={(e) => set('status', e.target.value as RfqResponseStatus)}
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary bg-white"
+            className={`${inputCls} bg-white`}
           >
             {STATUS_OPTIONS.map(({ value, label }) => (
               <option key={value} value={value}>{label}</option>
@@ -213,12 +247,13 @@ function ResponseForm({
 }
 
 export function RfqResponsesAdmin({ rfqId }: { rfqId: string }) {
-  const [responses, setResponses] = useState<RfqResponse[]>([])
-  const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [isPending, startTransition] = useTransition()
-  const [formError, setFormError] = useState<string | null>(null)
+  const [responses, setResponses]     = useState<RfqResponse[]>([])
+  const [suppliers, setSuppliers]     = useState<Supplier[]>([])
+  const [loading, setLoading]         = useState(true)
+  const [showForm, setShowForm]       = useState(false)
+  const [editingId, setEditingId]     = useState<string | null>(null)
+  const [isPending, startTransition]  = useTransition()
+  const [formError, setFormError]     = useState<string | null>(null)
 
   function reload() {
     listRfqResponses(rfqId).then((data) => {
@@ -227,9 +262,12 @@ export function RfqResponsesAdmin({ rfqId }: { rfqId: string }) {
     })
   }
 
-  useEffect(() => { reload() }, [rfqId])
+  useEffect(() => {
+    reload()
+    listSuppliers(true).then(setSuppliers)
+  }, [rfqId])
 
-  function handleCreate(data: RfqResponseFormData) {
+  function handleCreate(data: RfqResponseFormData & { supplier_id?: string }) {
     setFormError(null)
     startTransition(async () => {
       try {
@@ -242,7 +280,7 @@ export function RfqResponsesAdmin({ rfqId }: { rfqId: string }) {
     })
   }
 
-  function handleUpdate(responseId: string, data: RfqResponseFormData) {
+  function handleUpdate(responseId: string, data: RfqResponseFormData & { supplier_id?: string }) {
     setFormError(null)
     startTransition(async () => {
       try {
@@ -261,7 +299,7 @@ export function RfqResponsesAdmin({ rfqId }: { rfqId: string }) {
         await updateRfqResponseStatus(responseId, status)
         reload()
       } catch {
-        // silent — mostrar estado actual
+        // silent
       }
     })
   }
@@ -298,6 +336,7 @@ export function RfqResponsesAdmin({ rfqId }: { rfqId: string }) {
         <div className="mb-5">
           <ResponseForm
             initial={EMPTY_FORM}
+            suppliers={suppliers}
             onSave={handleCreate}
             onCancel={() => { setShowForm(false); setFormError(null) }}
             saving={isPending}
@@ -311,93 +350,103 @@ export function RfqResponsesAdmin({ rfqId }: { rfqId: string }) {
       )}
 
       <div className="space-y-4">
-        {responses.map((r) => (
-          <div key={r.id} className="border border-slate-200 rounded-xl overflow-hidden">
-            {editingId === r.id ? (
-              <div className="p-4">
-                <ResponseForm
-                  initial={{
-                    supplier_name: r.supplier_name,
-                    supplier_email: r.supplier_email ?? '',
-                    supplier_phone: r.supplier_phone ?? '',
-                    price: r.price,
-                    unit: r.unit,
-                    currency: r.currency,
-                    delivery_date: r.delivery_date ?? '',
-                    payment_terms: r.payment_terms ?? '',
-                    notes: r.notes ?? '',
-                    status: r.status,
-                  }}
-                  onSave={(data) => handleUpdate(r.id, data)}
-                  onCancel={() => { setEditingId(null); setFormError(null) }}
-                  saving={isPending}
-                  error={editingId === r.id ? formError : null}
-                />
-              </div>
-            ) : (
-              <div className="p-4">
-                <div className="flex items-start justify-between gap-3 mb-3">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">{r.supplier_name}</p>
-                    {(r.supplier_email || r.supplier_phone) && (
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        {[r.supplier_email, r.supplier_phone].filter(Boolean).join(' · ')}
-                      </p>
-                    )}
+        {responses.map((r) => {
+          const linkedSupplier = (r as any).supplier_id
+            ? suppliers.find((s) => s.id === (r as any).supplier_id)
+            : null
+
+          return (
+            <div key={r.id} className="border border-slate-200 rounded-xl overflow-hidden">
+              {editingId === r.id ? (
+                <div className="p-4">
+                  <ResponseForm
+                    initial={{
+                      supplier_name:  r.supplier_name,
+                      supplier_email: r.supplier_email ?? '',
+                      supplier_phone: r.supplier_phone ?? '',
+                      price:          r.price,
+                      unit:           r.unit,
+                      currency:       r.currency,
+                      delivery_date:  r.delivery_date ?? '',
+                      payment_terms:  r.payment_terms ?? '',
+                      notes:          r.notes ?? '',
+                      status:         r.status,
+                      supplier_id:    (r as any).supplier_id ?? '',
+                    }}
+                    suppliers={suppliers}
+                    onSave={(data) => handleUpdate(r.id, data)}
+                    onCancel={() => { setEditingId(null); setFormError(null) }}
+                    saving={isPending}
+                    error={editingId === r.id ? formError : null}
+                  />
+                </div>
+              ) : (
+                <div className="p-4">
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">{r.supplier_name}</p>
+                      {(r.supplier_email || r.supplier_phone) && (
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {[r.supplier_email, r.supplier_phone].filter(Boolean).join(' · ')}
+                        </p>
+                      )}
+                      {linkedSupplier && (
+                        <p className="text-xs text-mira-primary mt-0.5">Del catálogo</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColor(r.status)}`}>
+                        {statusLabel(r.status)}
+                      </span>
+                      <button
+                        onClick={() => { setEditingId(r.id); setFormError(null) }}
+                        className="p-1.5 text-slate-400 hover:text-slate-600 rounded-md hover:bg-slate-100 transition-colors"
+                        title="Editar"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColor(r.status)}`}>
-                      {statusLabel(r.status)}
-                    </span>
-                    <button
-                      onClick={() => { setEditingId(r.id); setFormError(null) }}
-                      className="p-1.5 text-slate-400 hover:text-slate-600 rounded-md hover:bg-slate-100 transition-colors"
-                      title="Editar"
-                    >
-                      <Pencil size={13} />
-                    </button>
+
+                  <div className="grid grid-cols-3 gap-3 text-sm mb-3">
+                    <div>
+                      <span className="text-xs text-slate-500 block">Precio</span>
+                      <span className="font-semibold text-slate-800">
+                        {r.price.toLocaleString('es-ES', { minimumFractionDigits: 2 })} {r.currency}/{r.unit}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-xs text-slate-500 block">Entrega</span>
+                      <span className="text-slate-700">{formatDate(r.delivery_date)}</span>
+                    </div>
+                    <div>
+                      <span className="text-xs text-slate-500 block">Pago</span>
+                      <span className="text-slate-700">{r.payment_terms || '—'}</span>
+                    </div>
+                  </div>
+
+                  {r.notes && (
+                    <p className="text-xs text-slate-500 mb-3 italic">{r.notes}</p>
+                  )}
+
+                  <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                    <span className="text-xs text-slate-400">Cambiar estado:</span>
+                    {STATUS_OPTIONS.filter((o) => o.value !== r.status).map(({ value, label, color }) => (
+                      <button
+                        key={value}
+                        onClick={() => handleStatusChange(r.id, value)}
+                        disabled={isPending}
+                        className={`px-2 py-0.5 rounded-full text-xs font-medium border border-transparent hover:border-current transition-colors disabled:opacity-50 ${color}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
                   </div>
                 </div>
-
-                <div className="grid grid-cols-3 gap-3 text-sm mb-3">
-                  <div>
-                    <span className="text-xs text-slate-500 block">Precio</span>
-                    <span className="font-semibold text-slate-800">
-                      {r.price.toLocaleString('es-ES', { minimumFractionDigits: 2 })} {r.currency}/{r.unit}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-xs text-slate-500 block">Entrega</span>
-                    <span className="text-slate-700">{formatDate(r.delivery_date)}</span>
-                  </div>
-                  <div>
-                    <span className="text-xs text-slate-500 block">Pago</span>
-                    <span className="text-slate-700">{r.payment_terms || '—'}</span>
-                  </div>
-                </div>
-
-                {r.notes && (
-                  <p className="text-xs text-slate-500 mb-3 italic">{r.notes}</p>
-                )}
-
-                {/* Cambio rápido de estado */}
-                <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
-                  <span className="text-xs text-slate-400">Cambiar estado:</span>
-                  {STATUS_OPTIONS.filter((o) => o.value !== r.status).map(({ value, label, color }) => (
-                    <button
-                      key={value}
-                      onClick={() => handleStatusChange(r.id, value)}
-                      disabled={isPending}
-                      className={`px-2 py-0.5 rounded-full text-xs font-medium border border-transparent hover:border-current transition-colors disabled:opacity-50 ${color}`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
+              )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )
