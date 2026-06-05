@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { getRfq, adminUpdateRfqStatus, type Rfq, type RfqStatus } from '@/lib/actions/rfqs'
 import { RfqStatusBadge } from '@/components/app/rfqs/RfqStatusBadge'
+import { RfqResponsesAdmin } from './RfqResponsesAdmin'
 
 const ALL_STATUSES: { value: RfqStatus; label: string }[] = [
   { value: 'draft',     label: 'Borrador' },
@@ -113,6 +114,11 @@ export function AdminRfqDetail({ id }: { id: string }) {
           {rfq.notes && <Field label="Notas" value={rfq.notes} />}
           {rfq.conditions && <Field label="Condiciones" value={rfq.conditions} />}
         </dl>
+      </div>
+
+      {/* Respuestas de proveedores */}
+      <div className="mb-6">
+        <RfqResponsesAdmin rfqId={id} />
       </div>
 
       {/* Cambio de estado */}

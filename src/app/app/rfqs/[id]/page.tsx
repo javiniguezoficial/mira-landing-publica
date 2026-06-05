@@ -5,6 +5,7 @@ import { ArrowLeft } from 'lucide-react'
 import { getRfq, publishRfq, cancelRfq, listActiveProducts, updateDraftRfq } from '@/lib/actions/rfqs'
 import { RfqStatusBadge } from '@/components/app/rfqs/RfqStatusBadge'
 import { RfqForm } from '@/components/app/rfqs/RfqForm'
+import { RfqResponsesClient } from '@/components/app/rfqs/RfqResponsesClient'
 
 function formatDate(d: string) {
   return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })
@@ -64,6 +65,13 @@ export default async function ClientRfqDetailPage({ params }: { params: Promise<
           {rfq.conditions && <Field label="Condiciones" value={rfq.conditions} />}
         </dl>
       </div>
+
+      {/* Respuestas recibidas — solo si no es borrador */}
+      {!isDraft && (
+        <div className="mb-6">
+          <RfqResponsesClient rfqId={id} />
+        </div>
+      )}
 
       {/* Acciones de borrador */}
       {isDraft && (

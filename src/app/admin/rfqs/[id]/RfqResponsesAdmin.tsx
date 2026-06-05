@@ -1,0 +1,404 @@
+'use client'
+
+import { useEffect, useState, useTransition } from 'react'
+import { Plus, Pencil, X, Check } from 'lucide-react'
+import {
+  listRfqResponses,
+  createRfqResponse,
+  updateRfqResponse,
+  updateRfqResponseStatus,
+  type RfqResponse,
+  type RfqResponseFormData,
+  type RfqResponseStatus,
+} from '@/lib/actions/rfq-responses'
+
+const STATUS_OPTIONS: { value: RfqResponseStatus; label: string; color: string }[] = [
+  { value: 'received',    label: 'Recibida',     color: 'bg-slate-100 text-slate-700' },
+  { value: 'shortlisted', label: 'Preseleccionada', color: 'bg-blue-100 text-blue-700' },
+  { value: 'rejected',    label: 'Rechazada',    color: 'bg-red-100 text-red-700' },
+  { value: 'accepted',    label: 'Aceptada',     color: 'bg-green-100 text-green-700' },
+]
+
+function statusLabel(s: RfqResponseStatus) {
+  return STATUS_OPTIONS.find((o) => o.value === s)?.label ?? s
+}
+function statusColor(s: RfqResponseStatus) {
+  return STATUS_OPTIONS.find((o) => o.value === s)?.color ?? ''
+}
+
+function formatDate(d: string | null) {
+  if (!d) return '—'
+  return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+const EMPTY_FORM: RfqResponseFormData = {
+  supplier_name: '',
+  supplier_email: '',
+  supplier_phone: '',
+  price: 0,
+  unit: '',
+  currency: 'EUR',
+  delivery_date: '',
+  payment_terms: '',
+  notes: '',
+  status: 'received',
+}
+
+function ResponseForm({
+  initial,
+  onSave,
+  onCancel,
+  saving,
+  error,
+}: {
+  initial: RfqResponseFormData
+  onSave: (data: RfqResponseFormData) => void
+  onCancel: () => void
+  saving: boolean
+  error: string | null
+}) {
+  const [form, setForm] = useState<RfqResponseFormData>(initial)
+
+  function set(field: keyof RfqResponseFormData, value: string | number) {
+    setForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  return (
+    <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 space-y-4">
+      {error && (
+        <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+      )}
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="col-span-2">
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+            Proveedor *
+          </label>
+          <input
+            value={form.supplier_name}
+            onChange={(e) => set('supplier_name', e.target.value)}
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary"
+            placeholder="Nombre del proveedor"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Email</label>
+          <input
+            type="email"
+            value={form.supplier_email ?? ''}
+            onChange={(e) => set('supplier_email', e.target.value)}
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary"
+            placeholder="correo@proveedor.com"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Teléfono</label>
+          <input
+            value={form.supplier_phone ?? ''}
+            onChange={(e) => set('supplier_phone', e.target.value)}
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary"
+            placeholder="+34 600 000 000"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+            Precio *
+          </label>
+          <input
+            type="number"
+            min="0.01"
+            step="0.01"
+            value={form.price || ''}
+            onChange={(e) => set('price', parseFloat(e.target.value) || 0)}
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary"
+            placeholder="0.00"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+            Unidad *
+          </label>
+          <input
+            value={form.unit}
+            onChange={(e) => set('unit', e.target.value)}
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary"
+            placeholder="kg, t, ud…"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Moneda</label>
+          <select
+            value={form.currency ?? 'EUR'}
+            onChange={(e) => set('currency', e.target.value)}
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary bg-white"
+          >
+            <option value="EUR">EUR</option>
+            <option value="USD">USD</option>
+            <option value="GBP">GBP</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+            Fecha de entrega
+          </label>
+          <input
+            type="date"
+            value={form.delivery_date ?? ''}
+            onChange={(e) => set('delivery_date', e.target.value)}
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary"
+          />
+        </div>
+
+        <div className="col-span-2">
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+            Condiciones de pago
+          </label>
+          <input
+            value={form.payment_terms ?? ''}
+            onChange={(e) => set('payment_terms', e.target.value)}
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary"
+            placeholder="30 días, contado, etc."
+          />
+        </div>
+
+        <div className="col-span-2">
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Notas</label>
+          <textarea
+            value={form.notes ?? ''}
+            onChange={(e) => set('notes', e.target.value)}
+            rows={2}
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary resize-none"
+            placeholder="Observaciones adicionales"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Estado</label>
+          <select
+            value={form.status ?? 'received'}
+            onChange={(e) => set('status', e.target.value as RfqResponseStatus)}
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary bg-white"
+          >
+            {STATUS_OPTIONS.map(({ value, label }) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3 pt-1">
+        <button
+          onClick={() => onSave(form)}
+          disabled={saving}
+          className="px-4 py-2 bg-mira-primary text-white rounded-lg text-sm font-semibold hover:bg-mira-primary/90 disabled:opacity-50 transition-colors"
+        >
+          {saving ? 'Guardando…' : 'Guardar respuesta'}
+        </button>
+        <button
+          onClick={onCancel}
+          disabled={saving}
+          className="px-4 py-2 border border-slate-300 text-slate-600 rounded-lg text-sm hover:bg-slate-100 transition-colors"
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export function RfqResponsesAdmin({ rfqId }: { rfqId: string }) {
+  const [responses, setResponses] = useState<RfqResponse[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
+  const [formError, setFormError] = useState<string | null>(null)
+
+  function reload() {
+    listRfqResponses(rfqId).then((data) => {
+      setResponses(data)
+      setLoading(false)
+    })
+  }
+
+  useEffect(() => { reload() }, [rfqId])
+
+  function handleCreate(data: RfqResponseFormData) {
+    setFormError(null)
+    startTransition(async () => {
+      try {
+        await createRfqResponse(rfqId, data)
+        setShowForm(false)
+        reload()
+      } catch (err: any) {
+        setFormError(err?.message ?? 'Error al crear respuesta')
+      }
+    })
+  }
+
+  function handleUpdate(responseId: string, data: RfqResponseFormData) {
+    setFormError(null)
+    startTransition(async () => {
+      try {
+        await updateRfqResponse(responseId, data)
+        setEditingId(null)
+        reload()
+      } catch (err: any) {
+        setFormError(err?.message ?? 'Error al actualizar respuesta')
+      }
+    })
+  }
+
+  function handleStatusChange(responseId: string, status: RfqResponseStatus) {
+    startTransition(async () => {
+      try {
+        await updateRfqResponseStatus(responseId, status)
+        reload()
+      } catch {
+        // silent — mostrar estado actual
+      }
+    })
+  }
+
+  if (loading) {
+    return (
+      <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <p className="text-sm text-slate-400">Cargando respuestas…</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-6">
+      <div className="flex items-center justify-between mb-5">
+        <h2 className="text-base font-semibold text-slate-800">
+          Respuestas de proveedores
+          {responses.length > 0 && (
+            <span className="ml-2 text-xs font-normal text-slate-400">({responses.length})</span>
+          )}
+        </h2>
+        {!showForm && (
+          <button
+            onClick={() => { setShowForm(true); setFormError(null) }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-mira-primary text-white rounded-lg text-xs font-semibold hover:bg-mira-primary/90 transition-colors"
+          >
+            <Plus size={13} />
+            Nueva respuesta
+          </button>
+        )}
+      </div>
+
+      {showForm && (
+        <div className="mb-5">
+          <ResponseForm
+            initial={EMPTY_FORM}
+            onSave={handleCreate}
+            onCancel={() => { setShowForm(false); setFormError(null) }}
+            saving={isPending}
+            error={formError}
+          />
+        </div>
+      )}
+
+      {responses.length === 0 && !showForm && (
+        <p className="text-sm text-slate-400 py-2">No hay respuestas aún.</p>
+      )}
+
+      <div className="space-y-4">
+        {responses.map((r) => (
+          <div key={r.id} className="border border-slate-200 rounded-xl overflow-hidden">
+            {editingId === r.id ? (
+              <div className="p-4">
+                <ResponseForm
+                  initial={{
+                    supplier_name: r.supplier_name,
+                    supplier_email: r.supplier_email ?? '',
+                    supplier_phone: r.supplier_phone ?? '',
+                    price: r.price,
+                    unit: r.unit,
+                    currency: r.currency,
+                    delivery_date: r.delivery_date ?? '',
+                    payment_terms: r.payment_terms ?? '',
+                    notes: r.notes ?? '',
+                    status: r.status,
+                  }}
+                  onSave={(data) => handleUpdate(r.id, data)}
+                  onCancel={() => { setEditingId(null); setFormError(null) }}
+                  saving={isPending}
+                  error={editingId === r.id ? formError : null}
+                />
+              </div>
+            ) : (
+              <div className="p-4">
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">{r.supplier_name}</p>
+                    {(r.supplier_email || r.supplier_phone) && (
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {[r.supplier_email, r.supplier_phone].filter(Boolean).join(' · ')}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColor(r.status)}`}>
+                      {statusLabel(r.status)}
+                    </span>
+                    <button
+                      onClick={() => { setEditingId(r.id); setFormError(null) }}
+                      className="p-1.5 text-slate-400 hover:text-slate-600 rounded-md hover:bg-slate-100 transition-colors"
+                      title="Editar"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3 text-sm mb-3">
+                  <div>
+                    <span className="text-xs text-slate-500 block">Precio</span>
+                    <span className="font-semibold text-slate-800">
+                      {r.price.toLocaleString('es-ES', { minimumFractionDigits: 2 })} {r.currency}/{r.unit}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-slate-500 block">Entrega</span>
+                    <span className="text-slate-700">{formatDate(r.delivery_date)}</span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-slate-500 block">Pago</span>
+                    <span className="text-slate-700">{r.payment_terms || '—'}</span>
+                  </div>
+                </div>
+
+                {r.notes && (
+                  <p className="text-xs text-slate-500 mb-3 italic">{r.notes}</p>
+                )}
+
+                {/* Cambio rápido de estado */}
+                <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                  <span className="text-xs text-slate-400">Cambiar estado:</span>
+                  {STATUS_OPTIONS.filter((o) => o.value !== r.status).map(({ value, label, color }) => (
+                    <button
+                      key={value}
+                      onClick={() => handleStatusChange(r.id, value)}
+                      disabled={isPending}
+                      className={`px-2 py-0.5 rounded-full text-xs font-medium border border-transparent hover:border-current transition-colors disabled:opacity-50 ${color}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
