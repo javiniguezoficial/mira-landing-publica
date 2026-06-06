@@ -1,6 +1,9 @@
 import Link from 'next/link'
-import { TrendingUp, Package } from 'lucide-react'
+import { TrendingUp, Package, ArrowRight } from 'lucide-react'
 import { getCategoriesWithMarkets } from '@/lib/queries/markets'
+import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
+import { MiraCategoryCard } from '@/components/mira/MiraCategoryCard'
+import { EmptyState } from '@/components/shared/EmptyState'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,66 +11,55 @@ export default async function MarketIntelligentPage() {
   const categories = await getCategoriesWithMarkets()
 
   return (
-    <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-heading font-bold text-slate-900">Market Intelligence</h1>
-        <p className="text-slate-500 font-body text-sm mt-1">
-          Mercados y productos disponibles en tu plan
-        </p>
-      </div>
+    <div className="w-full space-y-6 p-4 md:p-6 xl:p-8">
+      <MiraPageHeader
+        icon={TrendingUp}
+        title="Market Intelligence"
+        subtitle="Mercados y productos disponibles en tu plan"
+      />
 
       {categories.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
-          <TrendingUp size={32} className="text-slate-300 mx-auto mb-4" />
-          <p className="text-slate-500 text-sm">No hay mercados disponibles en este momento.</p>
+        <div className="mira-card rounded-2xl">
+          <EmptyState icon={TrendingUp} title="Sin mercados disponibles" description="No hay mercados disponibles en este momento. Contacta con tu administrador." />
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-5">
           {categories.map(cat => (
-            <div key={cat.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-              {/* Category header */}
-              <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-100 bg-slate-50">
-                <span className="text-2xl">{cat.icon ?? '📦'}</span>
-                <div>
-                  <h2 className="text-base font-heading font-bold text-slate-900">{cat.name}</h2>
-                  {cat.description && (
-                    <p className="text-xs text-slate-500">{cat.description}</p>
-                  )}
-                </div>
-                <span className="ml-auto text-xs font-bold text-slate-400">
-                  {cat.markets.length} {cat.markets.length === 1 ? 'mercado' : 'mercados'}
-                </span>
-              </div>
-
-              {/* Markets */}
-              <div className="divide-y divide-slate-50">
+            <MiraCategoryCard
+              key={cat.id}
+              emoji={cat.icon ?? '📦'}
+              name={cat.name}
+              description={cat.description}
+              meta={`${cat.markets.length} ${cat.markets.length === 1 ? 'mercado' : 'mercados'}`}
+            >
+              <div className="divide-y divide-mira-line">
                 {cat.markets.map(market => (
-                  <div key={market.id} className="px-6 py-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <TrendingUp size={15} className="text-mira-primary shrink-0" />
-                      <span className="text-sm font-bold text-slate-800">{market.name}</span>
-                      <span className="text-xs font-bold px-2 py-0.5 bg-slate-100 text-slate-500 rounded ml-1">
+                  <div key={market.id} className="px-5 py-4">
+                    <div className="mb-3 flex flex-wrap items-center gap-2">
+                      <TrendingUp size={15} className="shrink-0 text-mira-magenta" />
+                      <span className="text-sm font-bold text-mira-ink">{market.name}</span>
+                      <span className="rounded-md bg-mira-canvas px-2 py-0.5 text-[10px] font-bold text-slate-500">
                         {market.country_scope}
                       </span>
                       {market.description && (
-                        <span className="text-xs text-slate-400 ml-1 hidden sm:inline">
-                          — {market.description}
-                        </span>
+                        <span className="hidden text-xs text-slate-400 sm:inline">— {market.description}</span>
                       )}
                     </div>
 
-                    {/* Products */}
                     {market.products.length > 0 && (
-                      <div className="flex flex-wrap gap-2 pl-5">
+                      <div className="flex flex-wrap gap-2 sm:pl-6">
                         {market.products.map(product => (
                           <Link
                             key={product.id}
                             href={`/app/market-intelligent/${market.slug}/${product.slug}`}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg hover:bg-mira-primary/5 hover:border-mira-primary/30 transition-colors group"
+                            className="group flex items-center gap-2 rounded-xl border border-mira-line bg-white px-3 py-2 transition-all hover:-translate-y-0.5 hover:border-mira-magenta/30 hover:shadow-sm"
                           >
-                            <Package size={12} className="text-slate-400 group-hover:text-mira-primary transition-colors" />
-                            <span className="text-xs font-semibold text-slate-700 group-hover:text-mira-primary transition-colors">{product.name}</span>
-                            <span className="text-[10px] font-bold text-slate-400 ml-0.5">/ {product.unit}</span>
+                            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-mira-magenta-soft">
+                              <Package size={13} className="text-mira-magenta" />
+                            </span>
+                            <span className="text-xs font-bold text-slate-700 transition-colors group-hover:text-mira-magenta">{product.name}</span>
+                            <span className="rounded-md bg-mira-canvas px-1.5 py-0.5 text-[10px] font-bold text-slate-400">/ {product.unit}</span>
+                            <ArrowRight size={12} className="text-slate-300 transition-colors group-hover:text-mira-magenta" />
                           </Link>
                         ))}
                       </div>
@@ -75,17 +67,10 @@ export default async function MarketIntelligentPage() {
                   </div>
                 ))}
               </div>
-            </div>
+            </MiraCategoryCard>
           ))}
         </div>
       )}
-
-      {/* Placeholder próximas funciones */}
-      <div className="mt-8 bg-white rounded-xl border border-slate-200 p-6 text-center">
-        <p className="text-slate-400 font-body text-sm">
-          El histórico de precios y alertas de mercado se activarán en las siguientes fases.
-        </p>
-      </div>
     </div>
   )
 }

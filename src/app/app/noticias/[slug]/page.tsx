@@ -9,12 +9,12 @@ export default async function ClienteNoticiaDetailPage({ params }: { params: Pro
   if (!news) notFound()
 
   return (
-    <div className="p-8 max-w-3xl mx-auto">
-      <Link href="/app/noticias" className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-6">
+    <div className="mx-auto w-full max-w-3xl p-4 md:p-6 xl:p-8">
+      <Link href="/app/noticias" className="mb-6 inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 transition-colors hover:text-mira-magenta">
         <ArrowLeft size={15} /> Todas las noticias
       </Link>
 
-      <article className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <article className="mira-card overflow-hidden rounded-2xl">
         {/* Imagen destacada */}
         {news.image_url && (
           <div className="h-64 overflow-hidden bg-slate-100">
@@ -32,7 +32,7 @@ export default async function ClienteNoticiaDetailPage({ params }: { params: Pro
           {(news.category || news.markets?.name || news.products?.name) && (
             <div className="flex flex-wrap gap-2 mb-4">
               {news.category && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-mira-primary/10 text-mira-primary">
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-mira-magenta-soft text-mira-magenta">
                   <Tag size={10} /> {news.category}
                 </span>
               )}
@@ -65,7 +65,7 @@ export default async function ClienteNoticiaDetailPage({ params }: { params: Pro
 
           {/* Extracto como lead */}
           {news.excerpt && (
-            <p className="text-lg text-slate-600 leading-relaxed border-l-4 border-mira-primary pl-4 mb-8 font-medium">
+            <p className="text-lg text-slate-600 leading-relaxed border-l-4 border-mira-magenta pl-4 mb-8 font-medium">
               {news.excerpt}
             </p>
           )}

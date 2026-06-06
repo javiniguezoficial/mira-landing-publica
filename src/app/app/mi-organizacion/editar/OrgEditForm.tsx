@@ -43,7 +43,7 @@ export function OrgEditForm({ action, defaultValues }: Props) {
             name="city"
             type="text"
             defaultValue={defaultValues.city ?? ''}
-            className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30 focus:border-mira-primary"
+            className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-mira-magenta/20 focus:border-mira-magenta"
             placeholder="Madrid"
           />
         </div>
@@ -55,7 +55,7 @@ export function OrgEditForm({ action, defaultValues }: Props) {
             name="phone"
             type="tel"
             defaultValue={defaultValues.phone ?? ''}
-            className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30 focus:border-mira-primary"
+            className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-mira-magenta/20 focus:border-mira-magenta"
             placeholder="+34 600 000 000"
           />
         </div>
@@ -67,7 +67,7 @@ export function OrgEditForm({ action, defaultValues }: Props) {
             name="email"
             type="email"
             defaultValue={defaultValues.email ?? ''}
-            className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30 focus:border-mira-primary"
+            className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-mira-magenta/20 focus:border-mira-magenta"
             placeholder="contacto@empresa.com"
           />
         </div>
@@ -79,7 +79,7 @@ export function OrgEditForm({ action, defaultValues }: Props) {
             name="website"
             type="url"
             defaultValue={defaultValues.website ?? ''}
-            className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30 focus:border-mira-primary"
+            className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-mira-magenta/20 focus:border-mira-magenta"
             placeholder="https://empresa.com"
           />
         </div>
@@ -115,7 +115,7 @@ export function OrgEditForm({ action, defaultValues }: Props) {
         <button
           type="submit"
           disabled={pending}
-          className="flex items-center gap-2 px-6 py-2.5 bg-mira-primary text-white text-sm font-semibold rounded-lg hover:bg-mira-primary/90 transition-colors disabled:opacity-60"
+          className="flex items-center gap-2 px-6 py-2.5 bg-mira-magenta text-white text-sm font-semibold rounded-lg hover:bg-mira-magenta-deep transition-colors disabled:opacity-60"
         >
           {pending && <Loader2 size={15} className="animate-spin" />}
           Guardar cambios

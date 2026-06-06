@@ -49,7 +49,7 @@ export function SupportForm() {
           type="text"
           required
           placeholder="Describe brevemente tu solicitud"
-          className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30 focus:border-mira-primary transition-colors"
+          className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-mira-magenta/20 focus:border-mira-magenta transition-colors"
         />
       </div>
 
@@ -64,7 +64,7 @@ export function SupportForm() {
             name="category"
             required
             defaultValue="other"
-            className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30 focus:border-mira-primary transition-colors"
+            className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-mira-magenta/20 focus:border-mira-magenta transition-colors"
           >
             {CATEGORIES.map(c => (
               <option key={c.value} value={c.value}>{c.label}</option>
@@ -79,7 +79,7 @@ export function SupportForm() {
             id="priority"
             name="priority"
             defaultValue="normal"
-            className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30 focus:border-mira-primary transition-colors"
+            className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-mira-magenta/20 focus:border-mira-magenta transition-colors"
           >
             {PRIORITIES.map(p => (
               <option key={p.value} value={p.value}>{p.label}</option>
@@ -99,7 +99,7 @@ export function SupportForm() {
           required
           rows={5}
           placeholder="Describe con detalle tu consulta o problema…"
-          className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30 focus:border-mira-primary transition-colors resize-none"
+          className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-mira-magenta/20 focus:border-mira-magenta transition-colors resize-none"
         />
       </div>
 
@@ -119,7 +119,7 @@ export function SupportForm() {
         <button
           type="submit"
           disabled={pending}
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-mira-primary text-white text-sm font-semibold hover:bg-mira-primary/90 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-mira-magenta text-white text-sm font-semibold hover:bg-mira-magenta-deep disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
         >
           <Send size={14} />
           {pending ? 'Enviando…' : 'Enviar solicitud'}

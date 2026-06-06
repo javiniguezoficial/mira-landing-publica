@@ -15,9 +15,49 @@ html {
   --color-mira-dark: #1A1A2E;
   --color-mira-charcoal: #16213E;
 
+  /* ── Design System MIRA (panel app/admin) — aislado del landing ── */
+  --color-mira-magenta: #D6006E;
+  --color-mira-magenta-deep: #B80560;
+  --color-mira-magenta-soft: #FCE4EF;
+  --color-mira-plum: #2E0A47;
+  --color-mira-plum-deep: #170528;
+  --color-mira-ink: #1A1230;
+  --color-mira-canvas: #F6F4FA;
+  --color-mira-line: #ECE6F4;
+
   --font-display: "Comfortaa", "Open Sans", sans-serif;
   --font-heading: "Comfortaa", sans-serif;
   --font-body: "Open Sans", sans-serif;
+}
+
+/* ── Design System MIRA — utilidades del panel (no afecta al landing) ── */
+.mira-sidebar-bg {
+  background:
+    radial-gradient(120% 60% at 50% 0%, rgba(214, 0, 110, 0.18) 0%, transparent 55%),
+    linear-gradient(180deg, #2E0A47 0%, #200733 55%, #170528 100%);
+}
+.mira-content-bg {
+  background-color: #F6F4FA;
+  background-image:
+    radial-gradient(at 0% 0%, rgba(214, 0, 110, 0.05) 0px, transparent 45%),
+    radial-gradient(at 100% 0%, rgba(107, 31, 163, 0.05) 0px, transparent 45%);
+}
+.mira-card {
+  background: #ffffff;
+  border: 1px solid var(--color-mira-line);
+  box-shadow: 0 1px 2px rgba(26, 18, 48, 0.04), 0 8px 24px -12px rgba(26, 18, 48, 0.10);
+}
+.mira-scroll::-webkit-scrollbar { width: 6px; }
+.mira-scroll::-webkit-scrollbar-track { background: transparent; }
+.mira-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 9999px; }
+.mira-scroll:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); }
+
+/* Logo circular MIRA recreado en CSS */
+.mira-logo-ring {
+  background:
+    radial-gradient(circle at 30% 25%, rgba(255,255,255,0.18), transparent 55%),
+    conic-gradient(from 200deg, #D6006E, #CB6CE6, #9974E2, #D6006E);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.10), 0 8px 24px -6px rgba(214,0,110,0.55);
 }
 
 /* Custom Utilities for MIRA Visual Style */

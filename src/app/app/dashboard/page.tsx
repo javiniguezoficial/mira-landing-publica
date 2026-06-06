@@ -1,171 +1,184 @@
-import { getActiveOrg } from '@/lib/queries/user-org'
 import {
-  Building2,
-  Users,
-  TrendingUp,
-  FileText,
-  BadgeCheck,
-  ShieldAlert,
-  Clock,
-  XCircle,
+  Building2, Users, FileText, Newspaper, Truck, TrendingUp,
+  Plus, MapPin, HelpCircle, Zap, ArrowRight,
 } from 'lucide-react'
+import { redirect } from 'next/navigation'
+import { getActiveOrg } from '@/lib/queries/user-org'
+import { getClientDashboardData } from '@/lib/queries/client-dashboard'
+import { getLatestPrices } from '@/lib/queries/admin-dashboard'
+import { createClient } from '@/lib/supabase/server'
+import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
+import { MiraKpiCard } from '@/components/mira/MiraKpiCard'
+import { MiraChartCard } from '@/components/mira/MiraChartCard'
+import { MiraSectionCard } from '@/components/mira/MiraSectionCard'
+import { MiraStatusBadge } from '@/components/mira/MiraStatusBadge'
+import { MiraQuickAction } from '@/components/mira/MiraQuickAction'
+import { MiraDonut } from '@/components/mira/charts/MiraDonut'
+import { MiraRankBars } from '@/components/mira/charts/MiraRankBars'
+import { RFQ_COLORS } from '@/components/mira/charts/palette'
 
-// ── Status badge ──────────────────────────────────────────────────────────────
+export const dynamic = 'force-dynamic'
 
-const STATUS_CONFIG = {
-  active:    { label: 'Activo',   icon: BadgeCheck,  className: 'bg-green-50 text-green-700 border-green-200' },
-  trial:     { label: 'Trial',    icon: Clock,       className: 'bg-blue-50 text-blue-700 border-blue-200' },
-  past_due:  { label: 'Vencido',  icon: ShieldAlert, className: 'bg-yellow-50 text-yellow-700 border-yellow-200' },
-  cancelled: { label: 'Cancelado',icon: XCircle,     className: 'bg-slate-100 text-slate-500 border-slate-200' },
-  expired:   { label: 'Expirado', icon: XCircle,     className: 'bg-red-50 text-red-600 border-red-200' },
-} as const
+const ROLE_LABELS: Record<string, string> = { client_owner: 'Propietario', client_member: 'Miembro' }
 
-const ROLE_LABELS: Record<string, string> = {
-  org_owner: 'Propietario',
-  org_admin: 'Administrador',
-  org_member: 'Miembro',
-  client_owner: 'Propietario',
-  client_member: 'Miembro',
+function timeAgo(iso: string) {
+  const d = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
+  if (d < 60) return `${d}s`
+  if (d < 3600) return `${Math.floor(d / 60)}m`
+  if (d < 86400) return `${Math.floor(d / 3600)}h`
+  return `${Math.floor(d / 86400)}d`
 }
-
-// ── No-org screen ─────────────────────────────────────────────────────────────
 
 function NoOrgScreen() {
   return (
-    <div className="flex flex-col items-center justify-center h-full min-h-[60vh] p-8 text-center">
-      <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-6">
-        <Building2 size={32} className="text-slate-400" />
+    <div className="flex min-h-[60vh] flex-col items-center justify-center p-8 text-center">
+      <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-mira-magenta-soft">
+        <Building2 size={32} className="text-mira-magenta" />
       </div>
-      <h2 className="text-xl font-heading font-bold text-slate-900 mb-2">
-        No tienes organización asignada
-      </h2>
-      <p className="text-slate-500 font-body text-sm max-w-sm">
-        Tu cuenta no está vinculada a ninguna organización todavía. Contacta con tu
-        administrador para que te añada como miembro.
+      <h2 className="mb-2 text-xl font-black text-mira-ink">Sin organización asignada</h2>
+      <p className="max-w-sm text-sm text-slate-500">
+        Tu cuenta no está vinculada a ninguna organización. Contacta con tu administrador.
       </p>
     </div>
   )
 }
 
-// ── Dashboard ─────────────────────────────────────────────────────────────────
-
 export default async function AppDashboard() {
   const result = await getActiveOrg()
+  if (result.status === 'no_org') return <NoOrgScreen />
 
-  if (result.status === 'no_org') {
-    return <NoOrgScreen />
-  }
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
 
   const { org } = result
-  const statusCfg = STATUS_CONFIG[org.subscription_status] ?? STATUS_CONFIG.trial
-  const StatusIcon = statusCfg.icon
+  const [data, latestPrices] = await Promise.all([
+    getClientDashboardData(org.id, user.id),
+    getLatestPrices(5),
+  ])
+
   const roleLabel = ROLE_LABELS[org.userRole] ?? org.userRole
+  const rfqDonut = data.rfqStatusCounts.map(d => ({ label: d.label, value: d.count, color: RFQ_COLORS[d.status] ?? '#94A3B8' }))
+  const priceBars = latestPrices.map(p => ({ label: p.product, value: p.price }))
 
   return (
-    <div className="p-8">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-heading font-bold text-slate-900">Dashboard</h1>
-        <p className="text-slate-500 font-body text-sm mt-1">
-          Bienvenido a MIRA Pricing
-        </p>
+    <div className="w-full space-y-6 p-4 md:p-6 xl:p-8">
+      <MiraPageHeader
+        icon={Building2}
+        title={org.name}
+        subtitle={`Organización activa · Rol: ${roleLabel}`}
+        actions={
+          <>
+            <span className="rounded-xl border border-mira-line bg-white px-3 py-2 text-xs font-bold text-slate-600">
+              {org.plan?.name ?? 'Sin plan'}
+            </span>
+            <MiraStatusBadge status={org.subscription_status} kind="sub" className="px-3 py-2 text-xs" />
+            <a href="/app/rfqs/nueva" className="inline-flex items-center gap-1.5 rounded-xl bg-mira-magenta px-4 py-2 text-sm font-bold text-white shadow-lg shadow-mira-magenta/25 transition-colors hover:bg-mira-magenta-deep">
+              <Plus size={14} /> Nueva RFQ
+            </a>
+          </>
+        }
+      />
+
+      {/* KPIs */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <MiraKpiCard label="Miembros" value={org.memberCount} sublabel="en tu organización" icon={Users} tint="violet" href="/app/mi-organizacion" />
+        <MiraKpiCard label="RFQs activas" value={data.rfqsActive} sublabel={`de ${data.rfqsTotal} total`} icon={FileText} tint="magenta" href="/app/rfqs" />
+        <MiraKpiCard label="Respuestas" value={data.responsesReceived} sublabel="de proveedores" icon={TrendingUp} tint="emerald" href="/app/rfqs" />
+        <MiraKpiCard label="Proveedores" value={data.suppliersAvailable} sublabel="disponibles" icon={Truck} tint="cyan" href="/app/proveedores" />
       </div>
 
-      {/* Org context card */}
-      <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-6 flex flex-col sm:flex-row sm:items-center gap-4">
-        <div className="w-12 h-12 rounded-xl bg-mira-primary/10 flex items-center justify-center shrink-0">
-          <Building2 size={22} className="text-mira-primary" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">
-            Organización activa
-          </p>
-          <h2 className="text-lg font-heading font-bold text-slate-900 truncate">
-            {org.name}
-          </h2>
-          <p className="text-xs text-slate-500 font-body">
-            Tu rol: <span className="font-semibold text-slate-700">{roleLabel}</span>
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3 shrink-0">
-          {/* Plan badge */}
-          <span className="px-3 py-1 rounded-full bg-mira-primary/10 text-mira-primary text-xs font-bold border border-mira-primary/20">
-            {org.plan?.name ?? 'Sin plan'}
-          </span>
-          {/* Status badge */}
-          <span
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${statusCfg.className}`}
-          >
-            <StatusIcon size={12} />
-            {statusCfg.label}
-          </span>
-        </div>
+      {/* Market Intelligence protagonista + donut RFQs */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3 xl:gap-6">
+        <MiraChartCard
+          className="xl:col-span-2"
+          icon={Zap}
+          title="Market Intelligence"
+          subtitle="Precios de referencia más recientes (€)"
+          action={{ label: 'Explorar mercados', href: '/app/market-intelligent' }}
+        >
+          {priceBars.length === 0 ? (
+            <p className="py-10 text-center text-sm text-slate-400">Sin datos de precios disponibles</p>
+          ) : (
+            <MiraRankBars data={priceBars} unit="€" decimals={2} />
+          )}
+          <a href="/app/market-intelligent" className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-mira-magenta to-mira-magenta-deep py-2.5 text-sm font-bold text-white shadow-md shadow-mira-magenta/25 transition-opacity hover:opacity-90">
+            <TrendingUp size={15} /> Ver evolución de precios
+          </a>
+        </MiraChartCard>
+
+        <MiraChartCard
+          icon={FileText}
+          iconTint="bg-purple-100 text-purple-600"
+          title="Mis cotizaciones"
+          subtitle={`${data.rfqsTotal} RFQs en total`}
+          action={{ label: 'Ver', href: '/app/rfqs' }}
+        >
+          <MiraDonut data={rfqDonut} unit="RFQs" height={220} />
+        </MiraChartCard>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {/* Real KPI: miembros */}
-        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              Usuarios
-            </p>
-            <Users size={16} className="text-slate-300" />
-          </div>
-          <p className="text-3xl font-display font-bold text-slate-900 mb-1">
-            {org.memberCount}
-          </p>
-          <p className="text-xs text-slate-400 font-body">miembros activos</p>
-        </div>
+      {/* Mis RFQs + noticias */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:gap-6">
+        <MiraSectionCard title="Mis últimas RFQs" icon={FileText} iconTint="bg-purple-100 text-purple-600" action={{ label: 'Ver todas', href: '/app/rfqs' }}>
+          {data.recentRfqs.length === 0
+            ? <div className="flex flex-col items-center gap-3 px-5 py-10 text-center">
+                <FileText size={28} className="text-slate-300" />
+                <p className="text-sm text-slate-400">Sin RFQs todavía</p>
+                <a href="/app/rfqs/nueva" className="rounded-xl bg-mira-magenta px-4 py-2 text-xs font-bold text-white">Nueva RFQ</a>
+              </div>
+            : <div className="divide-y divide-mira-line">
+                {data.recentRfqs.map(rfq => (
+                  <a key={rfq.id} href={`/app/rfqs/${rfq.id}`} className="group flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-mira-canvas">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-purple-50"><FileText size={13} className="text-purple-500" /></div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-bold text-slate-800 transition-colors group-hover:text-mira-magenta">{rfq.product_name ?? 'Producto'}</p>
+                      <p className="text-[10px] text-slate-400">{rfq.quantity} {rfq.unit}</p>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <MiraStatusBadge status={rfq.status} kind="rfq" />
+                      <span className="text-[10px] text-slate-400">{timeAgo(rfq.created_at)}</span>
+                    </div>
+                  </a>
+                ))}
+              </div>
+          }
+        </MiraSectionCard>
 
-        {/* Placeholder KPIs */}
-        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              Mercados
-            </p>
-            <TrendingUp size={16} className="text-slate-300" />
-          </div>
-          <p className="text-3xl font-display font-bold text-slate-300 mb-1">—</p>
-          <p className="text-xs text-slate-400 font-body">próximamente</p>
-        </div>
-
-        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              RFQs activas
-            </p>
-            <FileText size={16} className="text-slate-300" />
-          </div>
-          <p className="text-3xl font-display font-bold text-slate-300 mb-1">—</p>
-          <p className="text-xs text-slate-400 font-body">próximamente</p>
-        </div>
-
-        {/* Real KPI: plan */}
-        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              Plan actual
-            </p>
-            <BadgeCheck size={16} className="text-slate-300" />
-          </div>
-          <p className="text-xl font-display font-bold text-slate-900 mb-1">
-            {org.plan?.name ?? '—'}
-          </p>
-          <span
-            className={`inline-flex items-center gap-1 text-xs font-bold ${statusCfg.className} px-2 py-0.5 rounded-full border`}
-          >
-            <StatusIcon size={10} />
-            {statusCfg.label}
-          </span>
-        </div>
+        <MiraSectionCard title="Últimas noticias" icon={Newspaper} iconTint="bg-emerald-100 text-emerald-600" action={{ label: 'Ver todas', href: '/app/noticias' }}>
+          {data.recentNews.length === 0
+            ? <div className="px-5 py-10 text-center text-sm text-slate-400">Sin noticias publicadas</div>
+            : <div className="divide-y divide-mira-line">
+                {data.recentNews.map(n => (
+                  <a key={n.id} href={`/app/noticias/${n.slug}`} className="group flex items-start gap-3 px-5 py-3.5 transition-colors hover:bg-mira-canvas">
+                    {n.image_url
+                      ? <img src={n.image_url} alt="" className="h-11 w-11 shrink-0 rounded-xl bg-slate-100 object-cover" />
+                      : <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50"><Newspaper size={16} className="text-emerald-400" /></div>
+                    }
+                    <div className="min-w-0 flex-1">
+                      <p className="line-clamp-2 text-xs font-bold text-slate-800 transition-colors group-hover:text-mira-magenta">{n.title}</p>
+                      {n.excerpt && <p className="mt-0.5 line-clamp-1 text-[10px] text-slate-400">{n.excerpt}</p>}
+                      <p className="mt-1 text-[10px] text-slate-400">{timeAgo(n.created_at)}</p>
+                    </div>
+                  </a>
+                ))}
+              </div>
+          }
+        </MiraSectionCard>
       </div>
 
-      {/* Modules placeholder */}
-      <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
-        <p className="text-slate-400 font-body text-sm">
-          Los módulos de mercados, RFQs y proveedores se activan en las siguientes fases.
-        </p>
+      {/* Accesos rápidos */}
+      <div className="mira-card rounded-2xl p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-[15px] font-black text-mira-ink">Accesos rápidos</h2>
+          <a href="/app/ayuda" className="flex items-center gap-1 text-xs font-bold text-mira-magenta hover:underline">Ayuda <ArrowRight size={12} /></a>
+        </div>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <MiraQuickAction href="/app/rfqs/nueva" label="Nueva RFQ" desc="Solicitar cotización" icon={Plus} gradient="from-mira-magenta to-purple-600" />
+          <MiraQuickAction href="/app/market-intelligent" label="Market Intelligence" desc="Precios de mercado" icon={TrendingUp} gradient="from-fuchsia-500 to-pink-600" />
+          <MiraQuickAction href="/app/proveedores" label="Proveedores" desc="Mapa y catálogo" icon={MapPin} gradient="from-cyan-500 to-blue-600" />
+          <MiraQuickAction href="/app/ayuda" label="Ayuda" desc="FAQ y soporte" icon={HelpCircle} gradient="from-emerald-500 to-teal-600" />
+        </div>
       </div>
     </div>
   )

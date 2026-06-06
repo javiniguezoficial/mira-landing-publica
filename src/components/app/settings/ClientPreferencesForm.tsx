@@ -53,7 +53,7 @@ export function ClientPreferencesForm({ defaultValues }: Props) {
           id="preferred_locale"
           name="preferred_locale"
           defaultValue={defaultValues.preferred_locale}
-          className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30 focus:border-mira-primary transition-colors"
+          className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-mira-magenta/20 focus:border-mira-magenta transition-colors"
         >
           {LOCALES.map(l => (
             <option key={l.value} value={l.value}>{l.label}</option>
@@ -70,7 +70,7 @@ export function ClientPreferencesForm({ defaultValues }: Props) {
           id="preferred_currency"
           name="preferred_currency"
           defaultValue={defaultValues.preferred_currency}
-          className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30 focus:border-mira-primary transition-colors"
+          className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-mira-magenta/20 focus:border-mira-magenta transition-colors"
         >
           {CURRENCIES.map(c => (
             <option key={c.value} value={c.value}>{c.label}</option>
@@ -88,7 +88,7 @@ export function ClientPreferencesForm({ defaultValues }: Props) {
           id="preferred_country"
           name="preferred_country"
           defaultValue={defaultValues.preferred_country}
-          className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30 focus:border-mira-primary transition-colors"
+          className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-mira-magenta/20 focus:border-mira-magenta transition-colors"
         >
           {COUNTRIES.map(c => (
             <option key={c.value} value={c.value}>{c.label}</option>
@@ -112,7 +112,7 @@ export function ClientPreferencesForm({ defaultValues }: Props) {
         <button
           type="submit"
           disabled={pending}
-          className="px-5 py-2.5 rounded-lg bg-mira-primary text-white text-sm font-semibold hover:bg-mira-primary/90 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+          className="px-5 py-2.5 rounded-lg bg-mira-magenta text-white text-sm font-semibold hover:bg-mira-magenta-deep disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
         >
           {pending ? 'Guardando…' : 'Guardar preferencias'}
         </button>

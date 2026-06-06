@@ -1,82 +1,65 @@
 import { getPublishedNews } from '@/lib/queries/news'
 import Link from 'next/link'
 import { Newspaper, Calendar, Tag, TrendingUp, Package } from 'lucide-react'
+import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
+import { EmptyState } from '@/components/shared/EmptyState'
 
 export default async function ClienteNoticiasPage() {
   const news = await getPublishedNews()
 
   return (
-    <div className="p-8">
-      <div className="flex items-center gap-3 mb-8">
-        <Newspaper className="text-mira-primary" size={28} />
-        <div>
-          <h1 className="text-2xl font-display font-bold text-slate-900">Noticias</h1>
-          <p className="text-sm text-slate-500">Últimas novedades del sector</p>
-        </div>
-      </div>
+    <div className="w-full space-y-6 p-4 md:p-6 xl:p-8">
+      <MiraPageHeader icon={Newspaper} title="Noticias" subtitle="Últimas novedades del sector" />
 
       {news.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-16 text-center">
-          <Newspaper size={36} className="mx-auto text-slate-200 mb-4" />
-          <p className="font-semibold text-slate-600 mb-1">No hay noticias publicadas todavía</p>
-          <p className="text-sm text-slate-400">Vuelve pronto para ver las últimas novedades del sector.</p>
+        <div className="mira-card rounded-2xl">
+          <EmptyState icon={Newspaper} title="No hay noticias publicadas todavía" description="Vuelve pronto para ver las últimas novedades del sector." />
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {news.map((item) => (
             <Link
               key={item.id}
               href={`/app/noticias/${item.slug}`}
-              className="group bg-white rounded-xl border border-slate-200 overflow-hidden hover:border-mira-primary/40 hover:shadow-md transition-all flex flex-col"
+              className="mira-card group flex flex-col overflow-hidden rounded-2xl transition-all hover:-translate-y-0.5 hover:border-mira-magenta/30 hover:shadow-lg hover:shadow-mira-ink/10"
             >
-              {/* Imagen — solo si existe */}
               {item.image_url && (
-                <div className="h-44 overflow-hidden bg-slate-100 shrink-0">
+                <div className="h-44 shrink-0 overflow-hidden bg-slate-100">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={item.image_url}
-                    alt={item.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
+                  <img src={item.image_url} alt={item.title} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
                 </div>
               )}
 
-              <div className="p-5 flex flex-col flex-1">
-                {/* Chips */}
+              <div className="flex flex-1 flex-col p-5">
                 {(item.category || item.markets?.name || item.products?.name) && (
-                  <div className="flex flex-wrap gap-1.5 mb-3">
+                  <div className="mb-3 flex flex-wrap gap-1.5">
                     {item.category && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-mira-primary/10 text-mira-primary">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-mira-magenta-soft px-2 py-0.5 text-xs font-semibold text-mira-magenta">
                         <Tag size={9} /> {item.category}
                       </span>
                     )}
                     {item.markets?.name && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-mira-canvas px-2 py-0.5 text-xs font-semibold text-slate-600">
                         <TrendingUp size={9} /> {item.markets.name}
                       </span>
                     )}
                     {item.products?.name && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-mira-canvas px-2 py-0.5 text-xs font-semibold text-slate-600">
                         <Package size={9} /> {item.products.name}
                       </span>
                     )}
                   </div>
                 )}
 
-                {/* Título */}
-                <h2 className="font-display font-bold text-slate-900 leading-snug mb-2 group-hover:text-mira-primary transition-colors line-clamp-2">
+                <h2 className="mb-2 line-clamp-2 font-black leading-snug text-mira-ink transition-colors group-hover:text-mira-magenta">
                   {item.title}
                 </h2>
 
-                {/* Extracto */}
                 {item.excerpt && (
-                  <p className="text-sm text-slate-500 leading-relaxed line-clamp-3 mb-3 flex-1">
-                    {item.excerpt}
-                  </p>
+                  <p className="mb-3 line-clamp-3 flex-1 text-sm leading-relaxed text-slate-500">{item.excerpt}</p>
                 )}
 
-                {/* Fecha */}
-                <div className="flex items-center gap-1 text-xs text-slate-400 mt-auto">
+                <div className="mt-auto flex items-center gap-1 text-xs text-slate-400">
                   <Calendar size={11} />
                   {new Date(item.published_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}
                 </div>

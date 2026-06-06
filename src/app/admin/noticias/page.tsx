@@ -95,7 +95,8 @@ export default async function AdminNoticiasPage({
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[640px]">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
                 <th className="text-left px-5 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Título</th>
@@ -172,6 +173,7 @@ export default async function AdminNoticiasPage({
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>

@@ -35,7 +35,7 @@ function CustomTooltip({ active, payload, label, currency, unit }: any) {
   return (
     <div className="bg-white border border-slate-200 rounded-lg shadow-lg px-3 py-2 text-xs">
       <p className="font-bold text-slate-700 mb-1">{formatDate(label)}</p>
-      <p className="text-mira-primary font-bold">
+      <p className="text-mira-magenta font-bold">
         {formatPrice(payload[0].value, currency)} / {unit}
       </p>
       {payload[1] && (

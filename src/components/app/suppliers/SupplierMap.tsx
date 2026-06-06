@@ -60,7 +60,7 @@ export function SupplierMap({ suppliers }: Props) {
               {s.category && <p className="text-xs text-slate-500 mt-0.5">{s.category}</p>}
               {s.city && <p className="text-xs text-slate-600 mt-1">{s.city}, {s.country}</p>}
               {s.email && (
-                <a href={`mailto:${s.email}`} className="text-xs text-mira-primary block mt-1 hover:underline">
+                <a href={`mailto:${s.email}`} className="text-xs text-mira-magenta block mt-1 hover:underline">
                   {s.email}
                 </a>
               )}

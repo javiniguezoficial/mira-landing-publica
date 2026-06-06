@@ -22,7 +22,7 @@ export default async function EditarMiOrganizacionPage() {
           <ArrowLeft size={15} /> Volver a mi organización
         </Link>
         <div className="flex items-center gap-3">
-          <Building2 className="text-mira-primary" size={22} />
+          <Building2 className="text-mira-magenta" size={22} />
           <div>
             <h1 className="text-2xl font-display font-bold text-slate-900">Editar datos de contacto</h1>
             <p className="text-sm text-slate-500">{org.name}</p>

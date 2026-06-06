@@ -3,9 +3,11 @@ import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { getRfq, publishRfq, cancelRfq, listActiveProducts, updateDraftRfq } from '@/lib/actions/rfqs'
-import { RfqStatusBadge } from '@/components/app/rfqs/RfqStatusBadge'
+import { MiraStatusBadge } from '@/components/mira/MiraStatusBadge'
+import { MiraFormCard } from '@/components/mira/MiraFormCard'
 import { RfqForm } from '@/components/app/rfqs/RfqForm'
 import { RfqResponsesClient } from '@/components/app/rfqs/RfqResponsesClient'
+import { miraBtn } from '@/lib/miraButtons'
 
 function formatDate(d: string) {
   return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })
@@ -15,7 +17,7 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   if (!value) return null
   return (
     <div>
-      <dt className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-0.5">{label}</dt>
+      <dt className="mb-0.5 text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</dt>
       <dd className="text-sm text-slate-800">{value}</dd>
     </div>
   )
@@ -31,30 +33,22 @@ export default async function ClientRfqDetailPage({ params }: { params: Promise<
   const isDraft = rfq.status === 'draft'
 
   return (
-    <div className="p-8 max-w-3xl mx-auto">
-      <div className="mb-6">
-        <Link
-          href="/app/rfqs"
-          className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-4"
-        >
-          <ArrowLeft size={14} />
-          Volver a cotizaciones
+    <div className="mx-auto w-full max-w-3xl space-y-6 p-4 md:p-6 xl:p-8">
+      <div>
+        <Link href="/app/rfqs" className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 transition-colors hover:text-mira-magenta">
+          <ArrowLeft size={14} /> Volver a cotizaciones
         </Link>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-heading font-bold text-slate-900">
-              {product?.name ?? 'Cotización'}
-            </h1>
-            <p className="text-sm text-slate-500 mt-1">
-              {market?.name ?? ''} · {formatDate(rfq.created_at)}
-            </p>
+            <h1 className="text-2xl font-black tracking-tight text-mira-ink">{product?.name ?? 'Cotización'}</h1>
+            <p className="mt-1 text-sm text-slate-500">{market?.name ?? ''} · {formatDate(rfq.created_at)}</p>
           </div>
-          <RfqStatusBadge status={rfq.status} />
+          <MiraStatusBadge status={rfq.status} kind="rfq" className="px-2.5 py-1 text-xs" />
         </div>
       </div>
 
       {/* Detalle */}
-      <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+      <div className="mira-card rounded-2xl p-6">
         <dl className="grid grid-cols-2 gap-5">
           <Field label="Producto" value={product?.name} />
           <Field label="Cantidad" value={`${rfq.quantity.toLocaleString('es-ES')} ${rfq.unit}`} />
@@ -67,19 +61,13 @@ export default async function ClientRfqDetailPage({ params }: { params: Promise<
       </div>
 
       {/* Respuestas recibidas — solo si no es borrador */}
-      {!isDraft && (
-        <div className="mb-6">
-          <RfqResponsesClient rfqId={id} />
-        </div>
-      )}
+      {!isDraft && <RfqResponsesClient rfqId={id} />}
 
       {/* Acciones de borrador */}
       {isDraft && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-6">
-          <h2 className="text-sm font-semibold text-blue-800 mb-1">Esta RFQ está en borrador</h2>
-          <p className="text-xs text-blue-700 mb-4">
-            Publícala para que quede registrada como solicitud abierta.
-          </p>
+        <div className="rounded-2xl border border-mira-magenta/20 bg-mira-magenta-soft/50 p-5">
+          <h2 className="mb-1 text-sm font-black text-mira-ink">Esta RFQ está en borrador</h2>
+          <p className="mb-4 text-xs text-slate-600">Publícala para que quede registrada como solicitud abierta.</p>
           <div className="flex items-center gap-3">
             <form
               action={async () => {
@@ -90,12 +78,7 @@ export default async function ClientRfqDetailPage({ params }: { params: Promise<
                 redirect(`/app/rfqs/${id}`)
               }}
             >
-              <button
-                type="submit"
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors"
-              >
-                Publicar RFQ
-              </button>
+              <button type="submit" className={miraBtn.primary}>Publicar RFQ</button>
             </form>
             <form
               action={async () => {
@@ -106,12 +89,7 @@ export default async function ClientRfqDetailPage({ params }: { params: Promise<
                 redirect(`/app/rfqs/${id}`)
               }}
             >
-              <button
-                type="submit"
-                className="px-4 py-2 border border-slate-300 text-slate-600 rounded-lg text-sm font-semibold hover:bg-slate-100 transition-colors"
-              >
-                Cancelar borrador
-              </button>
+              <button type="submit" className={miraBtn.ghost}>Cancelar borrador</button>
             </form>
           </div>
         </div>
@@ -119,10 +97,9 @@ export default async function ClientRfqDetailPage({ params }: { params: Promise<
 
       {/* Edición en draft */}
       {isDraft && (
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
-          <h2 className="text-base font-semibold text-slate-800 mb-5">Editar borrador</h2>
+        <MiraFormCard title="Editar borrador">
           <RfqFormWrapper rfqId={id} rfq={rfq} />
-        </div>
+        </MiraFormCard>
       )}
     </div>
   )

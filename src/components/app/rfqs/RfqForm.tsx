@@ -3,6 +3,9 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import type { ProductOption, RfqFormData } from '@/lib/actions/rfqs'
+import { miraBtn, miraField } from '@/lib/miraButtons'
+
+const labelCls = 'block text-sm font-semibold text-slate-700 mb-1.5'
 
 const COUNTRIES = [
   { code: 'ES', name: 'España' },
@@ -85,21 +88,21 @@ export function RfqForm({ products, defaultValues, onSubmit, submitLabel, cancel
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {error && (
-        <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
       )}
 
       {/* Producto */}
       <div>
-        <label className="block text-sm font-semibold text-slate-700 mb-1">
+        <label className={labelCls}>
           Producto <span className="text-red-500">*</span>
         </label>
         <select
           value={productId}
           onChange={(e) => handleProductChange(e.target.value)}
           required
-          className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary bg-white"
+          className={miraField}
         >
           <option value="">Selecciona un producto…</option>
           {Object.entries(grouped).map(([market, prods]) => (
@@ -117,7 +120,7 @@ export function RfqForm({ products, defaultValues, onSubmit, submitLabel, cancel
       {/* Cantidad + Unidad */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1">
+          <label className={labelCls}>
             Cantidad <span className="text-red-500">*</span>
           </label>
           <input
@@ -128,11 +131,11 @@ export function RfqForm({ products, defaultValues, onSubmit, submitLabel, cancel
             onChange={(e) => setQuantity(e.target.value)}
             required
             placeholder="1000"
-            className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary"
+            className={miraField}
           />
         </div>
         <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1">
+          <label className={labelCls}>
             Unidad <span className="text-red-500">*</span>
           </label>
           <input
@@ -141,14 +144,14 @@ export function RfqForm({ products, defaultValues, onSubmit, submitLabel, cancel
             onChange={(e) => setUnit(e.target.value)}
             required
             placeholder="kg, t, L…"
-            className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary"
+            className={miraField}
           />
         </div>
       </div>
 
       {/* Fecha límite */}
       <div>
-        <label className="block text-sm font-semibold text-slate-700 mb-1">
+        <label className={labelCls}>
           Fecha límite <span className="text-red-500">*</span>
         </label>
         <input
@@ -157,21 +160,21 @@ export function RfqForm({ products, defaultValues, onSubmit, submitLabel, cancel
           min={todayString()}
           onChange={(e) => setDeadline(e.target.value)}
           required
-          className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary"
+          className={miraField}
         />
       </div>
 
       {/* País + Región */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1">
+          <label className={labelCls}>
             País <span className="text-red-500">*</span>
           </label>
           <select
             value={country}
             onChange={(e) => setCountry(e.target.value)}
             required
-            className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary bg-white"
+            className={miraField}
           >
             {COUNTRIES.map((c) => (
               <option key={c.code} value={c.code}>{c.name}</option>
@@ -179,7 +182,7 @@ export function RfqForm({ products, defaultValues, onSubmit, submitLabel, cancel
           </select>
         </div>
         <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1">
+          <label className={labelCls}>
             Región <span className="text-slate-400 font-normal">(opcional)</span>
           </label>
           <input
@@ -187,14 +190,14 @@ export function RfqForm({ products, defaultValues, onSubmit, submitLabel, cancel
             value={region}
             onChange={(e) => setRegion(e.target.value)}
             placeholder="Andalucía, Castilla…"
-            className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary"
+            className={miraField}
           />
         </div>
       </div>
 
       {/* Notas */}
       <div>
-        <label className="block text-sm font-semibold text-slate-700 mb-1">
+        <label className={labelCls}>
           Notas <span className="text-slate-400 font-normal">(opcional)</span>
         </label>
         <textarea
@@ -202,13 +205,13 @@ export function RfqForm({ products, defaultValues, onSubmit, submitLabel, cancel
           onChange={(e) => setNotes(e.target.value)}
           rows={3}
           placeholder="Especificaciones adicionales, calidad requerida…"
-          className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary resize-none"
+          className={`${miraField} resize-none`}
         />
       </div>
 
       {/* Condiciones */}
       <div>
-        <label className="block text-sm font-semibold text-slate-700 mb-1">
+        <label className={labelCls}>
           Condiciones <span className="text-slate-400 font-normal">(opcional)</span>
         </label>
         <textarea
@@ -216,25 +219,16 @@ export function RfqForm({ products, defaultValues, onSubmit, submitLabel, cancel
           onChange={(e) => setConditions(e.target.value)}
           rows={3}
           placeholder="Condiciones de pago, entrega, incoterms…"
-          className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary resize-none"
+          className={`${miraField} resize-none`}
         />
       </div>
 
       {/* Acciones */}
       <div className="flex items-center gap-3 pt-2">
-        <button
-          type="submit"
-          disabled={isPending}
-          className="px-5 py-2.5 bg-mira-primary text-white rounded-lg text-sm font-semibold hover:bg-mira-primary/90 disabled:opacity-50 transition-colors"
-        >
+        <button type="submit" disabled={isPending} className={miraBtn.primary}>
           {isPending ? 'Guardando…' : submitLabel}
         </button>
-        <a
-          href={cancelHref}
-          className="px-5 py-2.5 border border-slate-300 text-slate-700 rounded-lg text-sm font-semibold hover:bg-slate-50 transition-colors"
-        >
-          Cancelar
-        </a>
+        <a href={cancelHref} className={miraBtn.ghost}>Cancelar</a>
       </div>
     </form>
   )
