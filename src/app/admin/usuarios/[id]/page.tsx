@@ -2,8 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ChevronLeft, Mail, Phone, Building2 } from 'lucide-react'
 import { getProfileById, getUserOrganizations } from '@/lib/actions/users'
-import { UserRoleBadge } from '@/components/admin/users/UserRoleBadge'
-import { ClientStatusBadge } from '@/components/admin/clients/ClientStatusBadge'
+import { MiraStatusBadge } from '@/components/mira/MiraStatusBadge'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,26 +28,26 @@ export default async function UsuarioDetailPage({ params }: { params: Promise<{ 
   const initials = (user.first_name ?? user.email)?.[0]?.toUpperCase() ?? '?'
 
   return (
-    <div className="p-8 max-w-3xl">
+    <div className="w-full max-w-3xl space-y-6 p-4 md:p-6 xl:p-8">
       {/* Cabecera */}
-      <div className="mb-8">
+      <div>
         <Link
           href="/admin/usuarios"
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 mb-4 transition-colors"
+          className="mb-4 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 transition-colors hover:text-mira-magenta"
         >
           <ChevronLeft size={14} />
           Volver a usuarios
         </Link>
 
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-xl bg-mira-primary/10 flex items-center justify-center shrink-0 text-xl font-bold text-mira-primary">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-mira-magenta to-mira-magenta-deep text-xl font-bold text-white shadow-lg shadow-mira-magenta/30">
             {initials}
           </div>
           <div>
-            <h1 className="text-2xl font-heading font-bold text-slate-900">{fullName}</h1>
-            <div className="flex items-center gap-3 mt-1">
+            <h1 className="text-xl font-black tracking-tight text-mira-ink md:text-2xl">{fullName}</h1>
+            <div className="mt-1 flex flex-wrap items-center gap-3">
               <span className="text-sm text-slate-500">{user.email}</span>
-              <UserRoleBadge role={user.role} />
+              <MiraStatusBadge status={user.role} kind="role" />
             </div>
           </div>
         </div>
@@ -56,8 +55,8 @@ export default async function UsuarioDetailPage({ params }: { params: Promise<{ 
 
       <div className="space-y-6">
         {/* Perfil */}
-        <section className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-          <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-5">Perfil</h2>
+        <section className="mira-card rounded-2xl p-5 sm:p-6">
+          <h2 className="mb-5 text-xs font-bold uppercase tracking-wider text-slate-400">Perfil</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="flex items-center gap-3">
               <Mail size={15} className="text-slate-400 shrink-0" />
@@ -68,63 +67,67 @@ export default async function UsuarioDetailPage({ params }: { params: Promise<{ 
               <span className="text-sm text-slate-700">{user.phone || '—'}</span>
             </div>
           </div>
-          <div className="mt-4 pt-4 border-t border-slate-100 flex items-center gap-6 text-xs text-slate-500">
+          <div className="mt-4 flex items-center gap-6 border-t border-mira-line pt-4 text-xs text-slate-500">
             <span>Alta: {fmt(user.created_at)}</span>
           </div>
         </section>
 
         {/* Organizaciones */}
-        <section className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2 px-6 py-4 border-b border-slate-100">
-            <Building2 size={15} className="text-slate-400" />
-            <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+        <section className="mira-card overflow-hidden rounded-2xl">
+          <div className="flex items-center gap-2 border-b border-mira-line px-5 py-3.5">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-mira-magenta-soft">
+              <Building2 size={14} className="text-mira-magenta" />
+            </div>
+            <h2 className="text-sm font-black text-mira-ink">
               Organizaciones ({memberships.length})
             </h2>
           </div>
 
           {memberships.length === 0 ? (
-            <p className="text-sm text-slate-400 text-center py-8 font-body">
+            <p className="py-8 text-center text-sm text-slate-400">
               Este usuario no pertenece a ninguna organización.
             </p>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-100">
-                  {['Organización', 'Rol', 'Estado', 'Incorporación'].map((h) => (
-                    <th key={h} className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {memberships.map((m) => {
-                  const org = (m.organization as unknown) as { id: string; name: string; subscription_status: string; plan: { name: string } | null } | null
-                  return (
-                    <tr key={m.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-4 py-3">
-                        {org ? (
-                          <Link href={`/admin/clientes/${org.id}`} className="font-semibold text-slate-900 hover:text-mira-primary transition-colors">
-                            {org.name}
-                          </Link>
-                        ) : '—'}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                          {ORG_ROLE_LABEL[m.role] ?? m.role}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        {org && <ClientStatusBadge status={org.subscription_status as never} />}
-                      </td>
-                      <td className="px-4 py-3 text-slate-500 text-xs">
-                        {new Date(m.joined_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-mira-line bg-mira-canvas/60">
+                    {['Organización', 'Rol', 'Estado', 'Incorporación'].map((h) => (
+                      <th key={h} className="whitespace-nowrap px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-mira-line">
+                  {memberships.map((m) => {
+                    const org = (m.organization as unknown) as { id: string; name: string; subscription_status: string; plan: { name: string } | null } | null
+                    return (
+                      <tr key={m.id} className="transition-colors hover:bg-mira-canvas/70">
+                        <td className="whitespace-nowrap px-4 py-3">
+                          {org ? (
+                            <Link href={`/admin/clientes/${org.id}`} className="font-bold text-mira-ink transition-colors hover:text-mira-magenta">
+                              {org.name}
+                            </Link>
+                          ) : '—'}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <span className="inline-flex items-center rounded-lg bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">
+                            {ORG_ROLE_LABEL[m.role] ?? m.role}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3">
+                          {org && <MiraStatusBadge status={org.subscription_status} kind="sub" />}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-500">
+                          {new Date(m.joined_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </section>
       </div>

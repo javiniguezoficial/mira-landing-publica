@@ -4,6 +4,9 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createOrganization, updateOrganization } from '@/lib/actions/organizations'
 import type { Organization, OrgFormData, SubscriptionStatus, OrgType } from '@/lib/actions/organizations'
+import { MiraFormCard } from '@/components/mira/MiraFormCard'
+import { miraBtn, miraField, miraLabel } from '@/lib/miraButtons'
+import { Building2, MapPin, CreditCard } from 'lucide-react'
 
 interface Plan { id: string; name: string; slug: string }
 
@@ -40,7 +43,7 @@ const STATUS_OPTIONS: { value: SubscriptionStatus; label: string }[] = [
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+      <label className={miraLabel}>
         {label}{required && <span className="text-red-500 ml-0.5">*</span>}
       </label>
       {children}
@@ -48,7 +51,7 @@ function Field({ label, required, children }: { label: string; required?: boolea
   )
 }
 
-const inputCls = 'w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-mira-primary/30 focus:border-mira-primary'
+const inputCls = miraField
 
 export function ClientForm({ org, plans, mode }: Props) {
   const router = useRouter()
@@ -105,10 +108,7 @@ export function ClientForm({ org, plans, mode }: Props) {
       )}
 
       {/* Datos básicos */}
-      <section className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-        <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-5">
-          Datos de la empresa
-        </h2>
+      <MiraFormCard title="Datos de la empresa" icon={Building2}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div className="md:col-span-2">
             <Field label="Nombre de la organización" required>
@@ -161,13 +161,10 @@ export function ClientForm({ org, plans, mode }: Props) {
             </select>
           </Field>
         </div>
-      </section>
+      </MiraFormCard>
 
       {/* Contacto */}
-      <section className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-        <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-5">
-          Contacto y ubicación
-        </h2>
+      <MiraFormCard title="Contacto y ubicación" icon={MapPin}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <Field label="Email">
             <input type="email" value={form.email} onChange={(e) => set('email', e.target.value)} className={inputCls} placeholder="empresa@ejemplo.com" />
@@ -185,13 +182,10 @@ export function ClientForm({ org, plans, mode }: Props) {
             <input type="text" value={form.country} onChange={(e) => set('country', e.target.value)} className={inputCls} placeholder="ES" maxLength={2} />
           </Field>
         </div>
-      </section>
+      </MiraFormCard>
 
       {/* Plan y suscripción */}
-      <section className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-        <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-5">
-          Plan y suscripción
-        </h2>
+      <MiraFormCard title="Plan y suscripción" icon={CreditCard}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <Field label="Plan">
             <select value={form.plan_id ?? ''} onChange={(e) => set('plan_id', e.target.value)} className={inputCls}>
@@ -205,22 +199,14 @@ export function ClientForm({ org, plans, mode }: Props) {
             </select>
           </Field>
         </div>
-      </section>
+      </MiraFormCard>
 
       {/* Acciones */}
       <div className="flex items-center justify-end gap-3">
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="px-4 py-2 text-sm font-semibold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-        >
+        <button type="button" onClick={() => router.back()} className={miraBtn.ghost}>
           Cancelar
         </button>
-        <button
-          type="submit"
-          disabled={isPending}
-          className="px-6 py-2 text-sm font-bold bg-mira-primary text-white rounded-lg hover:bg-mira-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-        >
+        <button type="submit" disabled={isPending} className={miraBtn.primary}>
           {isPending
             ? (mode === 'create' ? 'Creando…' : 'Guardando…')
             : (mode === 'create' ? 'Crear organización' : 'Guardar cambios')}

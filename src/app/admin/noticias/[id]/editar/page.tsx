@@ -2,7 +2,8 @@ import { getNewsById, updateNews, getMarketsForSelect, getProductsForSelect } fr
 import { NewsForm } from '../../NewsForm'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ArrowLeft, Pencil } from 'lucide-react'
+import { ArrowLeft, Newspaper } from 'lucide-react'
+import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 
 export default async function EditarNoticiaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -20,19 +21,15 @@ export default async function EditarNoticiaPage({ params }: { params: Promise<{ 
   }
 
   return (
-    <div className="p-8 max-w-3xl mx-auto">
-      <div className="mb-6">
-        <Link href={`/admin/noticias/${id}`} className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-4">
+    <div className="mx-auto w-full max-w-3xl space-y-6 p-4 md:p-6 xl:p-8">
+      <div>
+        <Link href={`/admin/noticias/${id}`} className="mb-4 inline-flex items-center gap-1.5 text-sm text-slate-500 transition-colors hover:text-mira-magenta">
           <ArrowLeft size={15} /> Volver al detalle
         </Link>
-        <div className="flex items-center gap-3">
-          <Pencil className="text-mira-primary" size={22} />
-          <h1 className="text-2xl font-display font-bold text-slate-900">Editar noticia</h1>
-        </div>
-        <p className="text-sm text-slate-500 mt-1 ml-9">{news.title}</p>
+        <MiraPageHeader icon={Newspaper} title="Editar noticia" subtitle={news.title} />
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-6">
+      <div className="mira-card rounded-2xl p-5 sm:p-6">
         <NewsForm
           action={action}
           defaultValues={news}

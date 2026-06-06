@@ -12,6 +12,7 @@ import {
   type RfqResponseStatus,
 } from '@/lib/actions/rfq-responses'
 import { listSuppliers, type Supplier } from '@/lib/actions/suppliers'
+import { miraBtn, miraField, miraLabel } from '@/lib/miraButtons'
 
 const STATUS_OPTIONS: { value: RfqResponseStatus; label: string; color: string }[] = [
   { value: 'received',    label: 'Recibida',        color: 'bg-slate-100 text-slate-700' },
@@ -46,7 +47,7 @@ const EMPTY_FORM: RfqResponseFormData & { supplier_id?: string } = {
   supplier_id:    '',
 }
 
-const inputCls = 'w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary'
+const inputCls = miraField
 
 function ResponseForm({
   initial,
@@ -87,16 +88,16 @@ function ResponseForm({
   }
 
   return (
-    <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 space-y-4">
+    <div className="space-y-4 rounded-2xl border border-mira-line bg-mira-canvas/50 p-5">
       {error && (
-        <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       )}
 
       <div className="grid grid-cols-2 gap-4">
         {/* Selector de proveedor del catálogo */}
         {suppliers.length > 0 && (
           <div className="col-span-2">
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+            <label className={miraLabel}>
               Seleccionar del catálogo <span className="font-normal normal-case text-slate-400">(opcional — autocompleta los campos)</span>
             </label>
             <select
@@ -115,7 +116,7 @@ function ResponseForm({
         )}
 
         <div className="col-span-2">
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+          <label className={miraLabel}>
             Proveedor *
           </label>
           <input
@@ -127,7 +128,7 @@ function ResponseForm({
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Email</label>
+          <label className={miraLabel}>Email</label>
           <input
             type="email"
             value={form.supplier_email ?? ''}
@@ -138,7 +139,7 @@ function ResponseForm({
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Teléfono</label>
+          <label className={miraLabel}>Teléfono</label>
           <input
             value={form.supplier_phone ?? ''}
             onChange={(e) => set('supplier_phone', e.target.value)}
@@ -148,7 +149,7 @@ function ResponseForm({
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Precio *</label>
+          <label className={miraLabel}>Precio *</label>
           <input
             type="number" min="0.01" step="0.01"
             value={form.price || ''}
@@ -159,7 +160,7 @@ function ResponseForm({
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Unidad *</label>
+          <label className={miraLabel}>Unidad *</label>
           <input
             value={form.unit}
             onChange={(e) => set('unit', e.target.value)}
@@ -169,7 +170,7 @@ function ResponseForm({
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Moneda</label>
+          <label className={miraLabel}>Moneda</label>
           <select
             value={form.currency ?? 'EUR'}
             onChange={(e) => set('currency', e.target.value)}
@@ -182,7 +183,7 @@ function ResponseForm({
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Fecha de entrega</label>
+          <label className={miraLabel}>Fecha de entrega</label>
           <input
             type="date"
             value={form.delivery_date ?? ''}
@@ -192,7 +193,7 @@ function ResponseForm({
         </div>
 
         <div className="col-span-2">
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Condiciones de pago</label>
+          <label className={miraLabel}>Condiciones de pago</label>
           <input
             value={form.payment_terms ?? ''}
             onChange={(e) => set('payment_terms', e.target.value)}
@@ -202,7 +203,7 @@ function ResponseForm({
         </div>
 
         <div className="col-span-2">
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Notas</label>
+          <label className={miraLabel}>Notas</label>
           <textarea
             value={form.notes ?? ''}
             onChange={(e) => set('notes', e.target.value)}
@@ -213,7 +214,7 @@ function ResponseForm({
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Estado</label>
+          <label className={miraLabel}>Estado</label>
           <select
             value={form.status ?? 'received'}
             onChange={(e) => set('status', e.target.value as RfqResponseStatus)}
@@ -227,18 +228,10 @@ function ResponseForm({
       </div>
 
       <div className="flex items-center gap-3 pt-1">
-        <button
-          onClick={() => onSave(form)}
-          disabled={saving}
-          className="px-4 py-2 bg-mira-primary text-white rounded-lg text-sm font-semibold hover:bg-mira-primary/90 disabled:opacity-50 transition-colors"
-        >
+        <button onClick={() => onSave(form)} disabled={saving} className={miraBtn.primary}>
           {saving ? 'Guardando…' : 'Guardar respuesta'}
         </button>
-        <button
-          onClick={onCancel}
-          disabled={saving}
-          className="px-4 py-2 border border-slate-300 text-slate-600 rounded-lg text-sm hover:bg-slate-100 transition-colors"
-        >
+        <button onClick={onCancel} disabled={saving} className={miraBtn.ghost}>
           Cancelar
         </button>
       </div>
@@ -306,16 +299,16 @@ export function RfqResponsesAdmin({ rfqId }: { rfqId: string }) {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-xl border border-slate-200 p-6">
+      <div className="mira-card rounded-2xl p-6">
         <p className="text-sm text-slate-400">Cargando respuestas…</p>
       </div>
     )
   }
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-6">
-      <div className="flex items-center justify-between mb-5">
-        <h2 className="text-base font-semibold text-slate-800">
+    <div className="mira-card rounded-2xl p-5 sm:p-6">
+      <div className="mb-5 flex items-center justify-between">
+        <h2 className="text-base font-black text-mira-ink">
           Respuestas de proveedores
           {responses.length > 0 && (
             <span className="ml-2 text-xs font-normal text-slate-400">({responses.length})</span>
@@ -324,7 +317,7 @@ export function RfqResponsesAdmin({ rfqId }: { rfqId: string }) {
         {!showForm && (
           <button
             onClick={() => { setShowForm(true); setFormError(null) }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-mira-primary text-white rounded-lg text-xs font-semibold hover:bg-mira-primary/90 transition-colors"
+            className={miraBtn.primary}
           >
             <Plus size={13} />
             Nueva respuesta
@@ -356,7 +349,7 @@ export function RfqResponsesAdmin({ rfqId }: { rfqId: string }) {
             : null
 
           return (
-            <div key={r.id} className="border border-slate-200 rounded-xl overflow-hidden">
+            <div key={r.id} className="overflow-hidden rounded-2xl border border-mira-line">
               {editingId === r.id ? (
                 <div className="p-4">
                   <ResponseForm
@@ -391,16 +384,16 @@ export function RfqResponsesAdmin({ rfqId }: { rfqId: string }) {
                         </p>
                       )}
                       {linkedSupplier && (
-                        <p className="text-xs text-mira-primary mt-0.5">Del catálogo</p>
+                        <p className="mt-0.5 text-xs text-mira-magenta">Del catálogo</p>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColor(r.status)}`}>
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusColor(r.status)}`}>
                         {statusLabel(r.status)}
                       </span>
                       <button
                         onClick={() => { setEditingId(r.id); setFormError(null) }}
-                        className="p-1.5 text-slate-400 hover:text-slate-600 rounded-md hover:bg-slate-100 transition-colors"
+                        className={miraBtn.icon}
                         title="Editar"
                       >
                         <Pencil size={13} />

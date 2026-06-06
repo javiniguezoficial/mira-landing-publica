@@ -2,6 +2,9 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { LineChart } from 'lucide-react'
+import { MiraFormCard } from '@/components/mira/MiraFormCard'
+import { miraBtn, miraField, miraLabel } from '@/lib/miraButtons'
 import type { PriceFormData } from '@/lib/actions/prices'
 
 interface Props {
@@ -50,128 +53,128 @@ export function PriceRecordForm({ initial, defaultUnit, onSave }: Props) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5 max-w-lg">
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg">
-          {error}
-        </div>
-      )}
+    <form onSubmit={handleSubmit} className="max-w-lg">
+      <MiraFormCard
+        title="Registro de precio"
+        icon={LineChart}
+        footer={
+          <>
+            <button type="button" onClick={() => router.back()} className={miraBtn.ghost}>
+              Cancelar
+            </button>
+            <button type="submit" disabled={saving} className={miraBtn.primary}>
+              {saving ? 'Guardando…' : 'Guardar'}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-5">
+          {error && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-xs font-bold text-slate-700 mb-1">Fecha *</label>
-          <input
-            type="date"
-            required
-            value={form.recorded_at}
-            onChange={e => set('recorded_at', e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-bold text-slate-700 mb-1">Precio *</label>
-          <input
-            type="number"
-            required
-            step="0.0001"
-            min="0"
-            value={form.price}
-            onChange={e => set('price', parseFloat(e.target.value) || 0)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30"
-          />
-        </div>
-      </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={miraLabel}>Fecha *</label>
+              <input
+                type="date"
+                required
+                value={form.recorded_at}
+                onChange={e => set('recorded_at', e.target.value)}
+                className={miraField}
+              />
+            </div>
+            <div>
+              <label className={miraLabel}>Precio *</label>
+              <input
+                type="number"
+                required
+                step="0.0001"
+                min="0"
+                value={form.price}
+                onChange={e => set('price', parseFloat(e.target.value) || 0)}
+                className={miraField}
+              />
+            </div>
+          </div>
 
-      <div className="grid grid-cols-3 gap-4">
-        <div>
-          <label className="block text-xs font-bold text-slate-700 mb-1">Unidad *</label>
-          <input
-            required
-            value={form.unit}
-            onChange={e => set('unit', e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-mira-primary/30"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-bold text-slate-700 mb-1">Moneda</label>
-          <input
-            value={form.currency}
-            onChange={e => set('currency', e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-mira-primary/30"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-bold text-slate-700 mb-1">País</label>
-          <input
-            value={form.country}
-            onChange={e => set('country', e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-mira-primary/30"
-          />
-        </div>
-      </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className={miraLabel}>Unidad *</label>
+              <input
+                required
+                value={form.unit}
+                onChange={e => set('unit', e.target.value)}
+                className={`${miraField} font-mono`}
+              />
+            </div>
+            <div>
+              <label className={miraLabel}>Moneda</label>
+              <input
+                value={form.currency}
+                onChange={e => set('currency', e.target.value)}
+                className={`${miraField} font-mono`}
+              />
+            </div>
+            <div>
+              <label className={miraLabel}>País</label>
+              <input
+                value={form.country}
+                onChange={e => set('country', e.target.value)}
+                className={`${miraField} font-mono`}
+              />
+            </div>
+          </div>
 
-      <div>
-        <label className="block text-xs font-bold text-slate-700 mb-1">Región (opcional)</label>
-        <input
-          value={form.region ?? ''}
-          onChange={e => set('region', e.target.value)}
-          placeholder="Ej: Cataluña, Norte"
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30"
-        />
-      </div>
+          <div>
+            <label className={miraLabel}>Región (opcional)</label>
+            <input
+              value={form.region ?? ''}
+              onChange={e => set('region', e.target.value)}
+              placeholder="Ej: Cataluña, Norte"
+              className={miraField}
+            />
+          </div>
 
-      <div className="grid grid-cols-3 gap-4">
-        <div>
-          <label className="block text-xs font-bold text-slate-700 mb-1">Precio mín.</label>
-          <input
-            type="number"
-            step="0.0001"
-            min="0"
-            value={form.min_price ?? ''}
-            onChange={e => set('min_price', numOrNull(e.target.value))}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30"
-          />
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className={miraLabel}>Precio mín.</label>
+              <input
+                type="number"
+                step="0.0001"
+                min="0"
+                value={form.min_price ?? ''}
+                onChange={e => set('min_price', numOrNull(e.target.value))}
+                className={miraField}
+              />
+            </div>
+            <div>
+              <label className={miraLabel}>Precio máx.</label>
+              <input
+                type="number"
+                step="0.0001"
+                min="0"
+                value={form.max_price ?? ''}
+                onChange={e => set('max_price', numOrNull(e.target.value))}
+                className={miraField}
+              />
+            </div>
+            <div>
+              <label className={miraLabel}>Precio medio</label>
+              <input
+                type="number"
+                step="0.0001"
+                min="0"
+                value={form.avg_price ?? ''}
+                onChange={e => set('avg_price', numOrNull(e.target.value))}
+                className={miraField}
+              />
+            </div>
+          </div>
         </div>
-        <div>
-          <label className="block text-xs font-bold text-slate-700 mb-1">Precio máx.</label>
-          <input
-            type="number"
-            step="0.0001"
-            min="0"
-            value={form.max_price ?? ''}
-            onChange={e => set('max_price', numOrNull(e.target.value))}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-bold text-slate-700 mb-1">Precio medio</label>
-          <input
-            type="number"
-            step="0.0001"
-            min="0"
-            value={form.avg_price ?? ''}
-            onChange={e => set('avg_price', numOrNull(e.target.value))}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30"
-          />
-        </div>
-      </div>
-
-      <div className="flex gap-3 pt-2">
-        <button
-          type="submit"
-          disabled={saving}
-          className="px-5 py-2 bg-mira-primary text-white text-sm font-bold rounded-lg hover:bg-mira-primary/90 disabled:opacity-50 transition-colors"
-        >
-          {saving ? 'Guardando…' : 'Guardar'}
-        </button>
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="px-5 py-2 border border-slate-200 text-slate-600 text-sm font-bold rounded-lg hover:bg-slate-50 transition-colors"
-        >
-          Cancelar
-        </button>
-      </div>
+      </MiraFormCard>
     </form>
   )
 }

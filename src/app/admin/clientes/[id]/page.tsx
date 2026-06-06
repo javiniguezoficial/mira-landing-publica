@@ -3,9 +3,10 @@ import { notFound } from 'next/navigation'
 import { ChevronLeft, Pencil, Building2, Mail, Phone, Globe, MapPin, Users } from 'lucide-react'
 import { getOrganizationById } from '@/lib/actions/organizations'
 import { getOrganizationMembers, getProfiles } from '@/lib/actions/users'
-import { ClientStatusBadge } from '@/components/admin/clients/ClientStatusBadge'
+import { MiraStatusBadge } from '@/components/mira/MiraStatusBadge'
 import { MembersTable } from '@/components/admin/users/MembersTable'
 import { AddMemberModal } from '@/components/admin/users/AddMemberModal'
+import { miraBtn } from '@/lib/miraButtons'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,38 +37,35 @@ export default async function ClienteDetailPage({ params }: { params: Promise<{ 
   })
 
   return (
-    <div className="p-8 max-w-4xl">
+    <div className="w-full max-w-4xl space-y-6 p-4 md:p-6 xl:p-8">
       {/* Cabecera */}
-      <div className="mb-8">
+      <div>
         <Link
           href="/admin/clientes"
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 mb-4 transition-colors"
+          className="mb-4 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 transition-colors hover:text-mira-magenta"
         >
           <ChevronLeft size={14} />
           Volver a clientes
         </Link>
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-mira-primary/10 flex items-center justify-center shrink-0">
-              <Building2 size={22} className="text-mira-primary" />
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-mira-magenta to-mira-magenta-deep shadow-lg shadow-mira-magenta/30">
+              <Building2 size={22} className="text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-heading font-bold text-slate-900">{org.name}</h1>
-              <div className="flex items-center gap-3 mt-1">
+              <h1 className="text-xl font-black tracking-tight text-mira-ink md:text-2xl">{org.name}</h1>
+              <div className="mt-1 flex flex-wrap items-center gap-3">
                 {org.type && (
-                  <span className="text-xs text-slate-500 font-body">{TYPE_LABEL[org.type]}</span>
+                  <span className="text-xs text-slate-500">{TYPE_LABEL[org.type]}</span>
                 )}
                 {org.cif_nif && (
-                  <span className="text-xs font-mono text-slate-500">{org.cif_nif}</span>
+                  <span className="font-mono text-xs text-slate-500">{org.cif_nif}</span>
                 )}
-                <ClientStatusBadge status={org.subscription_status} />
+                <MiraStatusBadge status={org.subscription_status} kind="sub" />
               </div>
             </div>
           </div>
-          <Link
-            href={`/admin/clientes/${org.id}/editar`}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-bold border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shrink-0"
-          >
+          <Link href={`/admin/clientes/${org.id}/editar`} className={`${miraBtn.ghost} shrink-0`}>
             <Pencil size={14} />
             Editar
           </Link>
@@ -76,8 +74,8 @@ export default async function ClienteDetailPage({ params }: { params: Promise<{ 
 
       <div className="space-y-6">
         {/* Datos de empresa */}
-        <section className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-          <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-5">
+        <section className="mira-card rounded-2xl p-5 sm:p-6">
+          <h2 className="mb-5 text-xs font-bold uppercase tracking-wider text-slate-400">
             Datos de la empresa
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-5">
@@ -89,8 +87,8 @@ export default async function ClienteDetailPage({ params }: { params: Promise<{ 
         </section>
 
         {/* Contacto */}
-        <section className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-          <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-5">
+        <section className="mira-card rounded-2xl p-5 sm:p-6">
+          <h2 className="mb-5 text-xs font-bold uppercase tracking-wider text-slate-400">
             Contacto y ubicación
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -104,7 +102,7 @@ export default async function ClienteDetailPage({ params }: { params: Promise<{ 
                 <Icon size={15} className="text-slate-400 shrink-0" />
                 {href ? (
                   <a href={href} target="_blank" rel="noopener noreferrer"
-                    className="text-sm text-mira-primary hover:underline truncate">
+                    className="truncate text-sm text-mira-magenta hover:underline">
                     {label}
                   </a>
                 ) : (
@@ -116,15 +114,15 @@ export default async function ClienteDetailPage({ params }: { params: Promise<{ 
         </section>
 
         {/* Plan y suscripción */}
-        <section className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-          <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-5">
+        <section className="mira-card rounded-2xl p-5 sm:p-6">
+          <h2 className="mb-5 text-xs font-bold uppercase tracking-wider text-slate-400">
             Plan y suscripción
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-5">
             <div className="flex flex-col gap-0.5">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Plan</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Plan</span>
               {org.plan ? (
-                <span className="inline-flex w-fit items-center px-2 py-0.5 rounded text-xs font-bold bg-mira-primary/10 text-mira-primary border border-mira-primary/20 mt-0.5">
+                <span className="mt-0.5 inline-flex w-fit items-center rounded-lg bg-mira-magenta-soft px-2 py-0.5 text-xs font-bold text-mira-magenta">
                   {org.plan.name}
                 </span>
               ) : (
@@ -132,9 +130,9 @@ export default async function ClienteDetailPage({ params }: { params: Promise<{ 
               )}
             </div>
             <div className="flex flex-col gap-0.5">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Estado</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Estado</span>
               <div className="mt-0.5">
-                <ClientStatusBadge status={org.subscription_status} />
+                <MiraStatusBadge status={org.subscription_status} kind="sub" />
               </div>
             </div>
             {org.subscription_start && (
@@ -147,11 +145,13 @@ export default async function ClienteDetailPage({ params }: { params: Promise<{ 
         </section>
 
         {/* Miembros */}
-        <section className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <section className="mira-card overflow-hidden rounded-2xl">
+          <div className="flex items-center justify-between border-b border-mira-line px-5 py-3.5">
             <div className="flex items-center gap-2">
-              <Users size={15} className="text-slate-400" />
-              <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-mira-magenta-soft">
+                <Users size={14} className="text-mira-magenta" />
+              </div>
+              <h2 className="text-sm font-black text-mira-ink">
                 Miembros ({members.length})
               </h2>
             </div>

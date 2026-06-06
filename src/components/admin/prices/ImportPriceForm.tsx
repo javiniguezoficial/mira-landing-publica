@@ -4,6 +4,7 @@ import { useState, useRef } from 'react'
 import { Upload, FileSpreadsheet, AlertTriangle, CheckCircle, XCircle, Info } from 'lucide-react'
 import { parseAndValidatePriceFile, importPriceRecords } from '@/lib/actions/import-prices'
 import type { ValidatedRow, ParseResult } from '@/lib/types/import-prices'
+import { miraBtn } from '@/lib/miraButtons'
 
 type State =
   | { phase: 'idle' }
@@ -71,7 +72,7 @@ export function ImportPriceForm() {
         onDrop={onDrop}
         onDragOver={e => e.preventDefault()}
         onClick={() => inputRef.current?.click()}
-        className="border-2 border-dashed border-slate-200 rounded-xl p-10 text-center cursor-pointer hover:border-mira-primary/40 hover:bg-mira-primary/5 transition-all group"
+        className="group cursor-pointer rounded-2xl border-2 border-dashed border-mira-line p-10 text-center transition-all hover:border-mira-magenta/40 hover:bg-mira-magenta-soft/40"
       >
         <input
           ref={inputRef}
@@ -82,12 +83,12 @@ export function ImportPriceForm() {
         />
         {state.phase === 'parsing' ? (
           <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-2 border-mira-primary border-t-transparent rounded-full animate-spin" />
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-mira-magenta border-t-transparent" />
             <p className="text-sm text-slate-500">Procesando archivo…</p>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-3">
-            <Upload size={28} className="text-slate-300 group-hover:text-mira-primary transition-colors" />
+            <Upload size={28} className="text-slate-300 transition-colors group-hover:text-mira-magenta" />
             <div>
               <p className="text-sm font-bold text-slate-700">Arrastra tu archivo aquí o haz clic para seleccionar</p>
               <p className="text-xs text-slate-400 mt-1">CSV o XLSX · Máximo 5 MB · Máximo 1.000 filas</p>
@@ -108,7 +109,7 @@ export function ImportPriceForm() {
             <p className="text-sm text-red-600 mt-1">{state.message}</p>
           </div>
         </div>
-        <button onClick={reset} className="px-4 py-2 border border-slate-200 text-slate-600 text-sm font-bold rounded-lg hover:bg-slate-50 transition-colors">
+        <button onClick={reset} className={miraBtn.ghost}>
           Intentar de nuevo
         </button>
       </div>
@@ -128,7 +129,7 @@ export function ImportPriceForm() {
             </p>
           </div>
         </div>
-        <button onClick={reset} className="px-4 py-2 border border-slate-200 text-slate-600 text-sm font-bold rounded-lg hover:bg-slate-50 transition-colors">
+        <button onClick={reset} className={miraBtn.ghost}>
           Importar otro archivo
         </button>
       </div>
@@ -138,7 +139,7 @@ export function ImportPriceForm() {
   if (state.phase === 'importing') {
     return (
       <div className="flex items-center gap-3 p-6">
-        <div className="w-5 h-5 border-2 border-mira-primary border-t-transparent rounded-full animate-spin" />
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-mira-magenta border-t-transparent" />
         <p className="text-sm text-slate-500">Insertando registros…</p>
       </div>
     )
@@ -274,10 +275,7 @@ export function ImportPriceForm() {
       <div className="flex gap-3 items-center">
         {nonDuplicates.length > 0 && (!columnIssues || columnIssues.missing.length === 0) ? (
           <>
-            <button
-              onClick={() => handleImport(valid)}
-              className="px-5 py-2 bg-mira-primary text-white text-sm font-bold rounded-lg hover:bg-mira-primary/90 transition-colors"
-            >
+            <button onClick={() => handleImport(valid)} className={miraBtn.primary}>
               Confirmar e importar {nonDuplicates.length} {nonDuplicates.length === 1 ? 'registro' : 'registros'}
             </button>
             {(errors.length > 0 || duplicates.length > 0) && (
@@ -290,7 +288,7 @@ export function ImportPriceForm() {
         ) : (
           <p className="text-sm text-slate-500">No hay filas válidas para importar.</p>
         )}
-        <button onClick={reset} className="ml-auto px-4 py-2 border border-slate-200 text-slate-500 text-sm font-bold rounded-lg hover:bg-slate-50 transition-colors">
+        <button onClick={reset} className={`${miraBtn.ghost} ml-auto`}>
           Cancelar
         </button>
       </div>

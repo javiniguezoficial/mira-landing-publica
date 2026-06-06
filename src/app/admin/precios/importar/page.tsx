@@ -1,51 +1,44 @@
 import { Download, FileSpreadsheet, AlertCircle } from 'lucide-react'
 import { ImportPriceForm } from '@/components/admin/prices/ImportPriceForm'
+import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
+import { miraBtn } from '@/lib/miraButtons'
 
 export default function ImportarPreciosPage() {
   return (
-    <div className="p-8 max-w-4xl">
-      <div className="mb-8">
-        <h1 className="text-2xl font-heading font-bold text-slate-900">Importar precios</h1>
-        <p className="text-slate-500 font-body text-sm mt-1">
-          Carga masiva de registros de precio desde archivo CSV o XLSX
-        </p>
-      </div>
+    <div className="w-full max-w-4xl space-y-6 p-4 md:p-6 xl:p-8">
+      <MiraPageHeader
+        icon={FileSpreadsheet}
+        title="Importar precios"
+        subtitle="Carga masiva de registros de precio desde archivo CSV o XLSX"
+      />
 
       {/* Plantilla */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 mb-6">
-        <div className="flex items-center gap-2 mb-4">
-          <FileSpreadsheet size={18} className="text-mira-primary" />
-          <h2 className="text-sm font-bold text-slate-900">Plantilla de importación</h2>
+      <div className="mira-card rounded-2xl p-6">
+        <div className="mb-4 flex items-center gap-2">
+          <FileSpreadsheet size={18} className="text-mira-magenta" />
+          <h2 className="text-sm font-black text-mira-ink">Plantilla de importación</h2>
         </div>
 
-        <p className="text-xs text-slate-500 mb-4">
+        <p className="mb-4 text-xs text-slate-500">
           Descarga la plantilla con las columnas correctas y datos de ejemplo. No modifiques los nombres de las columnas.
         </p>
 
-        <div className="flex gap-3 mb-6">
-          <a
-            href="/api/admin/price-template?format=csv"
-            download
-            className="inline-flex items-center gap-2 px-4 py-2 border border-slate-200 text-slate-700 text-sm font-bold rounded-lg hover:bg-slate-50 transition-colors"
-          >
+        <div className="mb-6 flex gap-3">
+          <a href="/api/admin/price-template?format=csv" download className={miraBtn.ghost}>
             <Download size={14} />
             Descargar CSV
           </a>
-          <a
-            href="/api/admin/price-template?format=xlsx"
-            download
-            className="inline-flex items-center gap-2 px-4 py-2 border border-slate-200 text-slate-700 text-sm font-bold rounded-lg hover:bg-slate-50 transition-colors"
-          >
+          <a href="/api/admin/price-template?format=xlsx" download className={miraBtn.ghost}>
             <Download size={14} />
             Descargar XLSX
           </a>
         </div>
 
         {/* Instrucciones */}
-        <div className="bg-slate-50 rounded-lg p-4 space-y-1.5">
-          <div className="flex items-center gap-1.5 mb-2">
+        <div className="space-y-1.5 rounded-xl bg-mira-canvas/60 p-4">
+          <div className="mb-2 flex items-center gap-1.5">
             <AlertCircle size={13} className="text-slate-400" />
-            <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">Instrucciones</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Instrucciones</p>
           </div>
           {[
             'No cambies los nombres de las columnas.',
@@ -71,24 +64,24 @@ export default function ImportarPreciosPage() {
             {['market_slug *','product_slug *','recorded_at *','price *','unit *','currency','country','region','min_price','max_price','avg_price','volume','source_name','notes'].map(c => (
               <span
                 key={c}
-                className={`text-xs px-2 py-0.5 rounded font-mono ${
+                className={`rounded px-2 py-0.5 font-mono text-xs ${
                   c.endsWith('*')
-                    ? 'bg-mira-primary/10 text-mira-primary font-bold'
+                    ? 'bg-mira-magenta-soft font-bold text-mira-magenta'
                     : 'bg-slate-100 text-slate-500'
                 }`}
               >
                 {c.replace(' *', '')}
-                {c.endsWith('*') && <span className="text-mira-primary ml-0.5">*</span>}
+                {c.endsWith('*') && <span className="ml-0.5 text-mira-magenta">*</span>}
               </span>
             ))}
           </div>
-          <p className="text-[10px] text-slate-400 mt-2"><span className="text-mira-primary font-bold">*</span> Obligatorio</p>
+          <p className="mt-2 text-[10px] text-slate-400"><span className="font-bold text-mira-magenta">*</span> Obligatorio</p>
         </div>
       </div>
 
       {/* Upload */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-        <h2 className="text-sm font-bold text-slate-900 mb-4">Subir archivo</h2>
+      <div className="mira-card rounded-2xl p-6">
+        <h2 className="mb-4 text-sm font-black text-mira-ink">Subir archivo</h2>
         <ImportPriceForm />
       </div>
     </div>

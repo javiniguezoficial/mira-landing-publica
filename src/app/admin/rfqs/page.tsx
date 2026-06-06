@@ -1,6 +1,8 @@
+import Link from 'next/link'
+import { FileText } from 'lucide-react'
 import { listAllRfqs, type RfqStatus } from '@/lib/actions/rfqs'
 import { AdminRfqsTable } from '@/components/admin/rfqs/AdminRfqsTable'
-import Link from 'next/link'
+import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 
 const STATUS_LABELS: Record<string, string> = {
   all:       'Todas',
@@ -21,26 +23,25 @@ export default async function AdminRfqsPage({
   const rfqs = await listAllRfqs(statusFilter)
 
   return (
-    <div className="p-8 max-w-6xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-2xl font-heading font-bold text-slate-900">RFQs</h1>
-        <p className="text-sm text-slate-500 mt-1">
-          Todas las solicitudes de cotización de la plataforma
-        </p>
-      </div>
+    <div className="mx-auto w-full max-w-6xl space-y-6 p-4 md:p-6 xl:p-8">
+      <MiraPageHeader
+        icon={FileText}
+        title="RFQs"
+        subtitle="Todas las solicitudes de cotización de la plataforma"
+      />
 
       {/* Filtros de estado */}
-      <div className="flex items-center gap-2 mb-6 flex-wrap">
+      <div className="flex flex-wrap items-center gap-2">
         {Object.entries(STATUS_LABELS).map(([key, label]) => {
           const isActive = (key === 'all' && !statusFilter) || key === statusFilter
           return (
             <Link
               key={key}
               href={`/admin/rfqs${key === 'all' ? '' : `?status=${key}`}`}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+              className={`rounded-full px-3 py-1.5 text-xs font-bold transition-colors ${
                 isActive
-                  ? 'bg-mira-primary text-white border-mira-primary'
-                  : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400'
+                  ? 'bg-mira-magenta text-white shadow-lg shadow-mira-magenta/25'
+                  : 'border border-mira-line bg-white text-slate-600 hover:border-mira-magenta/30 hover:text-mira-magenta'
               }`}
             >
               {label}

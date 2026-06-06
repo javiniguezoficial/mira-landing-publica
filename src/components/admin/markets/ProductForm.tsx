@@ -2,6 +2,9 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Package } from 'lucide-react'
+import { MiraFormCard } from '@/components/mira/MiraFormCard'
+import { miraBtn, miraField, miraLabel } from '@/lib/miraButtons'
 import type { Product } from '@/lib/actions/markets'
 
 interface Props {
@@ -50,105 +53,102 @@ export function ProductForm({ initial, marketName, onSave }: Props) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5 max-w-lg">
-      <div className="text-xs text-slate-500 font-medium">
-        Mercado: <span className="text-slate-700 font-bold">{marketName}</span>
-      </div>
-
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg">
-          {error}
-        </div>
-      )}
-
-      <div>
-        <label className="block text-xs font-bold text-slate-700 mb-1">Nombre *</label>
-        <input
-          required
-          value={form.name}
-          onChange={e => {
-            set('name', e.target.value)
-            if (!initial) set('slug', toSlug(e.target.value))
-          }}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-mira-primary/30"
-        />
-      </div>
-
-      <div>
-        <label className="block text-xs font-bold text-slate-700 mb-1">Slug *</label>
-        <input
-          required
-          value={form.slug}
-          onChange={e => set('slug', e.target.value)}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-500 font-mono focus:outline-none focus:ring-2 focus:ring-mira-primary/30"
-        />
-      </div>
-
-      <div>
-        <label className="block text-xs font-bold text-slate-700 mb-1">Unidad *</label>
-        <div className="flex gap-2 flex-wrap">
-          {UNITS.map(u => (
-            <button
-              key={u}
-              type="button"
-              onClick={() => set('unit', u)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
-                form.unit === u
-                  ? 'bg-mira-primary text-white border-mira-primary'
-                  : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              {u}
+    <form onSubmit={handleSubmit} className="max-w-lg">
+      <MiraFormCard
+        title="Datos del producto"
+        subtitle={`Mercado: ${marketName}`}
+        icon={Package}
+        footer={
+          <>
+            <button type="button" onClick={() => router.back()} className={miraBtn.ghost}>
+              Cancelar
             </button>
-          ))}
-          <input
-            value={UNITS.includes(form.unit) ? '' : form.unit}
-            onChange={e => set('unit', e.target.value)}
-            placeholder="otra…"
-            className="w-24 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-mira-primary/30"
-          />
+            <button type="submit" disabled={saving} className={miraBtn.primary}>
+              {saving ? 'Guardando…' : 'Guardar'}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-5">
+          {error && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          <div>
+            <label className={miraLabel}>Nombre *</label>
+            <input
+              required
+              value={form.name}
+              onChange={e => {
+                set('name', e.target.value)
+                if (!initial) set('slug', toSlug(e.target.value))
+              }}
+              className={miraField}
+            />
+          </div>
+
+          <div>
+            <label className={miraLabel}>Slug *</label>
+            <input
+              required
+              value={form.slug}
+              onChange={e => set('slug', e.target.value)}
+              className={`${miraField} font-mono text-slate-500`}
+            />
+          </div>
+
+          <div>
+            <label className={miraLabel}>Unidad *</label>
+            <div className="flex flex-wrap gap-2">
+              {UNITS.map(u => (
+                <button
+                  key={u}
+                  type="button"
+                  onClick={() => set('unit', u)}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors ${
+                    form.unit === u
+                      ? 'border-mira-magenta bg-mira-magenta text-white'
+                      : 'border-mira-line text-slate-600 hover:bg-mira-canvas'
+                  }`}
+                >
+                  {u}
+                </button>
+              ))}
+              <input
+                value={UNITS.includes(form.unit) ? '' : form.unit}
+                onChange={e => set('unit', e.target.value)}
+                placeholder="otra…"
+                className={`${miraField} w-24 py-1.5 font-mono text-xs`}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className={miraLabel}>Descripción</label>
+            <textarea
+              rows={3}
+              value={form.description}
+              onChange={e => set('description', e.target.value)}
+              className={`${miraField} resize-none`}
+            />
+          </div>
+
+          {initial && (
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="is_active"
+                checked={form.is_active}
+                onChange={e => set('is_active', e.target.checked)}
+                className="h-4 w-4 accent-mira-magenta"
+              />
+              <label htmlFor="is_active" className="text-sm font-medium text-slate-700">Activo</label>
+            </div>
+          )}
         </div>
-      </div>
-
-      <div>
-        <label className="block text-xs font-bold text-slate-700 mb-1">Descripción</label>
-        <textarea
-          rows={3}
-          value={form.description}
-          onChange={e => set('description', e.target.value)}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30 resize-none"
-        />
-      </div>
-
-      {initial && (
-        <div className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            id="is_active"
-            checked={form.is_active}
-            onChange={e => set('is_active', e.target.checked)}
-            className="w-4 h-4 accent-mira-primary"
-          />
-          <label htmlFor="is_active" className="text-sm text-slate-700 font-medium">Activo</label>
-        </div>
-      )}
-
-      <div className="flex gap-3 pt-2">
-        <button
-          type="submit"
-          disabled={saving}
-          className="px-5 py-2 bg-mira-primary text-white text-sm font-bold rounded-lg hover:bg-mira-primary/90 disabled:opacity-50 transition-colors"
-        >
-          {saving ? 'Guardando…' : 'Guardar'}
-        </button>
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="px-5 py-2 border border-slate-200 text-slate-600 text-sm font-bold rounded-lg hover:bg-slate-50 transition-colors"
-        >
-          Cancelar
-        </button>
-      </div>
+      </MiraFormCard>
     </form>
   )
 }

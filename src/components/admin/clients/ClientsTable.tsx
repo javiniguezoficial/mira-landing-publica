@@ -2,8 +2,13 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Eye, Pencil, Search } from 'lucide-react'
-import { ClientStatusBadge } from './ClientStatusBadge'
+import { Eye, Pencil, Building2 } from 'lucide-react'
+import { MiraTable, MiraTr, MiraTd } from '@/components/mira/MiraTable'
+import { MiraStatusBadge } from '@/components/mira/MiraStatusBadge'
+import { MiraFilterBar } from '@/components/mira/MiraFilterBar'
+import { MiraSearchInput } from '@/components/mira/MiraSearchInput'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { miraField, miraBtn } from '@/lib/miraButtons'
 import type { Organization, SubscriptionStatus } from '@/lib/actions/organizations'
 
 const TYPE_LABEL: Record<string, string> = { fisica: 'Física', juridica: 'Jurídica' }
@@ -37,106 +42,72 @@ export function ClientsTable({ orgs }: { orgs: Organization[] }) {
   return (
     <div className="space-y-4">
       {/* Filtros */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Buscar por nombre, CIF o email…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-mira-primary/30 focus:border-mira-primary"
-          />
-        </div>
+      <MiraFilterBar>
+        <MiraSearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Buscar por nombre, CIF o email…"
+          className="flex-1 sm:max-w-sm"
+        />
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as SubscriptionStatus | '')}
-          className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-mira-primary/30 focus:border-mira-primary"
+          className={`${miraField} sm:w-52`}
         >
           {STATUS_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
-      </div>
+      </MiraFilterBar>
 
       {/* Tabla */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        {filtered.length === 0 ? (
-          <div className="text-center py-16 text-slate-400 text-sm font-body">
-            {orgs.length === 0 ? 'No hay organizaciones todavía.' : 'Sin resultados para esa búsqueda.'}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50">
-                  {['Empresa', 'Tipo', 'CIF/NIF', 'Email', 'Ciudad / País', 'Plan', 'Estado', 'Alta', ''].map((h) => (
-                    <th key={h} className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filtered.map((org) => (
-                  <tr key={org.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-4 py-3 font-semibold text-slate-900 whitespace-nowrap">
-                      {org.name}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
-                      {TYPE_LABEL[org.type ?? ''] ?? '—'}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600 font-mono text-xs whitespace-nowrap">
-                      {org.cif_nif ?? '—'}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
-                      {org.email ?? '—'}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
-                      {[org.city, org.country].filter(Boolean).join(' / ') || '—'}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {org.plan ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-mira-primary/10 text-mira-primary border border-mira-primary/20">
-                          {org.plan.name}
-                        </span>
-                      ) : (
-                        <span className="text-slate-400 text-xs">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <ClientStatusBadge status={org.subscription_status} />
-                    </td>
-                    <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">
-                      {fmt(org.created_at)}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <Link
-                          href={`/admin/clientes/${org.id}`}
-                          className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
-                          title="Ver detalle"
-                        >
-                          <Eye size={15} />
-                        </Link>
-                        <Link
-                          href={`/admin/clientes/${org.id}/editar`}
-                          className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
-                          title="Editar"
-                        >
-                          <Pencil size={15} />
-                        </Link>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      {filtered.length === 0 ? (
+        <div className="mira-card rounded-2xl">
+          <EmptyState
+            icon={Building2}
+            title={orgs.length === 0 ? 'Aún no hay organizaciones' : 'Sin resultados'}
+            description={orgs.length === 0 ? 'Crea la primera organización para empezar.' : 'Prueba con otros términos de búsqueda.'}
+            {...(orgs.length === 0 ? { action: { label: 'Nueva organización', href: '/admin/clientes/nuevo' } } : {})}
+          />
+        </div>
+      ) : (
+        <MiraTable
+          headers={['Empresa', 'Tipo', 'CIF/NIF', 'Email', 'Ciudad / País', 'Plan', 'Estado', 'Alta', { label: '', align: 'right' }]}
+        >
+          {filtered.map((org) => (
+            <MiraTr key={org.id}>
+              <MiraTd className="font-bold text-mira-ink">{org.name}</MiraTd>
+              <MiraTd className="text-slate-600">{TYPE_LABEL[org.type ?? ''] ?? '—'}</MiraTd>
+              <MiraTd className="font-mono text-xs text-slate-600">{org.cif_nif ?? '—'}</MiraTd>
+              <MiraTd className="text-slate-600">{org.email ?? '—'}</MiraTd>
+              <MiraTd className="text-slate-600">{[org.city, org.country].filter(Boolean).join(' / ') || '—'}</MiraTd>
+              <MiraTd>
+                {org.plan ? (
+                  <span className="inline-flex items-center rounded-lg bg-mira-magenta-soft px-2 py-0.5 text-xs font-bold text-mira-magenta">
+                    {org.plan.name}
+                  </span>
+                ) : (
+                  <span className="text-xs text-slate-400">—</span>
+                )}
+              </MiraTd>
+              <MiraTd><MiraStatusBadge status={org.subscription_status} kind="sub" /></MiraTd>
+              <MiraTd className="text-xs text-slate-500">{fmt(org.created_at)}</MiraTd>
+              <MiraTd align="right">
+                <div className="flex items-center justify-end gap-1">
+                  <Link href={`/admin/clientes/${org.id}`} className={miraBtn.icon} title="Ver detalle">
+                    <Eye size={15} />
+                  </Link>
+                  <Link href={`/admin/clientes/${org.id}/editar`} className={miraBtn.icon} title="Editar">
+                    <Pencil size={15} />
+                  </Link>
+                </div>
+              </MiraTd>
+            </MiraTr>
+          ))}
+        </MiraTable>
+      )}
 
-      <p className="text-xs text-slate-400 font-body">
+      <p className="text-xs text-slate-400">
         {filtered.length} {filtered.length === 1 ? 'organización' : 'organizaciones'}
         {statusFilter || search ? ` (de ${orgs.length} total)` : ''}
       </p>

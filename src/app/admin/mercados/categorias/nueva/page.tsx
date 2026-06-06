@@ -1,13 +1,12 @@
+import { Layers } from 'lucide-react'
 import { CategoryForm } from '@/components/admin/markets/CategoryForm'
 import { createCategory } from '@/lib/actions/markets'
+import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 
 export default function NuevaCategoriaPage() {
   return (
-    <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-heading font-bold text-slate-900">Nueva categoría</h1>
-        <p className="text-slate-500 font-body text-sm mt-1">Añade una categoría de mercado</p>
-      </div>
+    <div className="w-full space-y-6 p-4 md:p-6 xl:p-8">
+      <MiraPageHeader icon={Layers} title="Nueva categoría" subtitle="Añade una categoría de mercado" />
       <CategoryForm
         onSave={async (form) => {
           'use server'

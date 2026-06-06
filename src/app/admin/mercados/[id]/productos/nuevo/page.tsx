@@ -1,6 +1,8 @@
 import { notFound } from 'next/navigation'
+import { Package } from 'lucide-react'
 import { getMarketById, createProduct } from '@/lib/actions/markets'
 import { ProductForm } from '@/components/admin/markets/ProductForm'
+import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 
 export default async function NuevoProductoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -8,11 +10,8 @@ export default async function NuevoProductoPage({ params }: { params: Promise<{ 
   if (!market) notFound()
 
   return (
-    <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-heading font-bold text-slate-900">Nuevo producto</h1>
-        <p className="text-slate-500 font-body text-sm mt-1">Añade un producto al mercado {market.name}</p>
-      </div>
+    <div className="w-full space-y-6 p-4 md:p-6 xl:p-8">
+      <MiraPageHeader icon={Package} title="Nuevo producto" subtitle={`Añade un producto al mercado ${market.name}`} />
       <ProductForm
         marketId={id}
         marketName={market.name}

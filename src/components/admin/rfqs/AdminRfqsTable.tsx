@@ -1,6 +1,9 @@
 import Link from 'next/link'
-import type { Rfq, RfqStatus } from '@/lib/actions/rfqs'
-import { RfqStatusBadge } from '@/components/app/rfqs/RfqStatusBadge'
+import { ArrowRight, FileText } from 'lucide-react'
+import type { Rfq } from '@/lib/actions/rfqs'
+import { MiraTable, MiraTr, MiraTd } from '@/components/mira/MiraTable'
+import { MiraStatusBadge } from '@/components/mira/MiraStatusBadge'
+import { EmptyState } from '@/components/shared/EmptyState'
 
 function formatDate(d: string) {
   return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -9,61 +12,54 @@ function formatDate(d: string) {
 export function AdminRfqsTable({ rfqs }: { rfqs: Rfq[] }) {
   if (rfqs.length === 0) {
     return (
-      <div className="text-center py-16 text-slate-400 text-sm">
-        No hay RFQs con los filtros aplicados.
+      <div className="mira-card rounded-2xl">
+        <EmptyState
+          icon={FileText}
+          title="Sin cotizaciones"
+          description="No hay RFQs con los filtros aplicados."
+        />
       </div>
     )
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200">
-      <table className="w-full text-sm">
-        <thead className="bg-slate-50 border-b border-slate-200">
-          <tr>
-            <th className="px-4 py-3 text-left font-semibold text-slate-600">Organización</th>
-            <th className="px-4 py-3 text-left font-semibold text-slate-600">Producto</th>
-            <th className="px-4 py-3 text-right font-semibold text-slate-600">Cantidad</th>
-            <th className="px-4 py-3 text-left font-semibold text-slate-600">País</th>
-            <th className="px-4 py-3 text-left font-semibold text-slate-600">Fecha límite</th>
-            <th className="px-4 py-3 text-left font-semibold text-slate-600">Estado</th>
-            <th className="px-4 py-3 text-left font-semibold text-slate-600">Creada</th>
-            <th className="px-4 py-3" />
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {rfqs.map((rfq) => {
-            const org = Array.isArray(rfq.organization) ? rfq.organization[0] : rfq.organization
-            const product = Array.isArray(rfq.product) ? rfq.product[0] : rfq.product
-            return (
-              <tr key={rfq.id} className="hover:bg-slate-50 transition-colors">
-                <td className="px-4 py-3 font-medium text-slate-800">
-                  {org?.name ?? '—'}
-                </td>
-                <td className="px-4 py-3 text-slate-700">
-                  {product?.name ?? '—'}
-                </td>
-                <td className="px-4 py-3 text-right text-slate-700 tabular-nums">
-                  {rfq.quantity.toLocaleString('es-ES')} {rfq.unit}
-                </td>
-                <td className="px-4 py-3 text-slate-600">{rfq.country}</td>
-                <td className="px-4 py-3 text-slate-600">{formatDate(rfq.deadline)}</td>
-                <td className="px-4 py-3">
-                  <RfqStatusBadge status={rfq.status} />
-                </td>
-                <td className="px-4 py-3 text-slate-500">{formatDate(rfq.created_at)}</td>
-                <td className="px-4 py-3 text-right">
-                  <Link
-                    href={`/admin/rfqs/${rfq.id}`}
-                    className="text-xs font-semibold text-mira-primary hover:underline"
-                  >
-                    Ver →
-                  </Link>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
+    <MiraTable
+      headers={[
+        'Organización',
+        'Producto',
+        { label: 'Cantidad', align: 'right' },
+        'País',
+        'Fecha límite',
+        'Estado',
+        'Creada',
+        { label: '', align: 'right' },
+      ]}
+    >
+      {rfqs.map((rfq) => {
+        const org = Array.isArray(rfq.organization) ? rfq.organization[0] : rfq.organization
+        const product = Array.isArray(rfq.product) ? rfq.product[0] : rfq.product
+        return (
+          <MiraTr key={rfq.id}>
+            <MiraTd className="font-bold text-mira-ink">{org?.name ?? '—'}</MiraTd>
+            <MiraTd className="text-slate-700">{product?.name ?? '—'}</MiraTd>
+            <MiraTd align="right">
+              <span className="tabular-nums text-slate-700">{rfq.quantity.toLocaleString('es-ES')} {rfq.unit}</span>
+            </MiraTd>
+            <MiraTd className="text-slate-600">{rfq.country}</MiraTd>
+            <MiraTd className="text-slate-600">{formatDate(rfq.deadline)}</MiraTd>
+            <MiraTd><MiraStatusBadge status={rfq.status} kind="rfq" /></MiraTd>
+            <MiraTd className="text-slate-500">{formatDate(rfq.created_at)}</MiraTd>
+            <MiraTd align="right">
+              <Link
+                href={`/admin/rfqs/${rfq.id}`}
+                className="inline-flex items-center gap-1 text-xs font-bold text-mira-magenta hover:underline"
+              >
+                Ver <ArrowRight size={12} />
+              </Link>
+            </MiraTd>
+          </MiraTr>
+        )
+      })}
+    </MiraTable>
   )
 }

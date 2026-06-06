@@ -1,6 +1,8 @@
 import { notFound } from 'next/navigation'
+import { LineChart } from 'lucide-react'
 import { getMarketById, getCategories, updateMarket } from '@/lib/actions/markets'
 import { MarketForm } from '@/components/admin/markets/MarketForm'
+import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 
 export default async function EditarMercadoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -8,11 +10,8 @@ export default async function EditarMercadoPage({ params }: { params: Promise<{ 
   if (!market) notFound()
 
   return (
-    <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-heading font-bold text-slate-900">Editar mercado</h1>
-        <p className="text-slate-500 font-body text-sm mt-1">{market.name}</p>
-      </div>
+    <div className="w-full space-y-6 p-4 md:p-6 xl:p-8">
+      <MiraPageHeader icon={LineChart} title="Editar mercado" subtitle={market.name} />
       <MarketForm
         initial={market}
         categories={categories}

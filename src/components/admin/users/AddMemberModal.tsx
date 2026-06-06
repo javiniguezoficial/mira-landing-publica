@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { X, UserPlus } from 'lucide-react'
 import { addOrganizationMember } from '@/lib/actions/users'
 import type { UserProfile, OrgMemberRole } from '@/lib/actions/users'
+import { miraBtn, miraField, miraLabel } from '@/lib/miraButtons'
 
 interface Props {
   orgId: string
@@ -12,7 +13,7 @@ interface Props {
   allUsers: UserProfile[]
 }
 
-const inputCls = 'w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-mira-primary/30 focus:border-mira-primary'
+const inputCls = miraField
 
 function fullName(u: UserProfile) {
   return [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email
@@ -53,10 +54,7 @@ export function AddMemberModal({ orgId, existingMemberIds, allUsers }: Props) {
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold bg-mira-primary text-white rounded-lg hover:bg-mira-primary/90 transition-colors"
-      >
+      <button onClick={() => setOpen(true)} className={miraBtn.primary}>
         <UserPlus size={14} />
         Añadir miembro
       </button>
@@ -67,10 +65,10 @@ export function AddMemberModal({ orgId, existingMemberIds, allUsers }: Props) {
           <div className="absolute inset-0 bg-black/40" onClick={handleClose} />
 
           {/* Modal */}
-          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md p-6 z-10">
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-base font-heading font-bold text-slate-900">Añadir miembro</h3>
-              <button onClick={handleClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 transition-colors">
+          <div className="relative z-10 w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <div className="mb-5 flex items-center justify-between">
+              <h3 className="text-base font-black text-mira-ink">Añadir miembro</h3>
+              <button onClick={handleClose} className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-mira-canvas">
                 <X size={16} />
               </button>
             </div>
@@ -88,7 +86,7 @@ export function AddMemberModal({ orgId, existingMemberIds, allUsers }: Props) {
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                  <label className={miraLabel}>
                     Usuario <span className="text-red-500">*</span>
                   </label>
                   <select
@@ -106,7 +104,7 @@ export function AddMemberModal({ orgId, existingMemberIds, allUsers }: Props) {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                  <label className={miraLabel}>
                     Rol en la organización
                   </label>
                   <select
@@ -120,18 +118,10 @@ export function AddMemberModal({ orgId, existingMemberIds, allUsers }: Props) {
                 </div>
 
                 <div className="flex justify-end gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={handleClose}
-                    className="px-4 py-2 text-sm font-semibold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-                  >
+                  <button type="button" onClick={handleClose} className={miraBtn.ghost}>
                     Cancelar
                   </button>
-                  <button
-                    type="submit"
-                    disabled={isPending}
-                    className="px-5 py-2 text-sm font-bold bg-mira-primary text-white rounded-lg hover:bg-mira-primary/90 transition-colors disabled:opacity-60"
-                  >
+                  <button type="submit" disabled={isPending} className={miraBtn.primary}>
                     {isPending ? 'Añadiendo…' : 'Añadir miembro'}
                   </button>
                 </div>

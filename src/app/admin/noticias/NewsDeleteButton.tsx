@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Trash2, AlertTriangle, X } from 'lucide-react'
 import { deleteNews } from '@/lib/actions/news'
 import { useRouter } from 'next/navigation'
+import { miraBtn } from '@/lib/miraButtons'
 
 export function NewsDeleteButton({ id, title }: { id: string; title: string }) {
   const [open, setOpen] = useState(false)
@@ -27,21 +28,21 @@ export function NewsDeleteButton({ id, title }: { id: string; title: string }) {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+        className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
         title="Eliminar"
       >
         <Trash2 size={15} />
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
-            <div className="flex items-start gap-3 mb-4">
-              <div className="p-2 bg-red-100 rounded-lg shrink-0">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-start gap-3">
+              <div className="shrink-0 rounded-xl bg-red-100 p-2">
                 <AlertTriangle size={20} className="text-red-600" />
               </div>
               <div>
-                <h3 className="font-display font-bold text-slate-900 mb-1">Eliminar noticia</h3>
+                <h3 className="mb-1 font-black text-mira-ink">Eliminar noticia</h3>
                 <p className="text-sm text-slate-600">
                   ¿Estás seguro de que quieres eliminar{' '}
                   <span className="font-semibold">&ldquo;{title}&rdquo;</span>? Esta acción no se puede deshacer.
@@ -53,22 +54,14 @@ export function NewsDeleteButton({ id, title }: { id: string; title: string }) {
             </div>
 
             {error && (
-              <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg mb-3">{error}</p>
+              <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
             )}
 
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setOpen(false)}
-                className="px-4 py-2 text-sm font-semibold text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
-                disabled={loading}
-              >
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setOpen(false)} className={miraBtn.ghost} disabled={loading}>
                 Cancelar
               </button>
-              <button
-                onClick={handleDelete}
-                disabled={loading}
-                className="px-4 py-2 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
-              >
+              <button onClick={handleDelete} disabled={loading} className={miraBtn.danger}>
                 {loading ? 'Eliminando…' : 'Sí, eliminar'}
               </button>
             </div>

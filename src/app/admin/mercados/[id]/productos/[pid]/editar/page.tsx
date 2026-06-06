@@ -1,6 +1,8 @@
 import { notFound } from 'next/navigation'
+import { Package } from 'lucide-react'
 import { getMarketById, getProductById, updateProduct } from '@/lib/actions/markets'
 import { ProductForm } from '@/components/admin/markets/ProductForm'
+import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 
 export default async function EditarProductoPage({
   params,
@@ -12,11 +14,8 @@ export default async function EditarProductoPage({
   if (!market || !product) notFound()
 
   return (
-    <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-heading font-bold text-slate-900">Editar producto</h1>
-        <p className="text-slate-500 font-body text-sm mt-1">{product.name}</p>
-      </div>
+    <div className="w-full space-y-6 p-4 md:p-6 xl:p-8">
+      <MiraPageHeader icon={Package} title="Editar producto" subtitle={product.name} />
       <ProductForm
         initial={product}
         marketId={id}

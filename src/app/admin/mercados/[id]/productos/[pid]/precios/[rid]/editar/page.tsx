@@ -1,7 +1,9 @@
 import { notFound } from 'next/navigation'
+import { LineChart } from 'lucide-react'
 import { getProductById } from '@/lib/actions/markets'
 import { getPriceRecordById, updatePriceRecord } from '@/lib/actions/prices'
 import { PriceRecordForm } from '@/components/admin/prices/PriceRecordForm'
+import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 
 export default async function EditarPrecioPage({
   params,
@@ -16,13 +18,8 @@ export default async function EditarPrecioPage({
   if (!product || !record) notFound()
 
   return (
-    <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-heading font-bold text-slate-900">Editar registro de precio</h1>
-        <p className="text-slate-500 font-body text-sm mt-1">
-          {product.name} · {record.recorded_at}
-        </p>
-      </div>
+    <div className="w-full space-y-6 p-4 md:p-6 xl:p-8">
+      <MiraPageHeader icon={LineChart} title="Editar registro de precio" subtitle={`${product.name} · ${record.recorded_at}`} />
       <PriceRecordForm
         initial={{ ...record, region: record.region ?? undefined }}
         defaultUnit={product.unit}

@@ -2,6 +2,7 @@ import { createNews, getMarketsForSelect, getProductsForSelect } from '@/lib/act
 import { NewsForm } from '../NewsForm'
 import Link from 'next/link'
 import { ArrowLeft, Newspaper } from 'lucide-react'
+import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 
 export default async function NuevanoticiaPage() {
   const [markets, products] = await Promise.all([
@@ -10,18 +11,15 @@ export default async function NuevanoticiaPage() {
   ])
 
   return (
-    <div className="p-8 max-w-3xl mx-auto">
-      <div className="mb-6">
-        <Link href="/admin/noticias" className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-4">
+    <div className="mx-auto w-full max-w-3xl space-y-6 p-4 md:p-6 xl:p-8">
+      <div>
+        <Link href="/admin/noticias" className="mb-4 inline-flex items-center gap-1.5 text-sm text-slate-500 transition-colors hover:text-mira-magenta">
           <ArrowLeft size={15} /> Volver a noticias
         </Link>
-        <div className="flex items-center gap-3">
-          <Newspaper className="text-mira-primary" size={24} />
-          <h1 className="text-2xl font-display font-bold text-slate-900">Nueva noticia</h1>
-        </div>
+        <MiraPageHeader icon={Newspaper} title="Nueva noticia" subtitle="Publica una novedad para tus clientes" />
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-6">
+      <div className="mira-card rounded-2xl p-5 sm:p-6">
         <NewsForm
           action={createNews}
           markets={markets}

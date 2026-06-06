@@ -5,6 +5,9 @@ import type { NewsItem, NewsStatus } from '@/lib/actions/news'
 import { RichTextEditor } from '@/components/admin/RichTextEditor'
 import { ImageUpload } from '@/components/admin/ImageUpload'
 import { Loader2 } from 'lucide-react'
+import { miraBtn, miraField } from '@/lib/miraButtons'
+
+const newsLabel = 'block text-sm font-bold text-mira-ink mb-1.5'
 
 interface Props {
   action: (formData: FormData) => Promise<{ error?: string } | void>
@@ -73,41 +76,41 @@ export function NewsForm({ action, defaultValues, markets, products, submitLabel
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm font-medium">
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
           {error}
         </div>
       )}
 
       {/* Título */}
       <div>
-        <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+        <label className={newsLabel}>
           Título <span className="text-red-500">*</span>
         </label>
         <input
           value={title}
           onChange={(e) => handleTitleChange(e.target.value)}
           required
-          className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30 focus:border-mira-primary"
+          className={miraField}
           placeholder="Título de la noticia"
         />
       </div>
 
       {/* Slug */}
       <div>
-        <label className="block text-sm font-semibold text-slate-700 mb-1.5">Slug (URL)</label>
+        <label className={newsLabel}>Slug (URL)</label>
         <div className="flex gap-2">
           <input
             value={slug}
             onChange={(e) => { setSlug(e.target.value); setSlugManual(true) }}
             required
-            className="flex-1 px-3 py-2.5 border border-slate-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-mira-primary/30 focus:border-mira-primary"
+            className={`${miraField} flex-1 font-mono`}
             placeholder="mi-noticia-de-ejemplo"
           />
           {slugManual && (
             <button
               type="button"
               onClick={() => { setSlugManual(false); setSlug(generateSlug(title)) }}
-              className="px-3 py-2 text-xs text-slate-500 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors whitespace-nowrap"
+              className="whitespace-nowrap rounded-xl bg-mira-magenta-soft px-3 py-2 text-xs font-bold text-mira-magenta transition-colors hover:bg-mira-magenta/15"
             >
               Auto
             </button>
@@ -118,7 +121,7 @@ export function NewsForm({ action, defaultValues, markets, products, submitLabel
 
       {/* Imagen */}
       <div>
-        <label className="block text-sm font-semibold text-slate-700 mb-1.5">Imagen destacada</label>
+        <label className={newsLabel}>Imagen destacada</label>
         <ImageUpload
           currentUrl={defaultValues?.image_url}
           onUploaded={(url) => setImageUrl(url)}
@@ -128,7 +131,7 @@ export function NewsForm({ action, defaultValues, markets, products, submitLabel
 
       {/* Contenido */}
       <div>
-        <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+        <label className={newsLabel}>
           Contenido <span className="text-red-500">*</span>
         </label>
         <RichTextEditor
@@ -142,12 +145,12 @@ export function NewsForm({ action, defaultValues, markets, products, submitLabel
       {/* Estado + Categoría */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1.5">Estado</label>
+          <label className={newsLabel}>Estado</label>
           <select
             name="status"
             value={status}
             onChange={(e) => setStatus(e.target.value as NewsStatus)}
-            className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30 focus:border-mira-primary bg-white"
+            className={miraField}
           >
             <option value="draft">Borrador</option>
             <option value="published">Publicada</option>
@@ -155,11 +158,11 @@ export function NewsForm({ action, defaultValues, markets, products, submitLabel
           </select>
         </div>
         <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1.5">Categoría</label>
+          <label className={newsLabel}>Categoría</label>
           <select
             name="category"
             defaultValue={defaultValues?.category ?? ''}
-            className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30 focus:border-mira-primary bg-white"
+            className={miraField}
           >
             <option value="">Sin categoría</option>
             {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -170,22 +173,22 @@ export function NewsForm({ action, defaultValues, markets, products, submitLabel
       {/* Mercado + Producto */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1.5">Mercado relacionado</label>
+          <label className={newsLabel}>Mercado relacionado</label>
           <select
             name="market_id"
             defaultValue={defaultValues?.market_id ?? ''}
-            className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30 focus:border-mira-primary bg-white"
+            className={miraField}
           >
             <option value="">Ninguno</option>
             {markets.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
         </div>
         <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1.5">Producto relacionado</label>
+          <label className={newsLabel}>Producto relacionado</label>
           <select
             name="product_id"
             defaultValue={defaultValues?.product_id ?? ''}
-            className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30 focus:border-mira-primary bg-white"
+            className={miraField}
           >
             <option value="">Ninguno</option>
             {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -195,11 +198,7 @@ export function NewsForm({ action, defaultValues, markets, products, submitLabel
 
       {/* Submit */}
       <div className="flex justify-end pt-2">
-        <button
-          type="submit"
-          disabled={pending}
-          className="flex items-center gap-2 bg-mira-primary text-white px-6 py-2.5 rounded-lg text-sm font-semibold hover:bg-mira-primary/90 transition-colors disabled:opacity-60"
-        >
+        <button type="submit" disabled={pending} className={miraBtn.primary}>
           {pending && <Loader2 size={15} className="animate-spin" />}
           {submitLabel}
         </button>

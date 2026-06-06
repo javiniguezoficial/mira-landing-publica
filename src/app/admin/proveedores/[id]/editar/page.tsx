@@ -1,8 +1,9 @@
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Truck } from 'lucide-react'
 import { getSupplier, updateSupplier } from '@/lib/actions/suppliers'
 import { SupplierForm } from '@/components/admin/suppliers/SupplierForm'
+import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 
 export default async function EditSupplierPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -10,15 +11,16 @@ export default async function EditSupplierPage({ params }: { params: Promise<{ i
   if (!supplier) notFound()
 
   return (
-    <div className="p-8 max-w-3xl mx-auto">
-      <Link href={`/admin/proveedores/${id}`} className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-6">
-        <ArrowLeft size={14} />
-        Volver al detalle
-      </Link>
-      <h1 className="text-2xl font-heading font-bold text-slate-900 mb-6">Editar proveedor</h1>
+    <div className="mx-auto w-full max-w-3xl space-y-6 p-4 md:p-6 xl:p-8">
+      <div>
+        <Link href={`/admin/proveedores/${id}`} className="mb-4 inline-flex items-center gap-1.5 text-sm text-slate-500 transition-colors hover:text-mira-magenta">
+          <ArrowLeft size={14} />
+          Volver al detalle
+        </Link>
+        <MiraPageHeader icon={Truck} title="Editar proveedor" subtitle={supplier.name} />
+      </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-6">
-        <SupplierForm
+      <SupplierForm
           defaultValues={{
             name:      supplier.name,
             email:     supplier.email ?? '',
@@ -43,7 +45,6 @@ export default async function EditSupplierPage({ params }: { params: Promise<{ i
             redirect(`/admin/proveedores/${id}`)
           }}
         />
-      </div>
     </div>
   )
 }

@@ -81,7 +81,7 @@ export function ImageUpload({ currentUrl, onUploaded, onClear }: Props) {
           />
           {uploading && (
             <div className="absolute inset-0 flex items-center justify-center bg-white/70">
-              <Loader2 size={24} className="animate-spin text-mira-primary" />
+              <Loader2 size={24} className="animate-spin text-mira-magenta" />
             </div>
           )}
           {!uploading && (
@@ -89,7 +89,7 @@ export function ImageUpload({ currentUrl, onUploaded, onClear }: Props) {
               <button
                 type="button"
                 onClick={() => inputRef.current?.click()}
-                className="p-1.5 bg-white rounded-lg shadow text-slate-600 hover:text-mira-primary transition-colors text-xs font-semibold flex items-center gap-1"
+                className="flex items-center gap-1 rounded-lg bg-white p-1.5 text-xs font-semibold text-slate-600 shadow transition-colors hover:text-mira-magenta"
                 title="Reemplazar imagen"
               >
                 <Upload size={13} /> Reemplazar
@@ -110,7 +110,7 @@ export function ImageUpload({ currentUrl, onUploaded, onClear }: Props) {
           onDrop={handleDrop}
           onDragOver={(e) => e.preventDefault()}
           onClick={() => inputRef.current?.click()}
-          className="flex flex-col items-center justify-center h-36 border-2 border-dashed border-slate-200 rounded-lg bg-slate-50 cursor-pointer hover:border-mira-primary/50 hover:bg-mira-primary/5 transition-colors"
+          className="flex h-36 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-mira-line bg-mira-canvas/60 transition-colors hover:border-mira-magenta/50 hover:bg-mira-magenta-soft/40"
         >
           <ImageIcon size={24} className="text-slate-300 mb-2" />
           <p className="text-sm font-semibold text-slate-500">Haz clic o arrastra una imagen</p>

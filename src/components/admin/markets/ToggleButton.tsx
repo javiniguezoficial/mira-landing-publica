@@ -29,7 +29,7 @@ export function ToggleButton({ id, isActive, onToggle }: Props) {
       onClick={handle}
       disabled={pending}
       className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors disabled:opacity-50 ${
-        active ? 'bg-mira-primary' : 'bg-slate-200'
+        active ? 'bg-mira-magenta' : 'bg-slate-200'
       }`}
     >
       <span

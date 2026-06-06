@@ -2,9 +2,11 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, FileText } from 'lucide-react'
 import { getRfq, adminUpdateRfqStatus, type Rfq, type RfqStatus } from '@/lib/actions/rfqs'
-import { RfqStatusBadge } from '@/components/app/rfqs/RfqStatusBadge'
+import { MiraStatusBadge } from '@/components/mira/MiraStatusBadge'
+import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
+import { miraBtn, miraField } from '@/lib/miraButtons'
 import { RfqResponsesAdmin } from './RfqResponsesAdmin'
 
 const ALL_STATUSES: { value: RfqStatus; label: string }[] = [
@@ -68,7 +70,7 @@ export function AdminRfqDetail({ id }: { id: string }) {
     return (
       <div className="p-8">
         <p className="text-sm text-slate-500">RFQ no encontrada.</p>
-        <Link href="/admin/rfqs" className="text-sm text-mira-primary hover:underline mt-2 inline-block">
+        <Link href="/admin/rfqs" className="mt-2 inline-block text-sm text-mira-magenta hover:underline">
           ← Volver
         </Link>
       </div>
@@ -80,30 +82,25 @@ export function AdminRfqDetail({ id }: { id: string }) {
   const org = Array.isArray(rfq.organization) ? rfq.organization[0] : rfq.organization
 
   return (
-    <div className="p-8 max-w-3xl mx-auto">
-      <div className="mb-6">
+    <div className="mx-auto w-full max-w-3xl space-y-6 p-4 md:p-6 xl:p-8">
+      <div>
         <Link
           href="/admin/rfqs"
-          className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-4"
+          className="mb-4 inline-flex items-center gap-1.5 text-sm text-slate-500 transition-colors hover:text-mira-magenta"
         >
           <ArrowLeft size={14} />
           Volver a RFQs
         </Link>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-heading font-bold text-slate-900">
-              {product?.name ?? 'Cotización'}
-            </h1>
-            <p className="text-sm text-slate-500 mt-1">
-              {org?.name ?? '—'} · {market?.name ?? ''} · {formatDate(rfq.created_at)}
-            </p>
-          </div>
-          <RfqStatusBadge status={rfq.status} />
-        </div>
+        <MiraPageHeader
+          icon={FileText}
+          title={product?.name ?? 'Cotización'}
+          subtitle={`${org?.name ?? '—'} · ${market?.name ?? ''} · ${formatDate(rfq.created_at)}`}
+          actions={<MiraStatusBadge status={rfq.status} kind="rfq" />}
+        />
       </div>
 
       {/* Detalle */}
-      <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+      <div className="mira-card rounded-2xl p-5 sm:p-6">
         <dl className="grid grid-cols-2 gap-5">
           <Field label="Organización" value={org?.name} />
           <Field label="Producto" value={product?.name} />
@@ -117,30 +114,28 @@ export function AdminRfqDetail({ id }: { id: string }) {
       </div>
 
       {/* Respuestas de proveedores */}
-      <div className="mb-6">
-        <RfqResponsesAdmin rfqId={id} />
-      </div>
+      <RfqResponsesAdmin rfqId={id} />
 
       {/* Cambio de estado */}
-      <div className="bg-white rounded-xl border border-slate-200 p-6">
-        <h2 className="text-base font-semibold text-slate-800 mb-4">Cambiar estado</h2>
+      <div className="mira-card rounded-2xl p-5 sm:p-6">
+        <h2 className="mb-4 text-base font-black text-mira-ink">Cambiar estado</h2>
 
         {error && (
-          <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
           </div>
         )}
         {success && (
-          <div className="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
+          <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
             Estado actualizado correctamente.
           </div>
         )}
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <select
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value as RfqStatus)}
-            className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary bg-white"
+            className={`${miraField} w-auto`}
           >
             {ALL_STATUSES.map(({ value, label }) => (
               <option key={value} value={value}>{label}</option>
@@ -149,7 +144,7 @@ export function AdminRfqDetail({ id }: { id: string }) {
           <button
             onClick={handleStatusChange}
             disabled={isPending || selectedStatus === rfq.status}
-            className="px-4 py-2 bg-mira-primary text-white rounded-lg text-sm font-semibold hover:bg-mira-primary/90 disabled:opacity-50 transition-colors"
+            className={miraBtn.primary}
           >
             {isPending ? 'Guardando…' : 'Actualizar estado'}
           </button>

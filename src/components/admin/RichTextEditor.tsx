@@ -86,12 +86,12 @@ export function RichTextEditor({ value, onChange, placeholder }: Props) {
     cn(
       'p-1.5 rounded transition-colors',
       active
-        ? 'bg-mira-primary text-white'
+        ? 'bg-mira-magenta text-white'
         : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
     )
 
   return (
-    <div className="border border-slate-200 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-mira-primary/30 focus-within:border-mira-primary">
+    <div className="overflow-hidden rounded-xl border border-mira-line focus-within:border-mira-magenta focus-within:ring-2 focus-within:ring-mira-magenta/20">
       {/* Barra de herramientas */}
       <div className="flex items-center gap-0.5 px-2 py-1.5 bg-slate-50 border-b border-slate-200 flex-wrap">
         <button type="button" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} className={btn(editor.isActive('heading', { level: 2 }))} title="Título H2">

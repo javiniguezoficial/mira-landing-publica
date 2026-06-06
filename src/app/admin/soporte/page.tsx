@@ -2,23 +2,15 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { getTickets } from '@/lib/queries/support'
-import { LifeBuoy, Tag, ChevronRight, AlertCircle } from 'lucide-react'
+import { LifeBuoy, ChevronRight } from 'lucide-react'
+import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
+import { MiraStatusBadge } from '@/components/mira/MiraStatusBadge'
+import { MiraFilterBar } from '@/components/mira/MiraFilterBar'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { miraBtn, miraField } from '@/lib/miraButtons'
 
 export const dynamic = 'force-dynamic'
 
-const STATUS_STYLES: Record<string, string> = {
-  open:        'bg-blue-50 text-blue-700 border-blue-200',
-  in_progress: 'bg-amber-50 text-amber-700 border-amber-200',
-  resolved:    'bg-emerald-50 text-emerald-700 border-emerald-200',
-  closed:      'bg-slate-100 text-slate-500 border-slate-200',
-}
-const STATUS_LABELS: Record<string, string> = {
-  open: 'Abierto', in_progress: 'En proceso', resolved: 'Resuelto', closed: 'Cerrado',
-}
-const PRIORITY_STYLES: Record<string, string> = {
-  low: 'bg-slate-100 text-slate-500', normal: 'bg-blue-50 text-blue-600', high: 'bg-red-50 text-red-600',
-}
-const PRIORITY_LABELS: Record<string, string> = { low: 'Baja', normal: 'Normal', high: 'Alta' }
 const CATEGORY_LABELS: Record<string, string> = {
   account: 'Cuenta', data: 'Datos', prices: 'Precios',
   rfq: 'Cotizaciones', suppliers: 'Proveedores', billing: 'Facturación', other: 'Otro',
@@ -55,65 +47,62 @@ export default async function AdminSoportePage({ searchParams }: PageProps) {
   const tickets = await getTickets(filters)
 
   return (
-    <div className="p-8 max-w-6xl mx-auto">
+    <div className="mx-auto w-full max-w-6xl space-y-6 p-4 md:p-6 xl:p-8">
       {/* Cabecera */}
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 rounded-lg bg-mira-primary/10 flex items-center justify-center">
-          <LifeBuoy size={20} className="text-mira-primary" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-heading font-bold text-slate-900">Soporte</h1>
-          <p className="text-sm text-slate-500">{tickets.length} solicitud{tickets.length !== 1 ? 'es' : ''}</p>
-        </div>
-      </div>
+      <MiraPageHeader
+        icon={LifeBuoy}
+        title="Soporte"
+        subtitle={`${tickets.length} solicitud${tickets.length !== 1 ? 'es' : ''}`}
+      />
 
       {/* Filtros */}
-      <form method="GET" className="flex flex-wrap gap-3 mb-6">
-        <select name="status" defaultValue={sp.status ?? ''} className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30">
-          {FILTER_STATUSES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-        <select name="priority" defaultValue={sp.priority ?? ''} className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30">
-          {FILTER_PRIORITIES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-        <select name="category" defaultValue={sp.category ?? ''} className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30">
-          {FILTER_CATEGORIES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-        <button type="submit" className="px-4 py-2 rounded-lg bg-mira-primary text-white text-sm font-semibold hover:bg-mira-primary/90 transition-colors">
-          Filtrar
-        </button>
-        {(filters.status || filters.priority || filters.category) && (
-          <Link href="/admin/soporte" className="px-4 py-2 rounded-lg border border-slate-200 text-sm text-slate-500 hover:bg-slate-50 transition-colors">
-            Limpiar
-          </Link>
-        )}
-      </form>
+      <MiraFilterBar>
+        <form method="GET" className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+          <select name="status" defaultValue={sp.status ?? ''} className={`${miraField} sm:w-48`}>
+            {FILTER_STATUSES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <select name="priority" defaultValue={sp.priority ?? ''} className={`${miraField} sm:w-48`}>
+            {FILTER_PRIORITIES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <select name="category" defaultValue={sp.category ?? ''} className={`${miraField} sm:w-48`}>
+            {FILTER_CATEGORIES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <button type="submit" className={miraBtn.primary}>
+            Filtrar
+          </button>
+          {(filters.status || filters.priority || filters.category) && (
+            <Link href="/admin/soporte" className={miraBtn.ghost}>
+              Limpiar
+            </Link>
+          )}
+        </form>
+      </MiraFilterBar>
 
       {/* Listado */}
       {tickets.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-200 flex flex-col items-center justify-center py-16 text-center">
-          <AlertCircle size={36} className="text-slate-300 mb-3" />
-          <p className="text-sm font-semibold text-slate-500">No hay solicitudes con estos filtros</p>
+        <div className="mira-card rounded-2xl">
+          <EmptyState
+            icon={LifeBuoy}
+            title="No hay solicitudes"
+            description="No hay tickets de soporte con estos filtros."
+          />
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="divide-y divide-slate-100">
+        <div className="mira-card overflow-hidden rounded-2xl">
+          <div className="divide-y divide-mira-line">
             {tickets.map(ticket => (
               <Link
                 key={ticket.id}
                 href={`/admin/soporte/${ticket.id}`}
-                className="flex items-center gap-4 px-6 py-4 hover:bg-slate-50 transition-colors group"
+                className="group flex items-center gap-4 px-5 py-4 transition-colors hover:bg-mira-canvas/70 sm:px-6"
               >
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-800 truncate group-hover:text-mira-primary transition-colors">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold text-mira-ink transition-colors group-hover:text-mira-magenta">
                     {ticket.subject}
                   </p>
-                  <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded border ${STATUS_STYLES[ticket.status] ?? ''}`}>
-                      {STATUS_LABELS[ticket.status] ?? ticket.status}
-                    </span>
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded inline-flex items-center gap-1 ${PRIORITY_STYLES[ticket.priority] ?? ''}`}>
-                      <Tag size={10} />{PRIORITY_LABELS[ticket.priority] ?? ticket.priority}
-                    </span>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                    <MiraStatusBadge status={ticket.status} kind="ticket" />
+                    <MiraStatusBadge status={ticket.priority} kind="priority" />
                     <span className="text-xs text-slate-400">{CATEGORY_LABELS[ticket.category] ?? ticket.category}</span>
                     {ticket.organization_name && (
                       <span className="text-xs text-slate-400">· {ticket.organization_name}</span>
@@ -123,11 +112,11 @@ export default async function AdminSoportePage({ searchParams }: PageProps) {
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
+                <div className="flex shrink-0 items-center gap-3">
                   <p className="text-xs text-slate-400">
                     {new Date(ticket.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
                   </p>
-                  <ChevronRight size={16} className="text-slate-300 group-hover:text-mira-primary transition-colors" />
+                  <ChevronRight size={16} className="text-slate-300 transition-colors group-hover:text-mira-magenta" />
                 </div>
               </Link>
             ))}

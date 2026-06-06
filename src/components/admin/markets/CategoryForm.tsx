@@ -2,6 +2,9 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Layers } from 'lucide-react'
+import { MiraFormCard } from '@/components/mira/MiraFormCard'
+import { miraBtn, miraField, miraLabel } from '@/lib/miraButtons'
 import type { MarketCategory } from '@/lib/actions/markets'
 
 interface Props {
@@ -47,96 +50,96 @@ export function CategoryForm({ initial, onSave }: Props) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5 max-w-lg">
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg">
-          {error}
+    <form onSubmit={handleSubmit} className="max-w-lg">
+      <MiraFormCard
+        title="Datos de la categoría"
+        icon={Layers}
+        footer={
+          <>
+            <button type="button" onClick={() => router.back()} className={miraBtn.ghost}>
+              Cancelar
+            </button>
+            <button type="submit" disabled={saving} className={miraBtn.primary}>
+              {saving ? 'Guardando…' : 'Guardar'}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-5">
+          {error && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          <div>
+            <label className={miraLabel}>Nombre *</label>
+            <input
+              required
+              value={form.name}
+              onChange={e => {
+                set('name', e.target.value)
+                if (!initial) set('slug', toSlug(e.target.value))
+              }}
+              className={miraField}
+            />
+          </div>
+
+          <div>
+            <label className={miraLabel}>Slug *</label>
+            <input
+              required
+              value={form.slug}
+              onChange={e => set('slug', e.target.value)}
+              className={`${miraField} font-mono text-slate-500`}
+            />
+          </div>
+
+          <div>
+            <label className={miraLabel}>Icono (emoji)</label>
+            <input
+              value={form.icon}
+              onChange={e => set('icon', e.target.value)}
+              placeholder="🐔"
+              className={miraField}
+            />
+          </div>
+
+          <div>
+            <label className={miraLabel}>Descripción</label>
+            <textarea
+              rows={3}
+              value={form.description}
+              onChange={e => set('description', e.target.value)}
+              className={`${miraField} resize-none`}
+            />
+          </div>
+
+          <div>
+            <label className={miraLabel}>Orden</label>
+            <input
+              type="number"
+              min={0}
+              value={form.sort_order}
+              onChange={e => set('sort_order', parseInt(e.target.value) || 0)}
+              className={`${miraField} w-32`}
+            />
+          </div>
+
+          {initial && (
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="is_active"
+                checked={form.is_active}
+                onChange={e => set('is_active', e.target.checked)}
+                className="h-4 w-4 accent-mira-magenta"
+              />
+              <label htmlFor="is_active" className="text-sm font-medium text-slate-700">Activa</label>
+            </div>
+          )}
         </div>
-      )}
-
-      <div>
-        <label className="block text-xs font-bold text-slate-700 mb-1">Nombre *</label>
-        <input
-          required
-          value={form.name}
-          onChange={e => {
-            set('name', e.target.value)
-            if (!initial) set('slug', toSlug(e.target.value))
-          }}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-mira-primary/30"
-        />
-      </div>
-
-      <div>
-        <label className="block text-xs font-bold text-slate-700 mb-1">Slug *</label>
-        <input
-          required
-          value={form.slug}
-          onChange={e => set('slug', e.target.value)}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-500 font-mono focus:outline-none focus:ring-2 focus:ring-mira-primary/30"
-        />
-      </div>
-
-      <div>
-        <label className="block text-xs font-bold text-slate-700 mb-1">Icono (emoji)</label>
-        <input
-          value={form.icon}
-          onChange={e => set('icon', e.target.value)}
-          placeholder="🐔"
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30"
-        />
-      </div>
-
-      <div>
-        <label className="block text-xs font-bold text-slate-700 mb-1">Descripción</label>
-        <textarea
-          rows={3}
-          value={form.description}
-          onChange={e => set('description', e.target.value)}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30 resize-none"
-        />
-      </div>
-
-      <div>
-        <label className="block text-xs font-bold text-slate-700 mb-1">Orden</label>
-        <input
-          type="number"
-          min={0}
-          value={form.sort_order}
-          onChange={e => set('sort_order', parseInt(e.target.value) || 0)}
-          className="w-32 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30"
-        />
-      </div>
-
-      {initial && (
-        <div className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            id="is_active"
-            checked={form.is_active}
-            onChange={e => set('is_active', e.target.checked)}
-            className="w-4 h-4 accent-mira-primary"
-          />
-          <label htmlFor="is_active" className="text-sm text-slate-700 font-medium">Activa</label>
-        </div>
-      )}
-
-      <div className="flex gap-3 pt-2">
-        <button
-          type="submit"
-          disabled={saving}
-          className="px-5 py-2 bg-mira-primary text-white text-sm font-bold rounded-lg hover:bg-mira-primary/90 disabled:opacity-50 transition-colors"
-        >
-          {saving ? 'Guardando…' : 'Guardar'}
-        </button>
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="px-5 py-2 border border-slate-200 text-slate-600 text-sm font-bold rounded-lg hover:bg-slate-50 transition-colors"
-        >
-          Cancelar
-        </button>
-      </div>
+      </MiraFormCard>
     </form>
   )
 }

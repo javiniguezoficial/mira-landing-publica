@@ -4,6 +4,9 @@ import { useActionState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { updateAdminProfile } from '@/lib/actions/admin-settings'
 import type { ActionResult } from '@/lib/actions/admin-settings'
+import { miraBtn, miraField } from '@/lib/miraButtons'
+
+const fieldLabel = 'block text-sm font-bold text-mira-ink mb-1.5'
 
 interface Props {
   defaultValues: {
@@ -29,21 +32,21 @@ export function AdminProfileForm({ defaultValues }: Props) {
     <form action={formAction} className="space-y-5">
       {/* Email — solo lectura */}
       <div>
-        <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+        <label className={fieldLabel}>
           Email
         </label>
         <input
           type="email"
           value={defaultValues.email}
           disabled
-          className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-slate-500 text-sm cursor-not-allowed"
+          className={`${miraField} cursor-not-allowed bg-slate-50 text-slate-500`}
         />
         <p className="text-xs text-slate-400 mt-1">El email no se puede modificar desde aquí.</p>
       </div>
 
       {/* Nombre */}
       <div>
-        <label htmlFor="first_name" className="block text-sm font-semibold text-slate-700 mb-1.5">
+        <label htmlFor="first_name" className={fieldLabel}>
           Nombre <span className="text-red-500">*</span>
         </label>
         <input
@@ -53,13 +56,13 @@ export function AdminProfileForm({ defaultValues }: Props) {
           required
           defaultValue={defaultValues.first_name ?? ''}
           placeholder="Nombre"
-          className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30 focus:border-mira-primary transition-colors"
+          className={miraField}
         />
       </div>
 
       {/* Apellidos */}
       <div>
-        <label htmlFor="last_name" className="block text-sm font-semibold text-slate-700 mb-1.5">
+        <label htmlFor="last_name" className={fieldLabel}>
           Apellidos
         </label>
         <input
@@ -68,13 +71,13 @@ export function AdminProfileForm({ defaultValues }: Props) {
           type="text"
           defaultValue={defaultValues.last_name ?? ''}
           placeholder="Apellidos"
-          className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30 focus:border-mira-primary transition-colors"
+          className={miraField}
         />
       </div>
 
       {/* Teléfono */}
       <div>
-        <label htmlFor="phone" className="block text-sm font-semibold text-slate-700 mb-1.5">
+        <label htmlFor="phone" className={fieldLabel}>
           Teléfono
         </label>
         <input
@@ -83,7 +86,7 @@ export function AdminProfileForm({ defaultValues }: Props) {
           type="tel"
           defaultValue={defaultValues.phone ?? ''}
           placeholder="+34 600 000 000"
-          className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary/30 focus:border-mira-primary transition-colors"
+          className={miraField}
         />
       </div>
 
@@ -100,11 +103,7 @@ export function AdminProfileForm({ defaultValues }: Props) {
       )}
 
       <div className="pt-1">
-        <button
-          type="submit"
-          disabled={pending}
-          className="px-5 py-2.5 rounded-lg bg-mira-primary text-white text-sm font-semibold hover:bg-mira-primary/90 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-        >
+        <button type="submit" disabled={pending} className={miraBtn.primary}>
           {pending ? 'Guardando…' : 'Guardar perfil'}
         </button>
       </div>

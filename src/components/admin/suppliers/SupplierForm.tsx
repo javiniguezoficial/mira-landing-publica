@@ -2,6 +2,9 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { Truck } from 'lucide-react'
+import { MiraFormCard } from '@/components/mira/MiraFormCard'
+import { miraBtn, miraField, miraLabel } from '@/lib/miraButtons'
 import type { SupplierFormData } from '@/lib/actions/suppliers'
 
 interface Props {
@@ -31,7 +34,7 @@ const EMPTY: SupplierFormData = {
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+      <label className={miraLabel}>
         {label}{required && <span className="text-red-500 ml-0.5">*</span>}
       </label>
       {children}
@@ -39,7 +42,7 @@ function Field({ label, required, children }: { label: string; required?: boolea
   )
 }
 
-const inputCls = 'w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mira-primary'
+const inputCls = miraField
 
 export function SupplierForm({ defaultValues, onSubmit, submitLabel = 'Guardar', cancelHref }: Props) {
   const [form, setForm] = useState<SupplierFormData>({ ...EMPTY, ...defaultValues })
@@ -63,12 +66,24 @@ export function SupplierForm({ defaultValues, onSubmit, submitLabel = 'Guardar',
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
-      {error && (
-        <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
-      )}
+    <form onSubmit={handleSubmit}>
+      <MiraFormCard
+        title="Datos del proveedor"
+        icon={Truck}
+        footer={
+          <>
+            <Link href={cancelHref} className={miraBtn.ghost}>Cancelar</Link>
+            <button type="submit" disabled={saving} className={miraBtn.primary}>
+              {saving ? 'Guardando…' : submitLabel}
+            </button>
+          </>
+        }
+      >
+        {error && (
+          <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+        )}
 
-      <div className="grid grid-cols-2 gap-5">
+        <div className="grid grid-cols-2 gap-5">
         <div className="col-span-2">
           <Field label="Nombre" required>
             <input value={form.name} onChange={(e) => set('name', e.target.value)} className={inputCls} placeholder="Nombre del proveedor" />
@@ -138,30 +153,18 @@ export function SupplierForm({ defaultValues, onSubmit, submitLabel = 'Guardar',
         </div>
 
         <div className="col-span-2">
-          <label className="flex items-center gap-2 cursor-pointer">
+          <label className="flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
               checked={form.is_active ?? true}
               onChange={(e) => set('is_active', e.target.checked)}
-              className="w-4 h-4 rounded border-slate-300 text-mira-primary focus:ring-mira-primary"
+              className="h-4 w-4 accent-mira-magenta"
             />
             <span className="text-sm text-slate-700">Proveedor activo</span>
           </label>
         </div>
-      </div>
-
-      <div className="flex items-center gap-3 pt-2 border-t border-slate-100">
-        <button
-          type="submit"
-          disabled={saving}
-          className="px-5 py-2 bg-mira-primary text-white rounded-lg text-sm font-semibold hover:bg-mira-primary/90 disabled:opacity-50 transition-colors"
-        >
-          {saving ? 'Guardando…' : submitLabel}
-        </button>
-        <Link href={cancelHref} className="px-5 py-2 border border-slate-300 text-slate-600 rounded-lg text-sm hover:bg-slate-100 transition-colors">
-          Cancelar
-        </Link>
-      </div>
+        </div>
+      </MiraFormCard>
     </form>
   )
 }
