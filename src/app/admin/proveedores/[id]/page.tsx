@@ -56,9 +56,15 @@ export default async function AdminSupplierDetailPage({ params }: { params: Prom
           <Field label="Web" value={supplier.website} />
           <Field label="NIF / CIF" value={supplier.tax_id} />
           <Field label="País" value={supplier.country} />
-          <Field label="Región" value={supplier.region} />
-          <Field label="Ciudad" value={supplier.city} />
+          <Field label="Provincia" value={supplier.region} />
+          <Field label="Localidad" value={supplier.city} />
+          <Field label="Código postal" value={supplier.postal_code} />
           <Field label="Categoría" value={supplier.category} />
+          <Field label="Mercado" value={supplier.market?.name} />
+          <Field label="Familia" value={supplier.family} />
+          <Field label="Subfamilia" value={supplier.subfamily} />
+          <Field label="Producción" value={supplier.produccion} />
+          <Field label="Medida" value={supplier.medida} />
           <div className="col-span-2">
             <Field label="Dirección" value={supplier.address} />
           </div>

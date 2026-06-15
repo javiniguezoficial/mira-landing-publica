@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import {
-  LayoutDashboard, Users, Building2, TrendingUp,
+  LayoutDashboard, Users, Building2, TrendingUp, Globe2,
   DollarSign, Truck, FileText, Newspaper, LifeBuoy, Settings,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -12,6 +12,7 @@ const nav: NavItem[] = [
   { href: '/admin/dashboard',        label: 'Dashboard',        icon: LayoutDashboard },
   { href: '/admin/clientes',         label: 'Clientes',         icon: Building2 },
   { href: '/admin/usuarios',         label: 'Usuarios',         icon: Users },
+  { href: '/admin/mercados-estrategicos', label: 'M. estratégicos', icon: Globe2 },
   { href: '/admin/mercados',         label: 'Mercados',         icon: TrendingUp },
   { href: '/admin/precios/importar', label: 'Importar precios', icon: DollarSign },
   { href: '/admin/proveedores',      label: 'Proveedores',      icon: Truck },

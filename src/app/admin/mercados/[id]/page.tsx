@@ -59,6 +59,7 @@ export default async function MercadoDetailPage({ params }: { params: Promise<{ 
               <thead>
                 <tr className="border-b border-mira-line bg-mira-canvas/60">
                   <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500 sm:px-6">Referencia</th>
+                  <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500 sm:px-6">Tipo</th>
                   <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500 sm:px-6">Unidad</th>
                   <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500 sm:px-6">Slug</th>
                   <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500 sm:px-6">Descripción</th>
@@ -70,6 +71,7 @@ export default async function MercadoDetailPage({ params }: { params: Promise<{ 
                 {products.map(product => (
                   <tr key={product.id} className="transition-colors hover:bg-mira-canvas/70">
                     <td className="px-5 py-3 font-bold text-mira-ink sm:px-6">{product.name}</td>
+                    <td className="px-5 py-3 text-xs text-slate-500 sm:px-6">{product.tipo ?? '—'}</td>
                     <td className="px-5 py-3 sm:px-6">
                       <span className="rounded-lg bg-slate-100 px-2 py-0.5 font-mono text-xs font-bold text-slate-600">
                         {product.unit}

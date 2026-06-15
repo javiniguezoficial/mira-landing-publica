@@ -15,14 +15,21 @@ export interface Supplier {
   country: string
   region: string | null
   city: string | null
+  postal_code: string | null
   address: string | null
   latitude: number | null
   longitude: number | null
   category: string | null
+  market_id: string | null
+  family: string | null
+  subfamily: string | null
+  produccion: string | null
+  medida: string | null
   notes: string | null
   is_active: boolean
   created_at: string
   updated_at: string
+  market?: { id: string; name: string } | null
 }
 
 export interface SupplierFormData {
@@ -34,10 +41,16 @@ export interface SupplierFormData {
   country?: string
   region?: string
   city?: string
+  postal_code?: string
   address?: string
   latitude?: number | null
   longitude?: number | null
   category?: string
+  market_id?: string | null
+  family?: string
+  subfamily?: string
+  produccion?: string
+  medida?: string
   notes?: string
   is_active?: boolean
 }
@@ -94,20 +107,26 @@ export async function createSupplier(data: SupplierFormData): Promise<{ id: stri
   const { data: row, error } = await supabase
     .from('suppliers')
     .insert({
-      name:      data.name.trim(),
-      email:     data.email?.trim() || null,
-      phone:     data.phone?.trim() || null,
-      website:   data.website?.trim() || null,
-      tax_id:    data.tax_id?.trim() || null,
-      country:   data.country?.trim() || 'ES',
-      region:    data.region?.trim() || null,
-      city:      data.city?.trim() || null,
-      address:   data.address?.trim() || null,
-      latitude:  data.latitude ?? null,
-      longitude: data.longitude ?? null,
-      category:  data.category?.trim() || null,
-      notes:     data.notes?.trim() || null,
-      is_active: data.is_active ?? true,
+      name:        data.name.trim(),
+      email:       data.email?.trim() || null,
+      phone:       data.phone?.trim() || null,
+      website:     data.website?.trim() || null,
+      tax_id:      data.tax_id?.trim() || null,
+      country:     data.country?.trim() || 'ES',
+      region:      data.region?.trim() || null,
+      city:        data.city?.trim() || null,
+      postal_code: data.postal_code?.trim() || null,
+      address:     data.address?.trim() || null,
+      latitude:    data.latitude ?? null,
+      longitude:   data.longitude ?? null,
+      category:    data.category?.trim() || null,
+      market_id:   data.market_id || null,
+      family:      data.family?.trim() || null,
+      subfamily:   data.subfamily?.trim() || null,
+      produccion:  data.produccion?.trim() || null,
+      medida:      data.medida?.trim() || null,
+      notes:       data.notes?.trim() || null,
+      is_active:   data.is_active ?? true,
     })
     .select('id')
     .single()
@@ -127,20 +146,26 @@ export async function updateSupplier(id: string, data: SupplierFormData): Promis
   const { error } = await supabase
     .from('suppliers')
     .update({
-      name:      data.name.trim(),
-      email:     data.email?.trim() || null,
-      phone:     data.phone?.trim() || null,
-      website:   data.website?.trim() || null,
-      tax_id:    data.tax_id?.trim() || null,
-      country:   data.country?.trim() || 'ES',
-      region:    data.region?.trim() || null,
-      city:      data.city?.trim() || null,
-      address:   data.address?.trim() || null,
-      latitude:  data.latitude ?? null,
-      longitude: data.longitude ?? null,
-      category:  data.category?.trim() || null,
-      notes:     data.notes?.trim() || null,
-      is_active: data.is_active ?? true,
+      name:        data.name.trim(),
+      email:       data.email?.trim() || null,
+      phone:       data.phone?.trim() || null,
+      website:     data.website?.trim() || null,
+      tax_id:      data.tax_id?.trim() || null,
+      country:     data.country?.trim() || 'ES',
+      region:      data.region?.trim() || null,
+      city:        data.city?.trim() || null,
+      postal_code: data.postal_code?.trim() || null,
+      address:     data.address?.trim() || null,
+      latitude:    data.latitude ?? null,
+      longitude:   data.longitude ?? null,
+      category:    data.category?.trim() || null,
+      market_id:   data.market_id || null,
+      family:      data.family?.trim() || null,
+      subfamily:   data.subfamily?.trim() || null,
+      produccion:  data.produccion?.trim() || null,
+      medida:      data.medida?.trim() || null,
+      notes:       data.notes?.trim() || null,
+      is_active:   data.is_active ?? true,
     })
     .eq('id', id)
 
@@ -183,10 +208,10 @@ export async function getSupplier(id: string): Promise<Supplier | null> {
 
   const { data, error } = await supabase
     .from('suppliers')
-    .select('*')
+    .select('*, market:markets(id, name)')
     .eq('id', id)
     .single()
 
   if (error || !data) return null
-  return data as Supplier
+  return data as unknown as Supplier
 }

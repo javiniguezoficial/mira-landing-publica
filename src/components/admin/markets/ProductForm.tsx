@@ -13,6 +13,7 @@ interface Props {
   marketName: string
   onSave: (form: {
     name: string; slug: string; unit: string; description: string; is_active: boolean
+    lonja: string; variedad: string; calibre: string; incoterm: string; tipo: string
   }) => Promise<void>
 }
 
@@ -33,6 +34,11 @@ export function ProductForm({ initial, marketName, onSave }: Props) {
     unit: initial?.unit ?? 'kg',
     description: initial?.description ?? '',
     is_active: initial?.is_active ?? true,
+    lonja: initial?.lonja ?? '',
+    variedad: initial?.variedad ?? '',
+    calibre: initial?.calibre ?? '',
+    incoterm: initial?.incoterm ?? '',
+    tipo: initial?.tipo ?? '',
   })
 
   const set = (k: keyof typeof form, v: string | boolean) =>
@@ -133,6 +139,30 @@ export function ProductForm({ initial, marketName, onSave }: Props) {
               onChange={e => set('description', e.target.value)}
               className={`${miraField} resize-none`}
             />
+          </div>
+
+          {/* Campos adicionales de la referencia (opcionales) */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={miraLabel}>Lonja</label>
+              <input value={form.lonja} onChange={e => set('lonja', e.target.value)} placeholder="Lonja de referencia" className={miraField} />
+            </div>
+            <div>
+              <label className={miraLabel}>Tipo</label>
+              <input value={form.tipo} onChange={e => set('tipo', e.target.value)} placeholder="Tipo / clasificación" className={miraField} />
+            </div>
+            <div>
+              <label className={miraLabel}>Variedad</label>
+              <input value={form.variedad} onChange={e => set('variedad', e.target.value)} className={miraField} />
+            </div>
+            <div>
+              <label className={miraLabel}>Calibre</label>
+              <input value={form.calibre} onChange={e => set('calibre', e.target.value)} className={miraField} />
+            </div>
+            <div>
+              <label className={miraLabel}>Incoterm</label>
+              <input value={form.incoterm} onChange={e => set('incoterm', e.target.value)} placeholder="EXW, FOB, CIF…" className={`${miraField} font-mono uppercase`} />
+            </div>
           </div>
 
           {initial && (

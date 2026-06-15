@@ -2,17 +2,15 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Layers } from 'lucide-react'
+import { Globe2 } from 'lucide-react'
 import { MiraFormCard } from '@/components/mira/MiraFormCard'
 import { miraBtn, miraField, miraLabel } from '@/lib/miraButtons'
-import type { MarketCategory, StrategicMarket } from '@/lib/actions/markets'
+import type { StrategicMarket } from '@/lib/actions/markets'
 
 interface Props {
-  initial?: MarketCategory
-  strategicMarkets?: Pick<StrategicMarket, 'id' | 'name'>[]
+  initial?: StrategicMarket
   onSave: (form: {
     name: string; slug: string; description: string; icon: string; sort_order: number; is_active: boolean
-    strategic_market_id: string | null
   }) => Promise<void>
 }
 
@@ -21,7 +19,7 @@ function toSlug(s: string) {
     .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 }
 
-export function CategoryForm({ initial, strategicMarkets = [], onSave }: Props) {
+export function StrategicMarketForm({ initial, onSave }: Props) {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -32,7 +30,6 @@ export function CategoryForm({ initial, strategicMarkets = [], onSave }: Props) 
     icon: initial?.icon ?? '',
     sort_order: initial?.sort_order ?? 0,
     is_active: initial?.is_active ?? true,
-    strategic_market_id: initial?.strategic_market_id ?? '',
   })
 
   const set = (k: keyof typeof form, v: string | number | boolean) =>
@@ -43,8 +40,8 @@ export function CategoryForm({ initial, strategicMarkets = [], onSave }: Props) 
     setSaving(true)
     setError(null)
     try {
-      await onSave({ ...form, strategic_market_id: form.strategic_market_id || null })
-      router.push('/admin/mercados')
+      await onSave(form)
+      router.push('/admin/mercados-estrategicos')
       router.refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido')
@@ -55,8 +52,8 @@ export function CategoryForm({ initial, strategicMarkets = [], onSave }: Props) 
   return (
     <form onSubmit={handleSubmit} className="max-w-lg">
       <MiraFormCard
-        title="Datos de la categoría"
-        icon={Layers}
+        title="Datos del mercado estratégico"
+        icon={Globe2}
         footer={
           <>
             <button type="button" onClick={() => router.back()} className={miraBtn.ghost}>
@@ -72,22 +69,6 @@ export function CategoryForm({ initial, strategicMarkets = [], onSave }: Props) 
           {error && (
             <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {error}
-            </div>
-          )}
-
-          {strategicMarkets.length > 0 && (
-            <div>
-              <label className={miraLabel}>Mercado estratégico</label>
-              <select
-                value={form.strategic_market_id}
-                onChange={e => set('strategic_market_id', e.target.value)}
-                className={miraField}
-              >
-                <option value="">Sin mercado estratégico</option>
-                {strategicMarkets.map(sm => (
-                  <option key={sm.id} value={sm.id}>{sm.name}</option>
-                ))}
-              </select>
             </div>
           )}
 
@@ -119,7 +100,7 @@ export function CategoryForm({ initial, strategicMarkets = [], onSave }: Props) 
             <input
               value={form.icon}
               onChange={e => set('icon', e.target.value)}
-              placeholder="🐔"
+              placeholder="🌍"
               className={miraField}
             />
           </div>
@@ -154,7 +135,7 @@ export function CategoryForm({ initial, strategicMarkets = [], onSave }: Props) 
                 onChange={e => set('is_active', e.target.checked)}
                 className="h-4 w-4 accent-mira-magenta"
               />
-              <label htmlFor="is_active" className="text-sm font-medium text-slate-700">Activa</label>
+              <label htmlFor="is_active" className="text-sm font-medium text-slate-700">Activo</label>
             </div>
           )}
         </div>

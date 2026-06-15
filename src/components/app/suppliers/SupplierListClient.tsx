@@ -179,12 +179,20 @@ export function SupplierListClient({ suppliers }: Props) {
                         <Tag size={10} /> {s.category}
                       </span>
                     )}
+                    {(s.family || s.subfamily) && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-mira-canvas px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                        {[s.family, s.subfamily].filter(Boolean).join(' · ')}
+                      </span>
+                    )}
                     {(s.city || s.country) && (
                       <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">
-                        <MapPin size={10} /> {[s.city, s.region, s.country].filter(Boolean).join(', ')}
+                        <MapPin size={10} /> {[s.city, s.region, s.postal_code, s.country].filter(Boolean).join(', ')}
                       </span>
                     )}
                   </div>
+                  {s.produccion && (
+                    <p className="mt-1 text-[11px] text-slate-400">Producción: {s.produccion}</p>
+                  )}
                   {(s.email || s.phone) && (
                     <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-mira-line pt-2">
                       {s.email && (

@@ -2,12 +2,13 @@ import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Truck } from 'lucide-react'
 import { getSupplier, updateSupplier } from '@/lib/actions/suppliers'
+import { getMarkets } from '@/lib/actions/markets'
 import { SupplierForm } from '@/components/admin/suppliers/SupplierForm'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 
 export default async function EditSupplierPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const supplier = await getSupplier(id)
+  const [supplier, markets] = await Promise.all([getSupplier(id), getMarkets()])
   if (!supplier) notFound()
 
   return (
@@ -21,21 +22,28 @@ export default async function EditSupplierPage({ params }: { params: Promise<{ i
       </div>
 
       <SupplierForm
+          markets={markets.map((m) => ({ id: m.id, name: m.name }))}
           defaultValues={{
-            name:      supplier.name,
-            email:     supplier.email ?? '',
-            phone:     supplier.phone ?? '',
-            website:   supplier.website ?? '',
-            tax_id:    supplier.tax_id ?? '',
-            country:   supplier.country,
-            region:    supplier.region ?? '',
-            city:      supplier.city ?? '',
-            address:   supplier.address ?? '',
-            latitude:  supplier.latitude,
-            longitude: supplier.longitude,
-            category:  supplier.category ?? '',
-            notes:     supplier.notes ?? '',
-            is_active: supplier.is_active,
+            name:        supplier.name,
+            email:       supplier.email ?? '',
+            phone:       supplier.phone ?? '',
+            website:     supplier.website ?? '',
+            tax_id:      supplier.tax_id ?? '',
+            country:     supplier.country,
+            region:      supplier.region ?? '',
+            city:        supplier.city ?? '',
+            postal_code: supplier.postal_code ?? '',
+            address:     supplier.address ?? '',
+            latitude:    supplier.latitude,
+            longitude:   supplier.longitude,
+            category:    supplier.category ?? '',
+            market_id:   supplier.market_id ?? '',
+            family:      supplier.family ?? '',
+            subfamily:   supplier.subfamily ?? '',
+            produccion:  supplier.produccion ?? '',
+            medida:      supplier.medida ?? '',
+            notes:       supplier.notes ?? '',
+            is_active:   supplier.is_active,
           }}
           submitLabel="Guardar cambios"
           cancelHref={`/admin/proveedores/${id}`}

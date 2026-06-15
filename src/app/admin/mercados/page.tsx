@@ -43,7 +43,14 @@ export default async function MercadosPage() {
               <div className="flex items-center gap-3">
                 <span className="text-2xl">{cat.icon ?? '📦'}</span>
                 <div>
-                  <p className="text-sm font-black text-mira-ink">{cat.name}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-black text-mira-ink">{cat.name}</p>
+                    {cat.strategic_market && (
+                      <span className="rounded-md bg-mira-magenta-soft px-2 py-0.5 text-[10px] font-bold text-mira-magenta">
+                        {cat.strategic_market.name}
+                      </span>
+                    )}
+                  </div>
                   {cat.description && (
                     <p className="text-xs text-slate-500">{cat.description}</p>
                   )}

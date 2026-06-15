@@ -9,6 +9,7 @@ import type { SupplierFormData } from '@/lib/actions/suppliers'
 
 interface Props {
   defaultValues?: Partial<SupplierFormData>
+  markets?: { id: string; name: string }[]
   onSubmit: (data: SupplierFormData) => Promise<void>
   submitLabel?: string
   cancelHref: string
@@ -23,10 +24,16 @@ const EMPTY: SupplierFormData = {
   country: 'ES',
   region: '',
   city: '',
+  postal_code: '',
   address: '',
   latitude: null,
   longitude: null,
   category: '',
+  market_id: '',
+  family: '',
+  subfamily: '',
+  produccion: '',
+  medida: '',
   notes: '',
   is_active: true,
 }
@@ -44,7 +51,7 @@ function Field({ label, required, children }: { label: string; required?: boolea
 
 const inputCls = miraField
 
-export function SupplierForm({ defaultValues, onSubmit, submitLabel = 'Guardar', cancelHref }: Props) {
+export function SupplierForm({ defaultValues, markets = [], onSubmit, submitLabel = 'Guardar', cancelHref }: Props) {
   const [form, setForm] = useState<SupplierFormData>({ ...EMPTY, ...defaultValues })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -110,16 +117,43 @@ export function SupplierForm({ defaultValues, onSubmit, submitLabel = 'Guardar',
           <input value={form.country} onChange={(e) => set('country', e.target.value)} className={inputCls} placeholder="ES" />
         </Field>
 
-        <Field label="Región / Provincia">
-          <input value={form.region ?? ''} onChange={(e) => set('region', e.target.value)} className={inputCls} placeholder="Castilla y León" />
+        <Field label="Provincia">
+          <input value={form.region ?? ''} onChange={(e) => set('region', e.target.value)} className={inputCls} placeholder="Valladolid" />
         </Field>
 
-        <Field label="Ciudad">
-          <input value={form.city ?? ''} onChange={(e) => set('city', e.target.value)} className={inputCls} placeholder="Valladolid" />
+        <Field label="Localidad">
+          <input value={form.city ?? ''} onChange={(e) => set('city', e.target.value)} className={inputCls} placeholder="Medina del Campo" />
+        </Field>
+
+        <Field label="Código postal">
+          <input value={form.postal_code ?? ''} onChange={(e) => set('postal_code', e.target.value)} className={inputCls} placeholder="47400" />
         </Field>
 
         <Field label="Categoría">
           <input value={form.category ?? ''} onChange={(e) => set('category', e.target.value)} className={inputCls} placeholder="Lácteos, Cereales…" />
+        </Field>
+
+        <Field label="Mercado">
+          <select value={form.market_id ?? ''} onChange={(e) => set('market_id', e.target.value)} className={inputCls}>
+            <option value="">Sin mercado asignado</option>
+            {markets.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+        </Field>
+
+        <Field label="Familia">
+          <input value={form.family ?? ''} onChange={(e) => set('family', e.target.value)} className={inputCls} placeholder="Familia" />
+        </Field>
+
+        <Field label="Subfamilia">
+          <input value={form.subfamily ?? ''} onChange={(e) => set('subfamily', e.target.value)} className={inputCls} placeholder="Subfamilia" />
+        </Field>
+
+        <Field label="Producción">
+          <input value={form.produccion ?? ''} onChange={(e) => set('produccion', e.target.value)} className={inputCls} placeholder="Capacidad / producción" />
+        </Field>
+
+        <Field label="Medida">
+          <input value={form.medida ?? ''} onChange={(e) => set('medida', e.target.value)} className={inputCls} placeholder="kg, TN, litro…" />
         </Field>
 
         <div className="col-span-2">

@@ -1,12 +1,12 @@
 import { notFound } from 'next/navigation'
 import { Layers } from 'lucide-react'
 import { CategoryForm } from '@/components/admin/markets/CategoryForm'
-import { getCategoryById, updateCategory } from '@/lib/actions/markets'
+import { getCategoryById, updateCategory, getStrategicMarkets } from '@/lib/actions/markets'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 
 export default async function EditarCategoriaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const category = await getCategoryById(id)
+  const [category, strategicMarkets] = await Promise.all([getCategoryById(id), getStrategicMarkets()])
   if (!category) notFound()
 
   return (
@@ -14,6 +14,7 @@ export default async function EditarCategoriaPage({ params }: { params: Promise<
       <MiraPageHeader icon={Layers} title="Editar categoría" subtitle={category.name} />
       <CategoryForm
         initial={category}
+        strategicMarkets={strategicMarkets}
         onSave={async (form) => {
           'use server'
           await updateCategory(id, form)
