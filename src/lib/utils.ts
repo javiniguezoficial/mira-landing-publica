@@ -5,14 +5,17 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-// ── Formato numérico (es-ES) ────────────────────────────────────────────────
+// ── Formato numérico ────────────────────────────────────────────────────────
 // Helpers compartidos para mostrar cifras con separador de miles y la medida
 // al final (€/kg, €/TN, €/litro, unidades…). Pensados para dashboards y tablas.
+// Nota: se usa 'de-DE' en lugar de 'es-ES' porque ambos comparten el mismo
+// formato visual (punto miles, coma decimal) pero de-DE agrupa desde 1.000
+// mientras que es-ES (CLDR) solo agrupa desde 10.000.
 
-/** Número con separador de miles en formato es-ES (1.234,56). */
+/** Número con separador de miles (1.303,56 — punto miles, coma decimal). */
 export function formatNumber(value: number | null | undefined, decimals = 0): string {
   if (value == null || Number.isNaN(value)) return '—'
-  return new Intl.NumberFormat('es-ES', {
+  return new Intl.NumberFormat('de-DE', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   }).format(value)

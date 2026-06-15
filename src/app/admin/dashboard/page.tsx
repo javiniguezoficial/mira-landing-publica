@@ -2,6 +2,7 @@ import {
   Building2, Users, FileText, LifeBuoy, Newspaper,
   Truck, Package, TrendingUp, Plus, Upload, PlusCircle, LayoutDashboard, Tag,
 } from 'lucide-react'
+import { formatNumber, formatPrice } from '@/lib/utils'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 import { MiraKpiCard } from '@/components/mira/MiraKpiCard'
 import { MiraChartCard } from '@/components/mira/MiraChartCard'
@@ -70,7 +71,7 @@ export default async function AdminDashboardPage() {
         <MiraKpiCard label="Noticias" value={kpis.newsPublished} sublabel="publicadas" icon={Newspaper} tint="emerald" href="/admin/noticias" />
         <MiraKpiCard label="Proveedores" value={kpis.suppliersActive} sublabel="activos" icon={Truck} tint="cyan" href="/admin/proveedores" />
         <MiraKpiCard label="Productos" value={kpis.productsActive} sublabel="en mercados" icon={Package} tint="violet" href="/admin/mercados" />
-        <MiraKpiCard label="Precios" value={kpis.priceRecords.toLocaleString('es-ES')} sublabel="registros" icon={TrendingUp} tint="amber" href="/admin/mercados" />
+        <MiraKpiCard label="Precios" value={formatNumber(kpis.priceRecords)} sublabel="registros" icon={TrendingUp} tint="amber" href="/admin/mercados" />
       </div>
 
       {/* Gráficos principales */}
@@ -121,8 +122,9 @@ export default async function AdminDashboardPage() {
                 <span className="truncate text-sm font-semibold text-slate-700">{p.product}</span>
               </div>
               <div className="shrink-0 text-right">
-                <span className="text-sm font-black text-mira-ink">{p.price.toFixed(p.price > 100 ? 0 : 2)} €</span>
-                <span className="block text-[10px] text-slate-400">/{p.unit}</span>
+                <span className="text-sm font-black text-mira-ink">
+                  {formatPrice(p.price, { unit: p.unit, currency: p.currency, decimals: p.price > 100 ? 0 : 2 })}
+                </span>
               </div>
             </div>
           ))}

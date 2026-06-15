@@ -1,5 +1,7 @@
 'use client'
 
+import { formatNumber } from '@/lib/utils'
+
 interface MiraTooltipProps {
   active?: boolean
   payload?: any[]
@@ -21,7 +23,7 @@ export function MiraTooltip({ active, payload, label, unit, multi }: MiraTooltip
             <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: p.color ?? p.payload?.fill ?? '#D6006E' }} />
             {multi && <span className="text-xs text-slate-500">{p.name}</span>}
             <span className="ml-auto text-sm font-bold text-mira-ink">
-              {typeof p.value === 'number' ? p.value.toLocaleString('es-ES') : p.value}
+              {typeof p.value === 'number' ? formatNumber(p.value) : p.value}
               {unit && <span className="ml-1 text-[11px] font-medium text-slate-400">{unit}</span>}
             </span>
           </div>

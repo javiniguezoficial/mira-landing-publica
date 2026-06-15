@@ -2,6 +2,7 @@ import {
   Building2, Users, FileText, Newspaper, Truck, TrendingUp,
   Plus, MapPin, HelpCircle, Zap, ArrowRight,
 } from 'lucide-react'
+import { currencySymbol, unitLabel } from '@/lib/utils'
 import { redirect } from 'next/navigation'
 import { getActiveOrg } from '@/lib/queries/user-org'
 import { getClientDashboardData } from '@/lib/queries/client-dashboard'
@@ -59,7 +60,11 @@ export default async function AppDashboard() {
 
   const roleLabel = ROLE_LABELS[org.userRole] ?? org.userRole
   const rfqDonut = data.rfqStatusCounts.map(d => ({ label: d.label, value: d.count, color: RFQ_COLORS[d.status] ?? '#94A3B8' }))
-  const priceBars = latestPrices.map(p => ({ label: p.product, value: p.price }))
+  const priceBars = latestPrices.map(p => ({
+    label: p.product,
+    value: p.price,
+    sublabel: `${currencySymbol(p.currency)}/${unitLabel(p.unit)}`,
+  }))
 
   return (
     <div className="w-full space-y-6 p-4 md:p-6 xl:p-8">
@@ -100,7 +105,7 @@ export default async function AppDashboard() {
           {priceBars.length === 0 ? (
             <p className="py-10 text-center text-sm text-slate-400">Sin datos de precios disponibles</p>
           ) : (
-            <MiraRankBars data={priceBars} unit="€" decimals={2} />
+            <MiraRankBars data={priceBars} decimals={2} />
           )}
           <a href="/app/market-intelligent" className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-mira-magenta to-mira-magenta-deep py-2.5 text-sm font-bold text-white shadow-md shadow-mira-magenta/25 transition-opacity hover:opacity-90">
             <TrendingUp size={15} /> Ver evolución de precios
