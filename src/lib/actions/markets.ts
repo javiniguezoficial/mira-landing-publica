@@ -231,6 +231,21 @@ export async function getMarketById(id: string): Promise<Market | null> {
   return data as Market | null
 }
 
+export interface MarketDetail extends Omit<Market, 'category'> {
+  category?: (Pick<MarketCategory, 'id' | 'name' | 'slug'> & {
+    strategic_market?: Pick<StrategicMarket, 'id' | 'name' | 'slug'> | null
+  }) | null
+}
+
+export async function getMarketDetail(id: string): Promise<MarketDetail | null> {
+  const supabase = await requireAdmin()
+  const { data } = await supabase
+    .from('markets')
+    .select('*, category:market_categories(id, name, slug, strategic_market:strategic_markets(id, name, slug))')
+    .eq('id', id).single()
+  return data as MarketDetail | null
+}
+
 export async function createMarket(form: {
   category_id: string; name: string; slug: string; description?: string; country_scope?: string
 }): Promise<{ id: string }> {
@@ -352,4 +367,65 @@ export async function toggleProduct(id: string, is_active: boolean): Promise<voi
     .update({ is_active, updated_at: new Date().toISOString() })
     .eq('id', id)
   if (error) throw new Error(error.message)
+}
+
+// ── Strategic market detail (drill-down) ──────────────────────────────────────
+
+export interface StrategicMarketCategoryDetail {
+  id: string
+  name: string
+  slug: string
+  icon: string | null
+  is_active: boolean
+  sort_order: number
+  markets: {
+    id: string
+    name: string
+    slug: string
+    country_scope: string
+    is_active: boolean
+    productCount: number
+  }[]
+}
+
+export interface StrategicMarketDetail {
+  strategicMarket: StrategicMarket
+  categories: StrategicMarketCategoryDetail[]
+}
+
+export async function getStrategicMarketDetail(id: string): Promise<StrategicMarketDetail | null> {
+  const supabase = await requireAdmin()
+
+  const [smResult, catResult] = await Promise.all([
+    supabase.from('strategic_markets').select('*').eq('id', id).single(),
+    supabase
+      .from('market_categories')
+      .select('id, name, slug, icon, is_active, sort_order, markets(id, name, slug, country_scope, is_active, products(id))')
+      .eq('strategic_market_id', id)
+      .order('sort_order', { ascending: true }),
+  ])
+
+  if (smResult.error || !smResult.data) return null
+
+  const categories: StrategicMarketCategoryDetail[] = (catResult.data ?? []).map((cat: any) => ({
+    id: cat.id,
+    name: cat.name,
+    slug: cat.slug,
+    icon: cat.icon,
+    is_active: cat.is_active,
+    sort_order: cat.sort_order,
+    markets: (cat.markets ?? []).map((m: any) => ({
+      id: m.id,
+      name: m.name,
+      slug: m.slug,
+      country_scope: m.country_scope,
+      is_active: m.is_active,
+      productCount: (m.products ?? []).length,
+    })),
+  }))
+
+  return {
+    strategicMarket: smResult.data as StrategicMarket,
+    categories,
+  }
 }

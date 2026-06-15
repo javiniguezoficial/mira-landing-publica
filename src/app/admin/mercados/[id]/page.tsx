@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { Plus, Pencil, ArrowLeft, Package } from 'lucide-react'
-import { getMarketById, getProductsByMarket, toggleProduct } from '@/lib/actions/markets'
+import { Plus, Pencil, ArrowLeft, Package, Globe2 } from 'lucide-react'
+import { getMarketDetail, getProductsByMarket, toggleProduct } from '@/lib/actions/markets'
 import { ToggleButton } from '@/components/admin/markets/ToggleButton'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
@@ -12,24 +12,51 @@ export const dynamic = 'force-dynamic'
 export default async function MercadoDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const [market, products] = await Promise.all([
-    getMarketById(id),
+    getMarketDetail(id),
     getProductsByMarket(id),
   ])
   if (!market) notFound()
 
+  const strategicMarket = market.category?.strategic_market
+  const categoryName = market.category?.name
+
   return (
     <div className="w-full space-y-6 p-4 md:p-6 xl:p-8">
       <div>
-        <Link
-          href="/admin/mercados"
-          className="mb-4 inline-flex items-center gap-1.5 text-sm text-slate-500 transition-colors hover:text-mira-magenta"
-        >
-          <ArrowLeft size={14} /> Mercados
-        </Link>
+        {/* Breadcrumb jerárquico */}
+        <nav className="mb-4 flex flex-wrap items-center gap-1.5 text-sm text-slate-500">
+          <Link
+            href="/admin/mercados"
+            className="transition-colors hover:text-mira-magenta"
+          >
+            Mercados
+          </Link>
+          <span className="text-slate-300">/</span>
+          {strategicMarket ? (
+            <Link
+              href={`/admin/mercados-estrategicos/${strategicMarket.id}`}
+              className="flex items-center gap-1 transition-colors hover:text-mira-magenta"
+            >
+              <Globe2 size={12} />
+              {strategicMarket.name}
+            </Link>
+          ) : (
+            <span className="italic text-slate-400">Sin mercado estratégico</span>
+          )}
+          {categoryName && (
+            <>
+              <span className="text-slate-300">/</span>
+              <span className="text-slate-600">{categoryName}</span>
+            </>
+          )}
+          <span className="text-slate-300">/</span>
+          <span className="font-semibold text-mira-ink">{market.name}</span>
+        </nav>
+
         <MiraPageHeader
           icon={Package}
           title={market.name}
-          subtitle={`${market.category?.name} · ${market.country_scope} · ${products.length} referencias`}
+          subtitle={`${categoryName ?? 'Sin categoría'} · ${market.country_scope} · ${products.length} referencias`}
           actions={
             <>
               <Link href={`/admin/mercados/${id}/editar`} className={miraBtn.ghost}>

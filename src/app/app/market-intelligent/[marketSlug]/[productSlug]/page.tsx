@@ -6,16 +6,9 @@ import { PriceChart } from '@/components/app/PriceChart'
 import { MiraKpiCard } from '@/components/mira/MiraKpiCard'
 import { MiraChartCard } from '@/components/mira/MiraChartCard'
 import { EmptyState } from '@/components/shared/EmptyState'
-import { currencySymbol, unitLabel } from '@/lib/utils'
+import { formatNumber, currencySymbol, unitLabel } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
-
-function fmt(n: number, decimals = 4) {
-  return new Intl.NumberFormat('es-ES', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: decimals,
-  }).format(n)
-}
 
 export default async function ProductDetailPage({
   params,
@@ -64,15 +57,15 @@ export default async function ProductDetailPage({
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <MiraKpiCard
               label="Precio actual"
-              value={`${fmt(priceStats.current)}`}
+              value={formatNumber(priceStats.current, 2)}
               sublabel={`${currencySymbol(priceStats.currency)} / ${unitLabel(priceStats.unit)}`}
               icon={TrendingUp}
               tint="magenta"
-              delta={!changeNeutral ? { value: `${fmt(Math.abs(priceStats.change30), 2)}%`, up: changePositive } : undefined}
+              delta={!changeNeutral ? { value: `${formatNumber(Math.abs(priceStats.change30), 2)}%`, up: changePositive } : undefined}
             />
-            <MiraKpiCard label="Media 30 días" value={fmt(priceStats.avg30)} sublabel={`${currencySymbol(priceStats.currency)} / ${unitLabel(priceStats.unit)}`} icon={BarChart3} tint="violet" />
-            <MiraKpiCard label="Mínimo 30 días" value={fmt(priceStats.min30)} sublabel={`${currencySymbol(priceStats.currency)} / ${unitLabel(priceStats.unit)}`} icon={TrendingDown} tint="emerald" />
-            <MiraKpiCard label="Máximo 30 días" value={fmt(priceStats.max30)} sublabel={`${currencySymbol(priceStats.currency)} / ${unitLabel(priceStats.unit)}`} icon={TrendingUp} tint="pink" />
+            <MiraKpiCard label="Media 30 días" value={formatNumber(priceStats.avg30, 2)} sublabel={`${currencySymbol(priceStats.currency)} / ${unitLabel(priceStats.unit)}`} icon={BarChart3} tint="violet" />
+            <MiraKpiCard label="Mínimo 30 días" value={formatNumber(priceStats.min30, 2)} sublabel={`${currencySymbol(priceStats.currency)} / ${unitLabel(priceStats.unit)}`} icon={TrendingDown} tint="emerald" />
+            <MiraKpiCard label="Máximo 30 días" value={formatNumber(priceStats.max30, 2)} sublabel={`${currencySymbol(priceStats.currency)} / ${unitLabel(priceStats.unit)}`} icon={TrendingUp} tint="pink" />
           </div>
 
           <MiraChartCard
