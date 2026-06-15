@@ -6,6 +6,7 @@ import { PriceChart } from '@/components/app/PriceChart'
 import { MiraKpiCard } from '@/components/mira/MiraKpiCard'
 import { MiraChartCard } from '@/components/mira/MiraChartCard'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { currencySymbol, unitLabel } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,20 +65,20 @@ export default async function ProductDetailPage({
             <MiraKpiCard
               label="Precio actual"
               value={`${fmt(priceStats.current)}`}
-              sublabel={`${priceStats.currency} / ${priceStats.unit}`}
+              sublabel={`${currencySymbol(priceStats.currency)} / ${unitLabel(priceStats.unit)}`}
               icon={TrendingUp}
               tint="magenta"
               delta={!changeNeutral ? { value: `${fmt(Math.abs(priceStats.change30), 2)}%`, up: changePositive } : undefined}
             />
-            <MiraKpiCard label="Media 30 días" value={fmt(priceStats.avg30)} sublabel={`${priceStats.currency} / ${priceStats.unit}`} icon={BarChart3} tint="violet" />
-            <MiraKpiCard label="Mínimo 30 días" value={fmt(priceStats.min30)} sublabel={`${priceStats.currency} / ${priceStats.unit}`} icon={TrendingDown} tint="emerald" />
-            <MiraKpiCard label="Máximo 30 días" value={fmt(priceStats.max30)} sublabel={`${priceStats.currency} / ${priceStats.unit}`} icon={TrendingUp} tint="pink" />
+            <MiraKpiCard label="Media 30 días" value={fmt(priceStats.avg30)} sublabel={`${currencySymbol(priceStats.currency)} / ${unitLabel(priceStats.unit)}`} icon={BarChart3} tint="violet" />
+            <MiraKpiCard label="Mínimo 30 días" value={fmt(priceStats.min30)} sublabel={`${currencySymbol(priceStats.currency)} / ${unitLabel(priceStats.unit)}`} icon={TrendingDown} tint="emerald" />
+            <MiraKpiCard label="Máximo 30 días" value={fmt(priceStats.max30)} sublabel={`${currencySymbol(priceStats.currency)} / ${unitLabel(priceStats.unit)}`} icon={TrendingUp} tint="pink" />
           </div>
 
           <MiraChartCard
             icon={BarChart3}
             title="Evolución histórica"
-            subtitle={`Últimos 90 días · ${priceStats.history.length} registros · ${priceStats.currency}/${priceStats.unit}`}
+            subtitle={`Últimos 90 días · ${priceStats.history.length} registros · ${currencySymbol(priceStats.currency)}/${unitLabel(priceStats.unit)}`}
           >
             <PriceChart data={priceStats.history} unit={priceStats.unit} currency={priceStats.currency} />
             <p className="mt-3 text-center text-[10px] text-slate-400">— Precio · - - Mín/Máx</p>
@@ -85,7 +86,7 @@ export default async function ProductDetailPage({
         </>
       ) : (
         <div className="mira-card rounded-2xl">
-          <EmptyState icon={Package} title="Sin datos de precio" description="No hay datos de precio disponibles para este producto." />
+          <EmptyState icon={Package} title="Sin datos de precio" description="No hay datos de precio disponibles para esta referencia." />
         </div>
       )}
     </div>

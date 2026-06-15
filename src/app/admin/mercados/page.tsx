@@ -99,7 +99,7 @@ export default async function MercadosPage() {
                               href={`/admin/mercados/${market.id}`}
                               className="text-xs font-bold text-mira-magenta hover:underline"
                             >
-                              Productos
+                              Referencias
                             </Link>
                             <Link
                               href={`/admin/mercados/${market.id}/editar`}

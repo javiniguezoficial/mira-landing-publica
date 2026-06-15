@@ -1,5 +1,5 @@
 import { type LucideIcon } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, formatNumber } from '@/lib/utils'
 
 export type KpiTint = 'magenta' | 'purple' | 'violet' | 'emerald' | 'amber' | 'cyan' | 'blue' | 'pink'
 
@@ -37,7 +37,9 @@ export function MiraKpiCard({ label, value, sublabel, icon: Icon, tint = 'magent
       <div className="min-w-0 flex-1">
         <p className="truncate text-xs font-semibold text-slate-500">{label}</p>
         <div className="mt-0.5 flex items-baseline gap-2">
-          <span className="text-2xl font-black leading-none tracking-tight text-mira-ink">{value}</span>
+          <span className="text-2xl font-black leading-none tracking-tight text-mira-ink">
+            {typeof value === 'number' ? formatNumber(value) : value}
+          </span>
           {delta && (
             <span className={cn('text-[11px] font-bold', delta.up ? 'text-emerald-600' : 'text-red-500')}>
               {delta.up ? '↑' : '↓'} {delta.value}

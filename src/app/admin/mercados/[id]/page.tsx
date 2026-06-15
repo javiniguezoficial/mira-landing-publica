@@ -29,14 +29,14 @@ export default async function MercadoDetailPage({ params }: { params: Promise<{ 
         <MiraPageHeader
           icon={Package}
           title={market.name}
-          subtitle={`${market.category?.name} · ${market.country_scope} · ${products.length} productos`}
+          subtitle={`${market.category?.name} · ${market.country_scope} · ${products.length} referencias`}
           actions={
             <>
               <Link href={`/admin/mercados/${id}/editar`} className={miraBtn.ghost}>
                 <Pencil size={14} /> Editar mercado
               </Link>
               <Link href={`/admin/mercados/${id}/productos/nuevo`} className={miraBtn.primary}>
-                <Plus size={15} /> Producto
+                <Plus size={15} /> Referencia
               </Link>
             </>
           }
@@ -47,9 +47,9 @@ export default async function MercadoDetailPage({ params }: { params: Promise<{ 
         <div className="mira-card rounded-2xl">
           <EmptyState
             icon={Package}
-            title="Aún no hay productos"
-            description="Añade el primer producto a este mercado."
-            action={{ label: 'Añadir producto', href: `/admin/mercados/${id}/productos/nuevo` }}
+            title="Aún no hay referencias"
+            description="Añade la primera referencia a este mercado."
+            action={{ label: 'Añadir referencia', href: `/admin/mercados/${id}/productos/nuevo` }}
           />
         </div>
       ) : (
@@ -58,7 +58,7 @@ export default async function MercadoDetailPage({ params }: { params: Promise<{ 
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-mira-line bg-mira-canvas/60">
-                  <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500 sm:px-6">Producto</th>
+                  <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500 sm:px-6">Referencia</th>
                   <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500 sm:px-6">Unidad</th>
                   <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500 sm:px-6">Slug</th>
                   <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500 sm:px-6">Descripción</th>

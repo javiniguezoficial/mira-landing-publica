@@ -11,7 +11,7 @@ export default async function NuevoProductoPage({ params }: { params: Promise<{ 
 
   return (
     <div className="w-full space-y-6 p-4 md:p-6 xl:p-8">
-      <MiraPageHeader icon={Package} title="Nuevo producto" subtitle={`Añade un producto al mercado ${market.name}`} />
+      <MiraPageHeader icon={Package} title="Nueva referencia" subtitle={`Añade una referencia al mercado ${market.name}`} />
       <ProductForm
         marketId={id}
         marketName={market.name}

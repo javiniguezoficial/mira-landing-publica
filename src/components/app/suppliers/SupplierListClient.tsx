@@ -28,7 +28,7 @@ export function SupplierListClient({ suppliers }: Props) {
   const [region,   setRegion]   = useState('')
   const [city,     setCity]     = useState('')
   const [category, setCategory] = useState('')
-  const [view,     setView]     = useState<'list' | 'map'>('list')
+  const [view,     setView]     = useState<'list' | 'map'>('map')
 
   const countries  = useMemo(() => unique(suppliers.map((s) => s.country)),  [suppliers])
   const regions    = useMemo(() => unique(suppliers.map((s) => s.region)),    [suppliers])

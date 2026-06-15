@@ -55,7 +55,7 @@ export function ProductForm({ initial, marketName, onSave }: Props) {
   return (
     <form onSubmit={handleSubmit} className="max-w-lg">
       <MiraFormCard
-        title="Datos del producto"
+        title="Datos de la referencia"
         subtitle={`Mercado: ${marketName}`}
         icon={Package}
         footer={

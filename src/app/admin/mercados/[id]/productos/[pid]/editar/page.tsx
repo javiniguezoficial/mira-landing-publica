@@ -15,7 +15,7 @@ export default async function EditarProductoPage({
 
   return (
     <div className="w-full space-y-6 p-4 md:p-6 xl:p-8">
-      <MiraPageHeader icon={Package} title="Editar producto" subtitle={product.name} />
+      <MiraPageHeader icon={Package} title="Editar referencia" subtitle={product.name} />
       <ProductForm
         initial={product}
         marketId={id}

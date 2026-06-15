@@ -15,7 +15,7 @@ export default async function MarketIntelligentPage() {
       <MiraPageHeader
         icon={TrendingUp}
         title="Market Intelligence"
-        subtitle="Mercados y productos disponibles en tu plan"
+        subtitle="Mercados y referencias disponibles en tu plan"
       />
 
       {categories.length === 0 ? (
