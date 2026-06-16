@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, FileText } from 'lucide-react'
+import { ArrowLeft, FileText, ExternalLink } from 'lucide-react'
 import { getRfq, adminUpdateRfqStatus, type Rfq, type RfqStatus } from '@/lib/actions/rfqs'
 import { MiraStatusBadge } from '@/components/mira/MiraStatusBadge'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
@@ -17,12 +17,15 @@ const ALL_STATUSES: { value: RfqStatus; label: string }[] = [
   { value: 'cancelled', label: 'Cancelada' },
 ]
 
-function formatDate(d: string) {
+function formatDate(d: string | null | undefined) {
+  if (!d) return null
   return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })
 }
 
+const CRITICALITY_LABELS: Record<string, string> = { alto: 'Alto', medio: 'Medio', bajo: 'Bajo' }
+
 function Field({ label, value }: { label: string; value?: React.ReactNode }) {
-  if (!value) return null
+  if (value === null || value === undefined || value === '') return null
   return (
     <div>
       <dt className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-0.5">{label}</dt>
@@ -80,6 +83,8 @@ export function AdminRfqDetail({ id }: { id: string }) {
   const product = Array.isArray(rfq.product) ? rfq.product[0] : rfq.product
   const market = product && (Array.isArray((product as any).market) ? (product as any).market[0] : (product as any).market)
   const org = Array.isArray(rfq.organization) ? rfq.organization[0] : rfq.organization
+  const isService = rfq.rfq_kind === 'service'
+  const title = isService ? (rfq.service_name ?? 'Servicio') : (product?.name ?? 'Cotización')
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6 p-4 md:p-6 xl:p-8">
@@ -93,8 +98,8 @@ export function AdminRfqDetail({ id }: { id: string }) {
         </Link>
         <MiraPageHeader
           icon={FileText}
-          title={product?.name ?? 'Cotización'}
-          subtitle={`${org?.name ?? '—'} · ${market?.name ?? ''} · ${formatDate(rfq.created_at)}`}
+          title={title}
+          subtitle={`${org?.name ?? '—'} · ${isService ? 'Servicio' : (market?.name ?? '')} · ${formatDate(rfq.created_at)}`}
           actions={<MiraStatusBadge status={rfq.status} kind="rfq" />}
         />
       </div>
@@ -103,14 +108,80 @@ export function AdminRfqDetail({ id }: { id: string }) {
       <div className="mira-card rounded-2xl p-5 sm:p-6">
         <dl className="grid grid-cols-2 gap-5">
           <Field label="Organización" value={org?.name} />
-          <Field label="Producto" value={product?.name} />
-          <Field label="Cantidad" value={`${rfq.quantity.toLocaleString('es-ES')} ${rfq.unit}`} />
-          <Field label="Fecha límite" value={formatDate(rfq.deadline)} />
+          <Field label="Tipo" value={isService ? 'Servicio' : 'Producto'} />
+          {isService
+            ? <Field label="Servicio" value={rfq.service_name} />
+            : <Field label="Producto" value={product?.name} />}
+          {isService && <Field label="Descripción" value={rfq.service_description} />}
+          <Field label="Formato unitario" value={rfq.unit_format} />
+          <Field label="Volumen estimado" value={rfq.estimated_volume?.toLocaleString('es-ES')} />
+          {rfq.estimated_volume == null && rfq.quantity != null && (
+            <Field label="Cantidad (heredada)" value={`${rfq.quantity.toLocaleString('es-ES')}${rfq.unit ? ` ${rfq.unit}` : ''}`} />
+          )}
+          <Field label="Pedido mínimo" value={rfq.min_order?.toLocaleString('es-ES')} />
+          <Field label="Frecuencia de compra" value={rfq.purchase_frequency} />
+          <Field label="Criticidad" value={rfq.criticality ? CRITICALITY_LABELS[rfq.criticality] : null} />
+
+          <Field label="Fecha de apertura" value={formatDate(rfq.opening_date)} />
+          <Field label="Límite recepción ofertas" value={formatDate(rfq.deadline)} />
+          <Field label="Fecha de adjudicación" value={formatDate(rfq.award_date)} />
+          <Field label="Inicio de suministro" value={formatDate(rfq.supply_start_date)} />
+
           <Field label="País" value={rfq.country} />
-          {rfq.region && <Field label="Región" value={rfq.region} />}
+          <Field label="Región" value={rfq.region} />
+          <Field label="Ubicación de entrega" value={rfq.delivery_location} />
+          <Field label="Incoterm" value={rfq.incoterm} />
+
+          <Field label="Precio objetivo" value={rfq.target_price != null ? `${rfq.target_price.toLocaleString('es-ES')} ${rfq.sale_currency}` : null} />
+          <Field label="Moneda de venta" value={rfq.sale_currency} />
+          <Field label="Forma de pago" value={rfq.payment_method} />
+          <Field label="Lead time" value={rfq.lead_time} />
+          <Field label="Codificación interna" value={rfq.internal_code} />
+
+          <Field
+            label="Certificaciones"
+            value={rfq.certifications && rfq.certifications.length > 0
+              ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {rfq.certifications.map((c) => (
+                    <span key={c} className="rounded-md bg-mira-canvas px-2 py-0.5 text-xs font-semibold text-slate-600">{c}</span>
+                  ))}
+                </div>
+              )
+              : null}
+          />
+          <Field label="Política de sostenibilidad" value={rfq.sustainability_policy} />
+
+          <Field
+            label="Ficha técnica"
+            value={rfq.technical_sheet_url
+              ? (
+                <a href={rfq.technical_sheet_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-semibold text-mira-magenta hover:underline">
+                  Ver ficha técnica <ExternalLink size={12} />
+                </a>
+              )
+              : null}
+          />
+          <Field label="Notas de ficha técnica" value={rfq.technical_sheet_notes} />
+
           {rfq.notes && <Field label="Notas" value={rfq.notes} />}
-          {rfq.conditions && <Field label="Condiciones" value={rfq.conditions} />}
+          {rfq.conditions && <Field label="Condiciones generales" value={rfq.conditions} />}
         </dl>
+
+        {/* Condiciones personalizadas (datos JSONB — solo render) */}
+        {rfq.custom_conditions && rfq.custom_conditions.length > 0 && (
+          <div className="mt-6 border-t border-mira-line pt-5">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Condiciones personalizadas</p>
+            <ul className="space-y-2">
+              {rfq.custom_conditions.map((c, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm">
+                  <span className="font-semibold text-slate-700">{c.label || '—'}:</span>
+                  <span className="text-slate-600">{c.value || '—'}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       {/* Respuestas de proveedores */}

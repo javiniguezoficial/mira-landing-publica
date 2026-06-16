@@ -7,17 +7,50 @@ import { redirect } from 'next/navigation'
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
 export type RfqStatus = 'draft' | 'open' | 'closed' | 'awarded' | 'cancelled'
+export type RfqKind = 'product' | 'service'
+export type RfqCriticality = 'alto' | 'medio' | 'bajo'
+
+// Condición personalizada dinámica. Se guarda como dato en custom_conditions
+// (JSONB). NUNCA se interpreta ni ejecuta su contenido — solo se renderiza.
+export interface RfqCustomCondition {
+  label: string
+  value: string
+  type: string
+}
 
 export interface Rfq {
   id: string
   organization_id: string
   created_by: string
-  product_id: string
-  quantity: number
-  unit: string
+  rfq_kind: RfqKind
+  product_id: string | null
+  service_name: string | null
+  service_description: string | null
+  quantity: number | null   // legacy/compatibilidad
+  unit: string | null       // legacy/compatibilidad
+  opening_date: string | null
   deadline: string
+  award_date: string | null
+  supply_start_date: string | null
   country: string
   region: string | null
+  estimated_volume: number | null
+  purchase_frequency: string | null
+  delivery_location: string | null
+  incoterm: string | null
+  target_price: number | null
+  certifications: string[] | null
+  sustainability_policy: string | null
+  unit_format: string | null
+  criticality: RfqCriticality | null
+  lead_time: string | null
+  min_order: number | null
+  sale_currency: string
+  internal_code: string | null
+  payment_method: string | null
+  technical_sheet_url: string | null
+  technical_sheet_notes: string | null
+  custom_conditions: RfqCustomCondition[]
   notes: string | null
   conditions: string | null
   status: RfqStatus
@@ -34,21 +67,48 @@ export interface Rfq {
 }
 
 export interface RfqFormData {
-  product_id: string
-  quantity: number
-  unit: string
+  rfq_kind: RfqKind
+  product_id?: string | null
+  service_name?: string
+  service_description?: string
+  opening_date: string
   deadline: string
+  award_date: string
+  supply_start_date: string
   country: string
   region?: string
+  estimated_volume?: number | null
+  purchase_frequency?: string
+  delivery_location?: string
+  incoterm?: string
+  target_price?: number | null
+  certifications?: string[]
+  sustainability_policy?: string
+  unit_format: string
+  criticality?: RfqCriticality | ''
+  lead_time: string
+  min_order?: number | null
+  sale_currency: string
+  internal_code?: string
+  payment_method?: string
+  technical_sheet_url?: string
+  technical_sheet_notes?: string
+  custom_conditions?: RfqCustomCondition[]
   notes?: string
   conditions?: string
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// Lista de columnas reutilizable para los SELECT (evita repetición).
+const RFQ_COLUMNS = `
+  id, organization_id, created_by, rfq_kind, product_id, service_name, service_description,
+  quantity, unit, opening_date, deadline, award_date, supply_start_date,
+  country, region, estimated_volume, purchase_frequency, delivery_location, incoterm,
+  target_price, certifications, sustainability_policy, unit_format, criticality, lead_time,
+  min_order, sale_currency, internal_code, payment_method, technical_sheet_url,
+  technical_sheet_notes, custom_conditions, notes, conditions, status, created_at, updated_at
+`
 
-function today(): string {
-  return new Date().toISOString().split('T')[0]
-}
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function resolveActiveProductOrThrow(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -73,12 +133,101 @@ async function resolveActiveProductOrThrow(
 }
 
 function validateFormData(data: RfqFormData) {
-  if (!data.product_id) throw new Error('Debes seleccionar un producto')
-  if (!data.quantity || data.quantity <= 0) throw new Error('La cantidad debe ser mayor que 0')
-  if (!data.unit?.trim()) throw new Error('La unidad es obligatoria')
-  if (!data.deadline) throw new Error('La fecha límite es obligatoria')
-  if (data.deadline < today()) throw new Error('La fecha límite no puede ser anterior a hoy')
+  // Tipo de RFQ
+  if (data.rfq_kind !== 'product' && data.rfq_kind !== 'service') {
+    throw new Error('Debes indicar si la RFQ es de producto o de servicio')
+  }
+  if (data.rfq_kind === 'product') {
+    if (!data.product_id) throw new Error('Debes seleccionar un producto')
+  } else {
+    if (!data.service_name?.trim()) throw new Error('El nombre del servicio es obligatorio')
+  }
+
+  // quantity/unit son legacy y NO se exigen. Volumen estimado es opcional.
+  // Obligatorios B1
+  if (!data.unit_format?.trim()) throw new Error('El formato unitario es obligatorio')
+  if (!data.lead_time?.trim()) throw new Error('El lead time es obligatorio')
+  if (!data.sale_currency?.trim()) throw new Error('La moneda de venta es obligatoria')
   if (!data.country?.trim()) throw new Error('El país es obligatorio')
+
+  // Fechas obligatorias
+  if (!data.opening_date) throw new Error('La fecha de apertura es obligatoria')
+  if (!data.deadline) throw new Error('La fecha límite de recepción de ofertas es obligatoria')
+  if (!data.award_date) throw new Error('La fecha de adjudicación es obligatoria')
+  if (!data.supply_start_date) throw new Error('La fecha de inicio de suministro es obligatoria')
+
+  // Orden cronológico: apertura ≤ límite ≤ adjudicación ≤ inicio suministro
+  if (data.opening_date > data.deadline) {
+    throw new Error('La fecha de apertura no puede ser posterior a la fecha límite de recepción de ofertas')
+  }
+  if (data.deadline > data.award_date) {
+    throw new Error('La fecha límite de recepción no puede ser posterior a la fecha de adjudicación')
+  }
+  if (data.award_date > data.supply_start_date) {
+    throw new Error('La fecha de adjudicación no puede ser posterior al inicio de suministro')
+  }
+
+  if (data.criticality && !['alto', 'medio', 'bajo'].includes(data.criticality)) {
+    throw new Error('Nivel de criticidad no válido')
+  }
+}
+
+// Limpia un array de strings (certificaciones): trim + sin vacíos. null si queda vacío.
+function cleanStringArray(arr?: string[]): string[] | null {
+  if (!Array.isArray(arr)) return null
+  const out = arr.map((s) => String(s ?? '').trim()).filter(Boolean)
+  return out.length ? out : null
+}
+
+// Sanea las condiciones personalizadas: estructura fija {label,value,type}, trim,
+// descarta filas totalmente vacías. Tratado SIEMPRE como dato, nunca ejecutado.
+function sanitizeCustomConditions(conds?: RfqCustomCondition[]): RfqCustomCondition[] {
+  if (!Array.isArray(conds)) return []
+  return conds
+    .map((c) => ({
+      label: String(c?.label ?? '').trim(),
+      value: String(c?.value ?? '').trim(),
+      type:  String(c?.type ?? 'text').trim() || 'text',
+    }))
+    .filter((c) => c.label.length > 0 || c.value.length > 0)
+}
+
+// Construye el payload de columnas de contenido común a insert y update.
+function buildRfqContent(data: RfqFormData) {
+  const isProduct = data.rfq_kind === 'product'
+  return {
+    rfq_kind:              data.rfq_kind,
+    product_id:            isProduct ? (data.product_id || null) : null,
+    service_name:          isProduct ? null : (data.service_name?.trim() || null),
+    service_description:   data.service_description?.trim() || null,
+    // quantity/unit son legacy: no se escriben desde el formulario ampliado.
+    // En INSERT quedan NULL; en UPDATE se preservan los valores existentes.
+    opening_date:          data.opening_date,
+    deadline:              data.deadline,
+    award_date:            data.award_date,
+    supply_start_date:     data.supply_start_date,
+    country:               data.country.trim(),
+    region:                data.region?.trim() || null,
+    estimated_volume:      data.estimated_volume ?? null,
+    purchase_frequency:    data.purchase_frequency?.trim() || null,
+    delivery_location:     data.delivery_location?.trim() || null,
+    incoterm:              data.incoterm?.trim() || null,
+    target_price:          data.target_price ?? null,
+    certifications:        cleanStringArray(data.certifications),
+    sustainability_policy: data.sustainability_policy?.trim() || null,
+    unit_format:           data.unit_format.trim(),
+    criticality:           data.criticality || null,
+    lead_time:             data.lead_time.trim(),
+    min_order:             data.min_order ?? null,
+    sale_currency:         data.sale_currency.trim() || 'EUR',
+    internal_code:         data.internal_code?.trim() || null,
+    payment_method:        data.payment_method?.trim() || null,
+    technical_sheet_url:   data.technical_sheet_url?.trim() || null,
+    technical_sheet_notes: data.technical_sheet_notes?.trim() || null,
+    custom_conditions:     sanitizeCustomConditions(data.custom_conditions),
+    notes:                 data.notes?.trim() || null,
+    conditions:            data.conditions?.trim() || null,
+  }
 }
 
 // ── Cliente: crear borrador ───────────────────────────────────────────────────
@@ -94,22 +243,18 @@ export async function createDraftRfq(formData: RfqFormData): Promise<{ id: strin
   if (orgResult.status !== 'ok') throw new Error('No tienes organización activa')
   const orgId = orgResult.org.id
 
-  await resolveActiveProductOrThrow(supabase, formData.product_id)
+  // Solo validamos producto activo cuando la RFQ es de producto
+  if (formData.rfq_kind === 'product') {
+    await resolveActiveProductOrThrow(supabase, formData.product_id!)
+  }
 
   const { data, error } = await supabase
     .from('rfqs')
     .insert({
       organization_id: orgId,
       created_by: user.id,
-      product_id: formData.product_id,
-      quantity: formData.quantity,
-      unit: formData.unit.trim(),
-      deadline: formData.deadline,
-      country: formData.country.trim(),
-      region: formData.region?.trim() || null,
-      notes: formData.notes?.trim() || null,
-      conditions: formData.conditions?.trim() || null,
       status: 'draft',
+      ...buildRfqContent(formData),
     })
     .select('id')
     .single()
@@ -138,22 +283,15 @@ export async function updateDraftRfq(rfqId: string, formData: RfqFormData): Prom
   if (existing.created_by !== user.id) throw new Error('No tienes permiso para editar esta RFQ')
   if (existing.status !== 'draft') throw new Error('Solo se pueden editar RFQs en borrador')
 
-  // Validar producto activo si se cambia
-  await resolveActiveProductOrThrow(supabase, formData.product_id)
+  // Validar producto activo solo si la RFQ es de producto
+  if (formData.rfq_kind === 'product') {
+    await resolveActiveProductOrThrow(supabase, formData.product_id!)
+  }
 
   // Actualizar solo campos de contenido — organization_id y created_by no se tocan
   const { error } = await supabase
     .from('rfqs')
-    .update({
-      product_id: formData.product_id,
-      quantity: formData.quantity,
-      unit: formData.unit.trim(),
-      deadline: formData.deadline,
-      country: formData.country.trim(),
-      region: formData.region?.trim() || null,
-      notes: formData.notes?.trim() || null,
-      conditions: formData.conditions?.trim() || null,
-    })
+    .update(buildRfqContent(formData))
     .eq('id', rfqId)
     .eq('created_by', user.id)
     .eq('status', 'draft')
@@ -253,8 +391,7 @@ export async function listMyRfqs(): Promise<Rfq[]> {
   const { data, error } = await supabase
     .from('rfqs')
     .select(`
-      id, organization_id, created_by, product_id, quantity, unit,
-      deadline, country, region, notes, conditions, status, created_at, updated_at,
+      ${RFQ_COLUMNS},
       product:products(id, name, slug, unit, market:markets(id, name, slug))
     `)
     .eq('organization_id', orgResult.org.id)
@@ -270,8 +407,7 @@ export async function listAllRfqs(statusFilter?: RfqStatus): Promise<Rfq[]> {
   let query = supabase
     .from('rfqs')
     .select(`
-      id, organization_id, created_by, product_id, quantity, unit,
-      deadline, country, region, notes, conditions, status, created_at, updated_at,
+      ${RFQ_COLUMNS},
       product:products(id, name, slug, unit, market:markets(id, name, slug)),
       organization:organizations(id, name)
     `)
@@ -290,8 +426,7 @@ export async function getRfq(rfqId: string): Promise<Rfq | null> {
   const { data, error } = await supabase
     .from('rfqs')
     .select(`
-      id, organization_id, created_by, product_id, quantity, unit,
-      deadline, country, region, notes, conditions, status, created_at, updated_at,
+      ${RFQ_COLUMNS},
       product:products(id, name, slug, unit, market:markets(id, name, slug)),
       organization:organizations(id, name)
     `)

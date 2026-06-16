@@ -26,10 +26,10 @@ export function AdminRfqsTable({ rfqs }: { rfqs: Rfq[] }) {
     <MiraTable
       headers={[
         'Organización',
-        'Producto',
-        { label: 'Cantidad', align: 'right' },
+        'Producto / Servicio',
+        { label: 'Volumen', align: 'right' },
         'País',
-        'Fecha límite',
+        'Límite ofertas',
         'Estado',
         'Creada',
         { label: '', align: 'right' },
@@ -38,12 +38,30 @@ export function AdminRfqsTable({ rfqs }: { rfqs: Rfq[] }) {
       {rfqs.map((rfq) => {
         const org = Array.isArray(rfq.organization) ? rfq.organization[0] : rfq.organization
         const product = Array.isArray(rfq.product) ? rfq.product[0] : rfq.product
+        const isService = rfq.rfq_kind === 'service'
+        const name = isService ? (rfq.service_name ?? '—') : (product?.name ?? '—')
         return (
           <MiraTr key={rfq.id}>
             <MiraTd className="font-bold text-mira-ink">{org?.name ?? '—'}</MiraTd>
-            <MiraTd className="text-slate-700">{product?.name ?? '—'}</MiraTd>
+            <MiraTd className="text-slate-700">
+              <div className="flex items-center gap-2">
+                <span>{name}</span>
+                <span className="rounded bg-mira-canvas px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                  {isService ? 'Servicio' : 'Producto'}
+                </span>
+                {rfq.criticality === 'alto' && (
+                  <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-600">Crítico</span>
+                )}
+              </div>
+            </MiraTd>
             <MiraTd align="right">
-              <span className="tabular-nums text-slate-700">{rfq.quantity.toLocaleString('es-ES')} {rfq.unit}</span>
+              <span className="tabular-nums text-slate-700">
+                {rfq.estimated_volume != null
+                  ? rfq.estimated_volume.toLocaleString('es-ES')
+                  : rfq.quantity != null
+                    ? `${rfq.quantity.toLocaleString('es-ES')}${rfq.unit ? ` ${rfq.unit}` : ''}`
+                    : '—'}
+              </span>
             </MiraTd>
             <MiraTd className="text-slate-600">{rfq.country}</MiraTd>
             <MiraTd className="text-slate-600">{formatDate(rfq.deadline)}</MiraTd>
