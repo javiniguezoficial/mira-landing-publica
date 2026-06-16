@@ -10,15 +10,15 @@ import type { NavItem, MiraUser } from '@/components/mira/MiraSidebar'
 
 const nav: NavItem[] = [
   { href: '/app/dashboard',          label: 'Dashboard',           icon: LayoutDashboard },
-  { href: '/app/market-intelligent', label: 'Market Intelligence', icon: TrendingUp, number: '1' },
+  { href: '/app/market-intelligent', label: 'Market Intelligence', icon: TrendingUp },
   {
-    href: '/app/rfqs', label: 'Cotizaciones', icon: FileText, number: '2',
+    href: '/app/rfqs', label: 'Cotizaciones', icon: FileText,
     children: [
       { href: '/app/rfqs',       label: 'Mis RFQs' },
       { href: '/app/rfqs/nueva', label: 'Nueva RFQ' },
     ],
   },
-  { href: '/app/proveedores',     label: 'Proveedores',     icon: MapPin, number: '3' },
+  { href: '/app/proveedores',     label: 'Proveedores',     icon: MapPin },
   { href: '/app/noticias',        label: 'Noticias',        icon: Newspaper },
   { href: '/app/mi-organizacion', label: 'Mi organización', icon: Users },
   { href: '/app/configuracion',   label: 'Configuración',   icon: Settings },

@@ -38,6 +38,7 @@ export default async function ClientSuppliersPage({
   const sp = await searchParams
   const page = Math.max(1, parseInt(sp.page ?? '1') || 1)
 
+  // filterParams usa 'q' como clave URL (nombre del input del formulario)
   const filterParams = {
     q: sp.q || undefined,
     region: sp.region || undefined,
@@ -52,7 +53,15 @@ export default async function ClientSuppliersPage({
 
   const [{ suppliers, total, hasMore }, markets] = await Promise.all([
     listSuppliersFiltered({
-      ...filterParams,
+      search: filterParams.q,        // SupplierFilters usa 'search', la URL usa 'q'
+      region: filterParams.region,
+      city: filterParams.city,
+      market_id: filterParams.market_id,
+      family: filterParams.family,
+      subfamily: filterParams.subfamily,
+      produccion: filterParams.produccion,
+      medida: filterParams.medida,
+      category: filterParams.category,
       is_active: true,
       limit: PAGE_SIZE,
       offset: (page - 1) * PAGE_SIZE,

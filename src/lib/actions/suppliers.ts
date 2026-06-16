@@ -227,15 +227,16 @@ export async function listSuppliersFiltered(filters: SupplierFilters = {}): Prom
     .order('name')
 
   if (filters.is_active !== undefined) query = query.eq('is_active', filters.is_active)
-  if (filters.search?.trim())          query = query.ilike('name', `%${filters.search.trim()}%`)
   if (filters.market_id)               query = query.eq('market_id', filters.market_id)
-  if (filters.family)                  query = query.eq('family', filters.family)
-  if (filters.subfamily)               query = query.eq('subfamily', filters.subfamily)
-  if (filters.region)                  query = query.eq('region', filters.region)
-  if (filters.city)                    query = query.eq('city', filters.city)
-  if (filters.category)                query = query.eq('category', filters.category)
-  if (filters.medida)                  query = query.eq('medida', filters.medida)
-  if (filters.produccion?.trim())      query = query.ilike('produccion', `%${filters.produccion.trim()}%`)
+  // Todos los filtros de texto usan ilike → case-insensitive + partial match
+  if (filters.search?.trim())     query = query.ilike('name',       `%${filters.search.trim()}%`)
+  if (filters.region?.trim())     query = query.ilike('region',     `%${filters.region.trim()}%`)
+  if (filters.city?.trim())       query = query.ilike('city',       `%${filters.city.trim()}%`)
+  if (filters.family?.trim())     query = query.ilike('family',     `%${filters.family.trim()}%`)
+  if (filters.subfamily?.trim())  query = query.ilike('subfamily',  `%${filters.subfamily.trim()}%`)
+  if (filters.category?.trim())   query = query.ilike('category',   `%${filters.category.trim()}%`)
+  if (filters.medida?.trim())     query = query.ilike('medida',     `%${filters.medida.trim()}%`)
+  if (filters.produccion?.trim()) query = query.ilike('produccion', `%${filters.produccion.trim()}%`)
 
   query = query.range(offset, offset + limit - 1)
 
