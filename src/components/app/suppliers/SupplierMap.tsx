@@ -23,9 +23,16 @@ export interface MapSupplier {
   name: string
   email: string | null
   phone: string | null
+  website: string | null
   city: string | null
+  region: string | null
   country: string
   category: string | null
+  market: { id: string; name: string } | null
+  family: string | null
+  subfamily: string | null
+  produccion: string | null
+  medida: string | null
   latitude: number
   longitude: number
 }
@@ -55,16 +62,64 @@ export function SupplierMap({ suppliers }: Props) {
       {suppliers.map((s) => (
         <Marker key={s.id} position={[s.latitude, s.longitude]} icon={icon}>
           <Popup>
-            <div className="min-w-[160px]">
-              <p className="font-semibold text-slate-800 text-sm">{s.name}</p>
-              {s.category && <p className="text-xs text-slate-500 mt-0.5">{s.category}</p>}
-              {s.city && <p className="text-xs text-slate-600 mt-1">{s.city}, {s.country}</p>}
-              {s.email && (
-                <a href={`mailto:${s.email}`} className="text-xs text-mira-magenta block mt-1 hover:underline">
-                  {s.email}
-                </a>
+            <div className="min-w-[190px] space-y-1.5 py-0.5">
+              {/* Nombre */}
+              <p className="text-sm font-bold text-slate-800 leading-tight">{s.name}</p>
+
+              {/* Mercado / Categoría */}
+              {(s.market?.name || s.category) && (
+                <p className="text-xs text-mira-magenta font-semibold">
+                  {[s.market?.name, s.category].filter(Boolean).join(' · ')}
+                </p>
               )}
-              {s.phone && <p className="text-xs text-slate-500 mt-0.5">{s.phone}</p>}
+
+              {/* Familia / Subfamilia */}
+              {(s.family || s.subfamily) && (
+                <p className="text-xs text-slate-500">
+                  {[s.family, s.subfamily].filter(Boolean).join(' · ')}
+                </p>
+              )}
+
+              {/* Localidad / Provincia */}
+              {(s.city || s.region) && (
+                <p className="text-xs text-slate-600">
+                  {[s.city, s.region].filter(Boolean).join(', ')}
+                </p>
+              )}
+
+              {/* Producción · Medida */}
+              {s.produccion && (
+                <p className="text-xs text-slate-500">
+                  {s.produccion}{s.medida ? ` · ${s.medida}` : ''}
+                </p>
+              )}
+
+              {/* Contacto */}
+              {(s.email || s.phone || s.website) && (
+                <div className="border-t border-slate-100 pt-1.5 space-y-0.5">
+                  {s.email && (
+                    <a
+                      href={`mailto:${s.email}`}
+                      className="block text-xs text-mira-magenta hover:underline truncate"
+                    >
+                      {s.email}
+                    </a>
+                  )}
+                  {s.phone && (
+                    <p className="text-xs text-slate-500">{s.phone}</p>
+                  )}
+                  {s.website && (
+                    <a
+                      href={s.website}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block text-xs text-slate-400 hover:underline truncate"
+                    >
+                      {s.website.replace(/^https?:\/\//, '')}
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
           </Popup>
         </Marker>

@@ -429,3 +429,15 @@ export async function getStrategicMarketDetail(id: string): Promise<StrategicMar
     categories,
   }
 }
+
+// ── Cliente: mercados activos sin requireAdmin (RLS garantiza acceso) ──────────
+
+export async function getMarketsForClient(): Promise<Pick<Market, 'id' | 'name'>[]> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('markets')
+    .select('id, name')
+    .eq('is_active', true)
+    .order('name')
+  return (data ?? []) as Pick<Market, 'id' | 'name'>[]
+}

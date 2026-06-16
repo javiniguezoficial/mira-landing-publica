@@ -188,19 +188,72 @@ export async function toggleSupplierActive(id: string, is_active: boolean): Prom
 
 // ── Queries ───────────────────────────────────────────────────────────────────
 
-export async function listSuppliers(onlyActive?: boolean): Promise<Supplier[]> {
+// Columnas explícitas + join a markets — evita select('*') y trae market.name
+const SUPPLIER_SELECT =
+  'id, name, email, phone, website, tax_id, country, region, city, postal_code, ' +
+  'address, latitude, longitude, category, market_id, family, subfamily, ' +
+  'produccion, medida, notes, is_active, created_at, updated_at, ' +
+  'market:markets(id, name)'
+
+export interface SupplierFilters {
+  search?: string
+  market_id?: string
+  family?: string
+  subfamily?: string
+  region?: string
+  city?: string
+  category?: string
+  produccion?: string
+  medida?: string
+  is_active?: boolean
+  limit?: number
+  offset?: number
+}
+
+export interface SuppliersPage {
+  suppliers: Supplier[]
+  total: number
+  hasMore: boolean
+}
+
+export async function listSuppliersFiltered(filters: SupplierFilters = {}): Promise<SuppliersPage> {
   const supabase = await createClient()
+  const limit = Math.min(filters.limit ?? 200, 1000)
+  const offset = filters.offset ?? 0
 
   let query = supabase
     .from('suppliers')
-    .select('*')
+    .select(SUPPLIER_SELECT, { count: 'exact' })
     .order('name')
 
-  if (onlyActive) query = query.eq('is_active', true)
+  if (filters.is_active !== undefined) query = query.eq('is_active', filters.is_active)
+  if (filters.search?.trim())          query = query.ilike('name', `%${filters.search.trim()}%`)
+  if (filters.market_id)               query = query.eq('market_id', filters.market_id)
+  if (filters.family)                  query = query.eq('family', filters.family)
+  if (filters.subfamily)               query = query.eq('subfamily', filters.subfamily)
+  if (filters.region)                  query = query.eq('region', filters.region)
+  if (filters.city)                    query = query.eq('city', filters.city)
+  if (filters.category)                query = query.eq('category', filters.category)
+  if (filters.medida)                  query = query.eq('medida', filters.medida)
+  if (filters.produccion?.trim())      query = query.ilike('produccion', `%${filters.produccion.trim()}%`)
 
-  const { data, error } = await query
-  if (error) return []
-  return (data ?? []) as Supplier[]
+  query = query.range(offset, offset + limit - 1)
+
+  const { data, error, count } = await query
+  if (error) return { suppliers: [], total: 0, hasMore: false }
+  return {
+    suppliers: (data ?? []) as unknown as Supplier[],
+    total: count ?? 0,
+    hasMore: (count ?? 0) > offset + limit,
+  }
+}
+
+export async function listSuppliers(onlyActive?: boolean): Promise<Supplier[]> {
+  const { suppliers } = await listSuppliersFiltered({
+    is_active: onlyActive ? true : undefined,
+    limit: 1000,
+  })
+  return suppliers
 }
 
 export async function getSupplier(id: string): Promise<Supplier | null> {
@@ -208,7 +261,7 @@ export async function getSupplier(id: string): Promise<Supplier | null> {
 
   const { data, error } = await supabase
     .from('suppliers')
-    .select('*, market:markets(id, name)')
+    .select(SUPPLIER_SELECT)
     .eq('id', id)
     .single()
 
