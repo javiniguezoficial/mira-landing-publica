@@ -216,37 +216,64 @@ export interface SuppliersPage {
   hasMore: boolean
 }
 
+// Búsqueda server-side vía la función RPC `search_suppliers` (migración 012).
+// La RPC normaliza con unaccent(lower(...)) en columna e input → filtros
+// case-insensitive Y sin acentos. Es SECURITY INVOKER, así que respeta la RLS
+// existente de `suppliers`. Devuelve `total_count` (count(*) OVER()) para la
+// paginación, manteniendo limit/offset.
 export async function listSuppliersFiltered(filters: SupplierFilters = {}): Promise<SuppliersPage> {
   const supabase = await createClient()
   const limit = Math.min(filters.limit ?? 200, 1000)
   const offset = filters.offset ?? 0
 
-  let query = supabase
-    .from('suppliers')
-    .select(SUPPLIER_SELECT, { count: 'exact' })
-    .order('name')
+  const { data, error } = await supabase.rpc('search_suppliers', {
+    p_search:     filters.search?.trim() || null,
+    p_market_id:  filters.market_id || null,
+    p_region:     filters.region?.trim() || null,
+    p_city:       filters.city?.trim() || null,
+    p_family:     filters.family?.trim() || null,
+    p_subfamily:  filters.subfamily?.trim() || null,
+    p_category:   filters.category?.trim() || null,
+    p_produccion: filters.produccion?.trim() || null,
+    p_medida:     filters.medida?.trim() || null,
+    p_is_active:  filters.is_active ?? null,
+    p_limit:      limit,
+    p_offset:     offset,
+  })
 
-  if (filters.is_active !== undefined) query = query.eq('is_active', filters.is_active)
-  if (filters.market_id)               query = query.eq('market_id', filters.market_id)
-  // Todos los filtros de texto usan ilike → case-insensitive + partial match
-  if (filters.search?.trim())     query = query.ilike('name',       `%${filters.search.trim()}%`)
-  if (filters.region?.trim())     query = query.ilike('region',     `%${filters.region.trim()}%`)
-  if (filters.city?.trim())       query = query.ilike('city',       `%${filters.city.trim()}%`)
-  if (filters.family?.trim())     query = query.ilike('family',     `%${filters.family.trim()}%`)
-  if (filters.subfamily?.trim())  query = query.ilike('subfamily',  `%${filters.subfamily.trim()}%`)
-  if (filters.category?.trim())   query = query.ilike('category',   `%${filters.category.trim()}%`)
-  if (filters.medida?.trim())     query = query.ilike('medida',     `%${filters.medida.trim()}%`)
-  if (filters.produccion?.trim()) query = query.ilike('produccion', `%${filters.produccion.trim()}%`)
+  if (error || !data) return { suppliers: [], total: 0, hasMore: false }
 
-  query = query.range(offset, offset + limit - 1)
+  const rows = data as Array<Record<string, unknown>>
+  const total = rows.length > 0 ? Number(rows[0].total_count) : 0
 
-  const { data, error, count } = await query
-  if (error) return { suppliers: [], total: 0, hasMore: false }
-  return {
-    suppliers: (data ?? []) as unknown as Supplier[],
-    total: count ?? 0,
-    hasMore: (count ?? 0) > offset + limit,
-  }
+  const suppliers: Supplier[] = rows.map((r) => ({
+    id:          r.id as string,
+    name:        r.name as string,
+    email:       (r.email as string | null) ?? null,
+    phone:       (r.phone as string | null) ?? null,
+    website:     (r.website as string | null) ?? null,
+    tax_id:      (r.tax_id as string | null) ?? null,
+    country:     r.country as string,
+    region:      (r.region as string | null) ?? null,
+    city:        (r.city as string | null) ?? null,
+    postal_code: (r.postal_code as string | null) ?? null,
+    address:     (r.address as string | null) ?? null,
+    latitude:    (r.latitude as number | null) ?? null,
+    longitude:   (r.longitude as number | null) ?? null,
+    category:    (r.category as string | null) ?? null,
+    market_id:   (r.market_id as string | null) ?? null,
+    family:      (r.family as string | null) ?? null,
+    subfamily:   (r.subfamily as string | null) ?? null,
+    produccion:  (r.produccion as string | null) ?? null,
+    medida:      (r.medida as string | null) ?? null,
+    notes:       (r.notes as string | null) ?? null,
+    is_active:   r.is_active as boolean,
+    created_at:  r.created_at as string,
+    updated_at:  r.updated_at as string,
+    market:      r.market_id ? { id: r.market_id as string, name: r.market_name as string } : null,
+  }))
+
+  return { suppliers, total, hasMore: total > offset + limit }
 }
 
 export async function listSuppliers(onlyActive?: boolean): Promise<Supplier[]> {
