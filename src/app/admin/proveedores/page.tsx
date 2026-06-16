@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Plus, Truck, Search, X } from 'lucide-react'
+import { Plus, Truck, Search, X, Upload } from 'lucide-react'
 import { listSuppliersFiltered, type SupplierFilters } from '@/lib/actions/suppliers'
 import { getMarkets } from '@/lib/actions/markets'
 import { ToggleActiveSupplier } from './ToggleActiveSupplier'
@@ -45,9 +45,14 @@ export default async function AdminSuppliersPage({
             : `${total} proveedor${total !== 1 ? 'es' : ''} en total`
         }
         actions={
-          <Link href="/admin/proveedores/nuevo" className={miraBtn.primary}>
-            <Plus size={14} /> Nuevo proveedor
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link href="/admin/proveedores/importar" className={miraBtn.ghost}>
+              <Upload size={14} /> Importar proveedores
+            </Link>
+            <Link href="/admin/proveedores/nuevo" className={miraBtn.primary}>
+              <Plus size={14} /> Nuevo proveedor
+            </Link>
+          </div>
         }
       />
 
