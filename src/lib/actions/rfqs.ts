@@ -223,16 +223,26 @@ function buildRfqContent(data: RfqFormData) {
 
 // ── Cliente: crear borrador ───────────────────────────────────────────────────
 
-export async function createDraftRfq(formData: RfqFormData): Promise<{ id: string }> {
-  validateFormData(formData)
+// Los actions de RFQ devuelven los errores como VALOR (no con throw). En
+// producción Next.js redacta el mensaje de cualquier Error lanzado desde un
+// Server Action (lo sustituye por uno genérico), así que devolverlo como dato
+// es la única forma de que el mensaje real de validación llegue al formulario.
+export type RfqActionResult = { id: string } | { error: string }
 
+export async function createDraftRfq(formData: RfqFormData): Promise<RfqActionResult> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+  if (!user) redirect('/login')   // fuera del try: el redirect debe propagarse
 
   const orgResult = await getActiveOrg()
-  if (orgResult.status !== 'ok') throw new Error('No tienes organización activa')
+  if (orgResult.status !== 'ok') return { error: 'No tienes una organización activa.' }
   const orgId = orgResult.org.id
+
+  try {
+    validateFormData(formData)
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Datos de la RFQ no válidos.' }
+  }
 
   const { data, error } = await supabase
     .from('rfqs')
@@ -245,18 +255,22 @@ export async function createDraftRfq(formData: RfqFormData): Promise<{ id: strin
     .select('id')
     .single()
 
-  if (error) throw new Error(error.message)
+  if (error) return { error: error.message }
   return { id: data.id }
 }
 
 // ── Cliente: actualizar borrador (solo campos de contenido) ──────────────────
 
-export async function updateDraftRfq(rfqId: string, formData: RfqFormData): Promise<void> {
-  validateFormData(formData)
-
+export async function updateDraftRfq(rfqId: string, formData: RfqFormData): Promise<{ error: string } | void> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+  if (!user) redirect('/login')   // fuera del try: el redirect debe propagarse
+
+  try {
+    validateFormData(formData)
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Datos de la RFQ no válidos.' }
+  }
 
   // Verificar que la RFQ pertenece al usuario y está en draft
   const { data: existing, error: fetchErr } = await supabase
@@ -265,9 +279,9 @@ export async function updateDraftRfq(rfqId: string, formData: RfqFormData): Prom
     .eq('id', rfqId)
     .single()
 
-  if (fetchErr || !existing) throw new Error('RFQ no encontrada')
-  if (existing.created_by !== user.id) throw new Error('No tienes permiso para editar esta RFQ')
-  if (existing.status !== 'draft') throw new Error('Solo se pueden editar RFQs en borrador')
+  if (fetchErr || !existing) return { error: 'RFQ no encontrada.' }
+  if (existing.created_by !== user.id) return { error: 'No tienes permiso para editar esta RFQ.' }
+  if (existing.status !== 'draft') return { error: 'Solo se pueden editar RFQs en borrador.' }
 
   // Actualizar solo campos de contenido — organization_id y created_by no se tocan
   const { error } = await supabase
@@ -277,7 +291,7 @@ export async function updateDraftRfq(rfqId: string, formData: RfqFormData): Prom
     .eq('created_by', user.id)
     .eq('status', 'draft')
 
-  if (error) throw new Error(error.message)
+  if (error) return { error: error.message }
 }
 
 // ── Cliente: publicar (draft → open) ─────────────────────────────────────────

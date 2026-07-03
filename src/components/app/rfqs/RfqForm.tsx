@@ -42,7 +42,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 interface Props {
   defaultValues?: Partial<RfqFormData>
-  onSubmit: (data: RfqFormData) => Promise<{ id: string } | void>
+  onSubmit: (data: RfqFormData) => Promise<{ id: string } | { error: string } | void>
   submitLabel: string
   cancelHref: string
 }
@@ -155,6 +155,11 @@ export function RfqForm({ defaultValues, onSubmit, submitLabel, cancelHref }: Pr
     startTransition(async () => {
       try {
         const result = await onSubmit(data)
+        // Los actions devuelven { error } como valor (Next redacta los throw en prod)
+        if (result && 'error' in result) {
+          setError(result.error)
+          return
+        }
         if (result && 'id' in result) router.push(`/app/rfqs/${result.id}`)
         else router.push('/app/rfqs')
         router.refresh()
@@ -199,6 +204,7 @@ export function RfqForm({ defaultValues, onSubmit, submitLabel, cancelHref }: Pr
           <input
             value={requestName}
             onChange={(e) => setRequestName(e.target.value)}
+            required
             placeholder={kind === 'product' ? 'Ej. Aceite de oliva virgen extra' : 'Ej. Transporte refrigerado'}
             className={miraField}
           />
@@ -223,7 +229,7 @@ export function RfqForm({ defaultValues, onSubmit, submitLabel, cancelHref }: Pr
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           <div>
             <label className={labelCls}>Formato unitario {reqMark}</label>
-            <input value={unitFormat} onChange={(e) => setUnitFormat(e.target.value)} placeholder="Caja 10 kg, palet, kg…" className={miraField} />
+            <input value={unitFormat} onChange={(e) => setUnitFormat(e.target.value)} required placeholder="Caja 10 kg, palet, kg…" className={miraField} />
           </div>
           <div>
             <label className={labelCls}>Volumen estimado {optMark}</label>
@@ -248,19 +254,19 @@ export function RfqForm({ defaultValues, onSubmit, submitLabel, cancelHref }: Pr
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className={labelCls}>Fecha de apertura RFQ {reqMark}</label>
-            <input type="date" value={openingDate} onChange={(e) => setOpeningDate(e.target.value)} className={miraField} />
+            <input type="date" value={openingDate} onChange={(e) => setOpeningDate(e.target.value)} required className={miraField} />
           </div>
           <div>
             <label className={labelCls}>Fecha límite de recepción de ofertas {reqMark}</label>
-            <input type="date" value={deadline} min={todayString()} onChange={(e) => setDeadline(e.target.value)} className={miraField} />
+            <input type="date" value={deadline} min={todayString()} onChange={(e) => setDeadline(e.target.value)} required className={miraField} />
           </div>
           <div>
             <label className={labelCls}>Fecha de adjudicación {reqMark}</label>
-            <input type="date" value={awardDate} onChange={(e) => setAwardDate(e.target.value)} className={miraField} />
+            <input type="date" value={awardDate} onChange={(e) => setAwardDate(e.target.value)} required className={miraField} />
           </div>
           <div>
             <label className={labelCls}>Fecha de inicio de suministro {reqMark}</label>
-            <input type="date" value={supplyStartDate} onChange={(e) => setSupplyStartDate(e.target.value)} className={miraField} />
+            <input type="date" value={supplyStartDate} onChange={(e) => setSupplyStartDate(e.target.value)} required className={miraField} />
           </div>
         </div>
       </Section>
@@ -314,7 +320,7 @@ export function RfqForm({ defaultValues, onSubmit, submitLabel, cancelHref }: Pr
           </div>
           <div>
             <label className={labelCls}>Lead time {reqMark}</label>
-            <input value={leadTime} onChange={(e) => setLeadTime(e.target.value)} placeholder="15 días, 4 semanas…" className={miraField} />
+            <input value={leadTime} onChange={(e) => setLeadTime(e.target.value)} required placeholder="15 días, 4 semanas…" className={miraField} />
           </div>
           <div>
             <label className={labelCls}>Nivel de criticidad {optMark}</label>

@@ -225,7 +225,7 @@ function RfqFormWrapper({ rfqId, rfq }: { rfqId: string; rfq: Rfq }) {
       }}
       onSubmit={async (data) => {
         'use server'
-        await updateDraftRfq(rfqId, data)
+        return await updateDraftRfq(rfqId, data)
       }}
       submitLabel="Guardar cambios"
       cancelHref="/app/rfqs"
