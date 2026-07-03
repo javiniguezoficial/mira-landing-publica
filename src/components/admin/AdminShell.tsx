@@ -15,7 +15,13 @@ const nav: NavItem[] = [
   { href: '/admin/mercados-estrategicos', label: 'M. estratégicos', icon: Globe2 },
   { href: '/admin/mercados',         label: 'Mercados',         icon: TrendingUp },
   { href: '/admin/precios/importar', label: 'Importar precios', icon: DollarSign },
-  { href: '/admin/proveedores',      label: 'Proveedores',      icon: Truck },
+  {
+    href: '/admin/proveedores', label: 'Proveedores', icon: Truck,
+    children: [
+      { href: '/admin/proveedores',            label: 'Listado' },
+      { href: '/admin/proveedores/taxonomia',  label: 'Taxonomía' },
+    ],
+  },
   { href: '/admin/rfqs',             label: 'RFQs',             icon: FileText },
   { href: '/admin/noticias',         label: 'Noticias',         icon: Newspaper },
   { href: '/admin/soporte',          label: 'Soporte',          icon: LifeBuoy },
