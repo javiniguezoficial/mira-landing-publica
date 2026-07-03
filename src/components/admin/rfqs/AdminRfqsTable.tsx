@@ -39,7 +39,7 @@ export function AdminRfqsTable({ rfqs }: { rfqs: Rfq[] }) {
         const org = Array.isArray(rfq.organization) ? rfq.organization[0] : rfq.organization
         const product = Array.isArray(rfq.product) ? rfq.product[0] : rfq.product
         const isService = rfq.rfq_kind === 'service'
-        const name = isService ? (rfq.service_name ?? '—') : (product?.name ?? '—')
+        const name = rfq.request_name || rfq.service_name || product?.name || '—'
         return (
           <MiraTr key={rfq.id}>
             <MiraTd className="font-bold text-mira-ink">{org?.name ?? '—'}</MiraTd>

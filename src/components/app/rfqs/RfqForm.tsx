@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Trash2 } from 'lucide-react'
-import type { ProductOption, RfqFormData, RfqKind, RfqCustomCondition } from '@/lib/actions/rfqs'
+import type { RfqFormData, RfqKind, RfqCustomCondition } from '@/lib/actions/rfqs'
 import { miraBtn, miraField } from '@/lib/miraButtons'
 import {
   INCOTERMS,
@@ -41,23 +41,21 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 interface Props {
-  products: ProductOption[]
   defaultValues?: Partial<RfqFormData>
   onSubmit: (data: RfqFormData) => Promise<{ id: string } | void>
   submitLabel: string
   cancelHref: string
 }
 
-export function RfqForm({ products, defaultValues, onSubmit, submitLabel, cancelHref }: Props) {
+export function RfqForm({ defaultValues, onSubmit, submitLabel, cancelHref }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
 
-  // Tipo
+  // Tipo — producto/servicio son ahora texto libre, no ligado al catálogo de Pricing
   const [kind, setKind] = useState<RfqKind>(defaultValues?.rfq_kind ?? 'product')
-  const [productId, setProductId] = useState(defaultValues?.product_id ?? '')
-  const [serviceName, setServiceName] = useState(defaultValues?.service_name ?? '')
-  const [serviceDescription, setServiceDescription] = useState(defaultValues?.service_description ?? '')
+  const [requestName, setRequestName] = useState(defaultValues?.request_name ?? '')
+  const [requestDescription, setRequestDescription] = useState(defaultValues?.request_description ?? '')
 
   // Volumen / formato (quantity/unit legacy ya no se editan aquí)
   const [unitFormat, setUnitFormat] = useState(defaultValues?.unit_format ?? '')
@@ -102,10 +100,6 @@ export function RfqForm({ products, defaultValues, onSubmit, submitLabel, cancel
   const [notes, setNotes] = useState(defaultValues?.notes ?? '')
   const [conditions, setConditions] = useState(defaultValues?.conditions ?? '')
 
-  function handleProductChange(id: string) {
-    setProductId(id)
-  }
-
   function addCondition() {
     setConditionsList((prev) => [...prev, { label: '', value: '', type: 'text' }])
   }
@@ -129,9 +123,8 @@ export function RfqForm({ products, defaultValues, onSubmit, submitLabel, cancel
 
     const data: RfqFormData = {
       rfq_kind: kind,
-      product_id: kind === 'product' ? productId : null,
-      service_name: kind === 'service' ? serviceName.trim() : undefined,
-      service_description: serviceDescription.trim() || undefined,
+      request_name: requestName.trim(),
+      request_description: requestDescription.trim() || undefined,
       unit_format: unitFormat.trim(),
       opening_date: openingDate,
       deadline,
@@ -171,12 +164,6 @@ export function RfqForm({ products, defaultValues, onSubmit, submitLabel, cancel
     })
   }
 
-  const grouped = products.reduce<Record<string, ProductOption[]>>((acc, p) => {
-    if (!acc[p.market_name]) acc[p.market_name] = []
-    acc[p.market_name].push(p)
-    return acc
-  }, {})
-
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {error && (
@@ -205,32 +192,30 @@ export function RfqForm({ products, defaultValues, onSubmit, submitLabel, cancel
           </div>
         </div>
 
-        {kind === 'product' ? (
-          <div>
-            <label className={labelCls}>Producto {reqMark}</label>
-            <select value={productId ?? ''} onChange={(e) => handleProductChange(e.target.value)} className={miraField}>
-              <option value="">Selecciona un producto…</option>
-              {Object.entries(grouped).map(([market, prods]) => (
-                <optgroup key={market} label={market}>
-                  {prods.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name} ({p.unit})</option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-          </div>
-        ) : (
-          <>
-            <div>
-              <label className={labelCls}>Nombre del servicio {reqMark}</label>
-              <input value={serviceName} onChange={(e) => setServiceName(e.target.value)} placeholder="Ej. Transporte refrigerado" className={miraField} />
-            </div>
-            <div>
-              <label className={labelCls}>Descripción del servicio {optMark}</label>
-              <textarea value={serviceDescription} onChange={(e) => setServiceDescription(e.target.value)} rows={2} className={`${miraField} resize-none`} />
-            </div>
-          </>
-        )}
+        <div>
+          <label className={labelCls}>
+            {kind === 'product' ? 'Producto solicitado' : 'Servicio solicitado'} {reqMark}
+          </label>
+          <input
+            value={requestName}
+            onChange={(e) => setRequestName(e.target.value)}
+            placeholder={kind === 'product' ? 'Ej. Aceite de oliva virgen extra' : 'Ej. Transporte refrigerado'}
+            className={miraField}
+          />
+          <p className="mt-1 text-xs text-slate-400">
+            Escribe libremente qué {kind === 'product' ? 'producto' : 'servicio'} necesitas. No depende del catálogo de Pricing.
+          </p>
+        </div>
+        <div>
+          <label className={labelCls}>Descripción {optMark}</label>
+          <textarea
+            value={requestDescription}
+            onChange={(e) => setRequestDescription(e.target.value)}
+            rows={2}
+            placeholder="Especificaciones, calidad, variedad, alcance del servicio…"
+            className={`${miraField} resize-none`}
+          />
+        </div>
       </Section>
 
       {/* ── Volumen y formato ──────────────────────────────────────────────── */}

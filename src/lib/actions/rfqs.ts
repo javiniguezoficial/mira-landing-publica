@@ -23,9 +23,11 @@ export interface Rfq {
   organization_id: string
   created_by: string
   rfq_kind: RfqKind
-  product_id: string | null
-  service_name: string | null
-  service_description: string | null
+  request_name: string
+  request_description: string | null
+  product_id: string | null       // legacy/compatibilidad
+  service_name: string | null     // legacy/compatibilidad
+  service_description: string | null  // legacy/compatibilidad
   quantity: number | null   // legacy/compatibilidad
   unit: string | null       // legacy/compatibilidad
   opening_date: string | null
@@ -68,9 +70,11 @@ export interface Rfq {
 
 export interface RfqFormData {
   rfq_kind: RfqKind
-  product_id?: string | null
-  service_name?: string
-  service_description?: string
+  request_name: string
+  request_description?: string
+  product_id?: string | null      // legacy/compatibilidad — no obligatorio
+  service_name?: string           // legacy/compatibilidad — no obligatorio
+  service_description?: string    // legacy/compatibilidad
   opening_date: string
   deadline: string
   award_date: string
@@ -100,7 +104,8 @@ export interface RfqFormData {
 
 // Lista de columnas reutilizable para los SELECT (evita repetición).
 const RFQ_COLUMNS = `
-  id, organization_id, created_by, rfq_kind, product_id, service_name, service_description,
+  id, organization_id, created_by, rfq_kind, request_name, request_description,
+  product_id, service_name, service_description,
   quantity, unit, opening_date, deadline, award_date, supply_start_date,
   country, region, estimated_volume, purchase_frequency, delivery_location, incoterm,
   target_price, certifications, sustainability_policy, unit_format, criticality, lead_time,
@@ -110,37 +115,20 @@ const RFQ_COLUMNS = `
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-async function resolveActiveProductOrThrow(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  product_id: string
-) {
-  const { data, error } = await supabase
-    .from('products')
-    .select('id, name, unit, is_active, market:markets(id, is_active, category:market_categories(id, is_active))')
-    .eq('id', product_id)
-    .single()
-
-  if (error || !data) throw new Error('Producto no encontrado')
-
-  const market = Array.isArray(data.market) ? data.market[0] : data.market
-  const category = market && (Array.isArray((market as any).category) ? (market as any).category[0] : (market as any).category)
-
-  if (!data.is_active) throw new Error('El producto no está activo')
-  if (!market?.is_active) throw new Error('El mercado del producto no está activo')
-  if (!category?.is_active) throw new Error('La categoría del mercado no está activa')
-
-  return data
-}
-
 function validateFormData(data: RfqFormData) {
   // Tipo de RFQ
   if (data.rfq_kind !== 'product' && data.rfq_kind !== 'service') {
     throw new Error('Debes indicar si la RFQ es de producto o de servicio')
   }
-  if (data.rfq_kind === 'product') {
-    if (!data.product_id) throw new Error('Debes seleccionar un producto')
-  } else {
-    if (!data.service_name?.trim()) throw new Error('El nombre del servicio es obligatorio')
+
+  // request_name es el único requisito real de "qué se pide" — texto libre,
+  // no ligado al catálogo de Pricing. product_id/service_name son legacy.
+  if (!data.request_name?.trim()) {
+    throw new Error(
+      data.rfq_kind === 'product'
+        ? 'El nombre del producto solicitado es obligatorio'
+        : 'El nombre del servicio solicitado es obligatorio'
+    )
   }
 
   // quantity/unit son legacy y NO se exigen. Volumen estimado es opcional.
@@ -194,11 +182,14 @@ function sanitizeCustomConditions(conds?: RfqCustomCondition[]): RfqCustomCondit
 
 // Construye el payload de columnas de contenido común a insert y update.
 function buildRfqContent(data: RfqFormData) {
-  const isProduct = data.rfq_kind === 'product'
   return {
     rfq_kind:              data.rfq_kind,
-    product_id:            isProduct ? (data.product_id || null) : null,
-    service_name:          isProduct ? null : (data.service_name?.trim() || null),
+    request_name:          data.request_name.trim(),
+    request_description:   data.request_description?.trim() || null,
+    // Legacy/compatibilidad: no se piden en el formulario nuevo, pero si
+    // vienen informados (p. ej. datos antiguos) se conservan sin validar.
+    product_id:            data.product_id || null,
+    service_name:          data.service_name?.trim() || null,
     service_description:   data.service_description?.trim() || null,
     // quantity/unit son legacy: no se escriben desde el formulario ampliado.
     // En INSERT quedan NULL; en UPDATE se preservan los valores existentes.
@@ -243,11 +234,6 @@ export async function createDraftRfq(formData: RfqFormData): Promise<{ id: strin
   if (orgResult.status !== 'ok') throw new Error('No tienes organización activa')
   const orgId = orgResult.org.id
 
-  // Solo validamos producto activo cuando la RFQ es de producto
-  if (formData.rfq_kind === 'product') {
-    await resolveActiveProductOrThrow(supabase, formData.product_id!)
-  }
-
   const { data, error } = await supabase
     .from('rfqs')
     .insert({
@@ -282,11 +268,6 @@ export async function updateDraftRfq(rfqId: string, formData: RfqFormData): Prom
   if (fetchErr || !existing) throw new Error('RFQ no encontrada')
   if (existing.created_by !== user.id) throw new Error('No tienes permiso para editar esta RFQ')
   if (existing.status !== 'draft') throw new Error('Solo se pueden editar RFQs en borrador')
-
-  // Validar producto activo solo si la RFQ es de producto
-  if (formData.rfq_kind === 'product') {
-    await resolveActiveProductOrThrow(supabase, formData.product_id!)
-  }
 
   // Actualizar solo campos de contenido — organization_id y created_by no se tocan
   const { error } = await supabase
@@ -435,44 +416,4 @@ export async function getRfq(rfqId: string): Promise<Rfq | null> {
 
   if (error || !data) return null
   return data as unknown as Rfq
-}
-
-// ── Productos activos para el selector ───────────────────────────────────────
-
-export interface ProductOption {
-  id: string
-  name: string
-  slug: string
-  unit: string
-  market_name: string
-}
-
-export async function listActiveProducts(): Promise<ProductOption[]> {
-  const supabase = await createClient()
-
-  const { data, error } = await supabase
-    .from('products')
-    .select(`
-      id, name, slug, unit,
-      market:markets!inner(id, name, is_active,
-        category:market_categories!inner(id, is_active)
-      )
-    `)
-    .eq('is_active', true)
-    .eq('markets.is_active', true)
-    .eq('markets.market_categories.is_active', true)
-    .order('name')
-
-  if (error || !data) return []
-
-  return data.map((p: any) => {
-    const market = Array.isArray(p.market) ? p.market[0] : p.market
-    return {
-      id: p.id,
-      name: p.name,
-      slug: p.slug,
-      unit: p.unit,
-      market_name: market?.name ?? '',
-    }
-  })
 }

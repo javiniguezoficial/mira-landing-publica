@@ -84,7 +84,7 @@ export function AdminRfqDetail({ id }: { id: string }) {
   const market = product && (Array.isArray((product as any).market) ? (product as any).market[0] : (product as any).market)
   const org = Array.isArray(rfq.organization) ? rfq.organization[0] : rfq.organization
   const isService = rfq.rfq_kind === 'service'
-  const title = isService ? (rfq.service_name ?? 'Servicio') : (product?.name ?? 'Cotización')
+  const title = rfq.request_name || rfq.service_name || product?.name || 'Cotización'
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6 p-4 md:p-6 xl:p-8">
@@ -109,10 +109,11 @@ export function AdminRfqDetail({ id }: { id: string }) {
         <dl className="grid grid-cols-2 gap-5">
           <Field label="Organización" value={org?.name} />
           <Field label="Tipo" value={isService ? 'Servicio' : 'Producto'} />
-          {isService
-            ? <Field label="Servicio" value={rfq.service_name} />
-            : <Field label="Producto" value={product?.name} />}
-          {isService && <Field label="Descripción" value={rfq.service_description} />}
+          <Field
+            label={isService ? 'Servicio solicitado' : 'Producto solicitado'}
+            value={rfq.request_name || rfq.service_name || product?.name}
+          />
+          <Field label="Descripción" value={rfq.request_description || rfq.service_description} />
           <Field label="Formato unitario" value={rfq.unit_format} />
           <Field label="Volumen estimado" value={rfq.estimated_volume?.toLocaleString('es-ES')} />
           {rfq.estimated_volume == null && rfq.quantity != null && (

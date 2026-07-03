@@ -1,12 +1,10 @@
-import { listActiveProducts, createDraftRfq } from '@/lib/actions/rfqs'
+import { createDraftRfq } from '@/lib/actions/rfqs'
 import { RfqForm } from '@/components/app/rfqs/RfqForm'
 import { MiraFormCard } from '@/components/mira/MiraFormCard'
 import { ArrowLeft, FileText } from 'lucide-react'
 import Link from 'next/link'
 
-export default async function NewRfqPage() {
-  const products = await listActiveProducts()
-
+export default function NewRfqPage() {
   return (
     <div className="w-full max-w-2xl space-y-6 p-4 md:p-6 xl:p-8">
       <div>
@@ -25,7 +23,7 @@ export default async function NewRfqPage() {
       </div>
 
       <MiraFormCard>
-        <RfqForm products={products} onSubmit={createDraftRfq} submitLabel="Guardar borrador" cancelHref="/app/rfqs" />
+        <RfqForm onSubmit={createDraftRfq} submitLabel="Guardar borrador" cancelHref="/app/rfqs" />
       </MiraFormCard>
     </div>
   )

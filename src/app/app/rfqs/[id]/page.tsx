@@ -2,7 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
 import { ArrowLeft, ExternalLink } from 'lucide-react'
-import { getRfq, publishRfq, cancelRfq, listActiveProducts, updateDraftRfq, type Rfq } from '@/lib/actions/rfqs'
+import { getRfq, publishRfq, cancelRfq, updateDraftRfq, type Rfq } from '@/lib/actions/rfqs'
 import { MiraStatusBadge } from '@/components/mira/MiraStatusBadge'
 import { MiraFormCard } from '@/components/mira/MiraFormCard'
 import { RfqForm } from '@/components/app/rfqs/RfqForm'
@@ -35,7 +35,8 @@ export default async function ClientRfqDetailPage({ params }: { params: Promise<
   const market = product && (Array.isArray((product as any).market) ? (product as any).market[0] : (product as any).market)
   const isDraft = rfq.status === 'draft'
   const isService = rfq.rfq_kind === 'service'
-  const title = isService ? (rfq.service_name ?? 'Servicio') : (product?.name ?? 'Cotización')
+  // request_name es el nombre real desde B1.1. Fallback a legacy para RFQs muy antiguas.
+  const title = rfq.request_name || rfq.service_name || product?.name || 'Cotización'
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6 p-4 md:p-6 xl:p-8">
@@ -67,10 +68,11 @@ export default async function ClientRfqDetailPage({ params }: { params: Promise<
       {/* Detalle */}
       <div className="mira-card rounded-2xl p-6">
         <dl className="grid grid-cols-2 gap-5">
-          {isService
-            ? <Field label="Servicio" value={rfq.service_name} />
-            : <Field label="Producto" value={product?.name} />}
-          {isService && <Field label="Descripción" value={rfq.service_description} />}
+          <Field
+            label={isService ? 'Servicio solicitado' : 'Producto solicitado'}
+            value={rfq.request_name || rfq.service_name || product?.name}
+          />
+          <Field label="Descripción" value={rfq.request_description || rfq.service_description} />
           <Field label="Formato unitario" value={rfq.unit_format} />
           <Field label="Volumen estimado" value={rfq.estimated_volume?.toLocaleString('es-ES')} />
           {rfq.estimated_volume == null && rfq.quantity != null && (
@@ -186,18 +188,15 @@ export default async function ClientRfqDetailPage({ params }: { params: Promise<
   )
 }
 
-// Wrapper server component para pasar productos al formulario de edición
-async function RfqFormWrapper({ rfqId, rfq }: { rfqId: string; rfq: Rfq }) {
-  const products = await listActiveProducts()
-
+// Wrapper que precarga los valores por defecto del formulario de edición
+function RfqFormWrapper({ rfqId, rfq }: { rfqId: string; rfq: Rfq }) {
   return (
     <RfqForm
-      products={products}
       defaultValues={{
         rfq_kind: rfq.rfq_kind,
-        product_id: rfq.product_id ?? '',
-        service_name: rfq.service_name ?? '',
-        service_description: rfq.service_description ?? '',
+        // Fallback a legacy para RFQs creadas antes de B1.1
+        request_name: rfq.request_name || rfq.service_name || '',
+        request_description: rfq.request_description || rfq.service_description || '',
         unit_format: rfq.unit_format ?? '',
         opening_date: rfq.opening_date ?? '',
         deadline: rfq.deadline,
