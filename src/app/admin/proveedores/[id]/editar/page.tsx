@@ -3,12 +3,15 @@ import Link from 'next/link'
 import { ArrowLeft, Truck } from 'lucide-react'
 import { getSupplier, updateSupplier } from '@/lib/actions/suppliers'
 import { getMarkets } from '@/lib/actions/markets'
+import { getActiveSupplierTaxonomyTree } from '@/lib/actions/supplier-taxonomy'
 import { SupplierForm } from '@/components/admin/suppliers/SupplierForm'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 
 export default async function EditSupplierPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const [supplier, markets] = await Promise.all([getSupplier(id), getMarkets()])
+  const [supplier, markets, taxonomyTree] = await Promise.all([
+    getSupplier(id), getMarkets(), getActiveSupplierTaxonomyTree(),
+  ])
   if (!supplier) notFound()
 
   return (
@@ -23,6 +26,7 @@ export default async function EditSupplierPage({ params }: { params: Promise<{ i
 
       <SupplierForm
           markets={markets.map((m) => ({ id: m.id, name: m.name }))}
+          taxonomyTree={taxonomyTree}
           defaultValues={{
             name:        supplier.name,
             email:       supplier.email ?? '',
@@ -44,12 +48,17 @@ export default async function EditSupplierPage({ params }: { params: Promise<{ i
             medida:      supplier.medida ?? '',
             notes:       supplier.notes ?? '',
             is_active:   supplier.is_active,
+            supplier_market_id:    supplier.supplier_market_id ?? '',
+            supplier_category_id:  supplier.supplier_category_id ?? '',
+            supplier_family_id:    supplier.supplier_family_id ?? '',
+            supplier_subfamily_id: supplier.supplier_subfamily_id ?? '',
           }}
           submitLabel="Guardar cambios"
           cancelHref={`/admin/proveedores/${id}`}
           onSubmit={async (data) => {
             'use server'
-            await updateSupplier(id, data)
+            const result = await updateSupplier(id, data)
+            if (result && 'error' in result) return result
             redirect(`/admin/proveedores/${id}`)
           }}
         />

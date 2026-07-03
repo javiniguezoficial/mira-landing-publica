@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Pencil, Truck } from 'lucide-react'
+import { ArrowLeft, Pencil, Truck, ListTree } from 'lucide-react'
 import { getSupplier } from '@/lib/actions/suppliers'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 import { miraBtn } from '@/lib/miraButtons'
@@ -49,6 +49,33 @@ export default async function AdminSupplierDetailPage({ params }: { params: Prom
         />
       </div>
 
+      {/* Taxonomía propia de proveedores (P2) */}
+      <div className="mira-card rounded-2xl p-5 sm:p-6">
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-black text-mira-ink">
+          <ListTree size={15} className="text-mira-magenta" /> Taxonomía de proveedores
+        </h2>
+        {supplier.supplier_market ? (
+          <p className="text-sm text-mira-ink">
+            {[
+              supplier.supplier_market?.name,
+              supplier.supplier_category?.name,
+              supplier.supplier_family?.name,
+              supplier.supplier_subfamily?.name,
+            ].filter(Boolean).join(' › ')}
+          </p>
+        ) : (
+          <p className="text-sm text-slate-400">Sin taxonomía nueva asignada.</p>
+        )}
+        {(supplier.category || supplier.family || supplier.subfamily || supplier.market?.name) && (
+          <div className="mt-3 border-t border-mira-line pt-3">
+            <p className="mb-1 text-xs font-bold uppercase tracking-wider text-slate-400">Clasificación legacy</p>
+            <p className="text-sm text-slate-500">
+              {[supplier.market?.name, supplier.category, supplier.family, supplier.subfamily].filter(Boolean).join(' · ')}
+            </p>
+          </div>
+        )}
+      </div>
+
       <div className="mira-card rounded-2xl p-5 sm:p-6">
         <dl className="grid grid-cols-2 gap-5">
           <Field label="Email" value={supplier.email} />
@@ -59,10 +86,6 @@ export default async function AdminSupplierDetailPage({ params }: { params: Prom
           <Field label="Provincia" value={supplier.region} />
           <Field label="Localidad" value={supplier.city} />
           <Field label="Código postal" value={supplier.postal_code} />
-          <Field label="Categoría" value={supplier.category} />
-          <Field label="Mercado" value={supplier.market?.name} />
-          <Field label="Familia" value={supplier.family} />
-          <Field label="Subfamilia" value={supplier.subfamily} />
           <Field label="Producción" value={supplier.produccion} />
           <Field label="Medida" value={supplier.medida} />
           <div className="col-span-2">

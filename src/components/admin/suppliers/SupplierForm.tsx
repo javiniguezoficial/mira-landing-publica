@@ -1,16 +1,18 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Truck } from 'lucide-react'
+import { Truck, ListTree, ExternalLink, AlertTriangle } from 'lucide-react'
 import { MiraFormCard } from '@/components/mira/MiraFormCard'
 import { miraBtn, miraField, miraLabel } from '@/lib/miraButtons'
-import type { SupplierFormData } from '@/lib/actions/suppliers'
+import type { SupplierFormData, SupplierActionResult, SupplierVoidResult } from '@/lib/actions/suppliers'
+import type { SupplierMarketNode } from '@/lib/actions/supplier-taxonomy'
 
 interface Props {
   defaultValues?: Partial<SupplierFormData>
   markets?: { id: string; name: string }[]
-  onSubmit: (data: SupplierFormData) => Promise<void>
+  taxonomyTree: SupplierMarketNode[]
+  onSubmit: (data: SupplierFormData) => Promise<SupplierActionResult | SupplierVoidResult>
   submitLabel?: string
   cancelHref: string
 }
@@ -36,6 +38,10 @@ const EMPTY: SupplierFormData = {
   medida: '',
   notes: '',
   is_active: true,
+  supplier_market_id: '',
+  supplier_category_id: '',
+  supplier_family_id: '',
+  supplier_subfamily_id: '',
 }
 
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
@@ -51,25 +57,59 @@ function Field({ label, required, children }: { label: string; required?: boolea
 
 const inputCls = miraField
 
-export function SupplierForm({ defaultValues, markets = [], onSubmit, submitLabel = 'Guardar', cancelHref }: Props) {
+export function SupplierForm({ defaultValues, markets = [], taxonomyTree, onSubmit, submitLabel = 'Guardar', cancelHref }: Props) {
   const [form, setForm] = useState<SupplierFormData>({ ...EMPTY, ...defaultValues })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Calculado una sola vez a partir de los valores iniciales (no del estado
+  // en vivo) — evita que el aviso aparezca/desaparezca mientras se edita.
+  const [showLegacyNotice] = useState(() =>
+    !!(defaultValues?.category || defaultValues?.family || defaultValues?.subfamily || defaultValues?.market_id)
+    && !defaultValues?.supplier_market_id
+  )
 
   function set(field: keyof SupplierFormData, value: string | number | boolean | null) {
     setForm((prev) => ({ ...prev, [field]: value }))
   }
 
+  function setSupplierMarket(id: string) {
+    setForm((prev) => ({ ...prev, supplier_market_id: id, supplier_category_id: '', supplier_family_id: '', supplier_subfamily_id: '' }))
+  }
+  function setSupplierCategory(id: string) {
+    setForm((prev) => ({ ...prev, supplier_category_id: id, supplier_family_id: '', supplier_subfamily_id: '' }))
+  }
+  function setSupplierFamily(id: string) {
+    setForm((prev) => ({ ...prev, supplier_family_id: id, supplier_subfamily_id: '' }))
+  }
+
+  const selectedMarket = useMemo(
+    () => taxonomyTree.find((m) => m.id === form.supplier_market_id),
+    [taxonomyTree, form.supplier_market_id]
+  )
+  const categories = selectedMarket?.categories ?? []
+  const selectedCategory = useMemo(
+    () => categories.find((c) => c.id === form.supplier_category_id),
+    [categories, form.supplier_category_id]
+  )
+  const families = selectedCategory?.families ?? []
+  const selectedFamily = useMemo(
+    () => families.find((f) => f.id === form.supplier_family_id),
+    [families, form.supplier_family_id]
+  )
+  const subfamilies = selectedFamily?.subfamilies ?? []
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
     setSaving(true)
-    try {
-      await onSubmit(form)
-    } catch (err: any) {
-      setError(err?.message ?? 'Error al guardar')
+    const result = await onSubmit(form)
+    if (result && 'error' in result) {
+      setError(result.error)
       setSaving(false)
+      return
     }
+    // Sin error → el server action redirige (redirect() no vuelve al cliente).
   }
 
   return (
@@ -129,25 +169,6 @@ export function SupplierForm({ defaultValues, markets = [], onSubmit, submitLabe
           <input value={form.postal_code ?? ''} onChange={(e) => set('postal_code', e.target.value)} className={inputCls} placeholder="47400" />
         </Field>
 
-        <Field label="Categoría">
-          <input value={form.category ?? ''} onChange={(e) => set('category', e.target.value)} className={inputCls} placeholder="Lácteos, Cereales…" />
-        </Field>
-
-        <Field label="Mercado">
-          <select value={form.market_id ?? ''} onChange={(e) => set('market_id', e.target.value)} className={inputCls}>
-            <option value="">Sin mercado asignado</option>
-            {markets.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
-        </Field>
-
-        <Field label="Familia">
-          <input value={form.family ?? ''} onChange={(e) => set('family', e.target.value)} className={inputCls} placeholder="Familia" />
-        </Field>
-
-        <Field label="Subfamilia">
-          <input value={form.subfamily ?? ''} onChange={(e) => set('subfamily', e.target.value)} className={inputCls} placeholder="Subfamilia" />
-        </Field>
-
         <Field label="Producción">
           <input value={form.produccion ?? ''} onChange={(e) => set('produccion', e.target.value)} className={inputCls} placeholder="Capacidad / producción" />
         </Field>
@@ -198,6 +219,109 @@ export function SupplierForm({ defaultValues, markets = [], onSubmit, submitLabe
           </label>
         </div>
         </div>
+
+        {/* ── Taxonomía propia de proveedores (P2) ──────────────────────────── */}
+        <div className="col-span-2 mt-6 rounded-2xl border border-mira-magenta/20 bg-mira-magenta-soft/30 p-5">
+          <div className="mb-1 flex items-center justify-between gap-3">
+            <h3 className="flex items-center gap-2 text-sm font-black text-mira-ink">
+              <ListTree size={15} className="text-mira-magenta" /> Taxonomía de proveedores
+            </h3>
+            <Link href="/admin/proveedores/taxonomia" target="_blank" className="inline-flex items-center gap-1 text-xs font-semibold text-mira-magenta hover:underline">
+              Gestionar taxonomía de proveedores <ExternalLink size={11} />
+            </Link>
+          </div>
+          <p className="mb-4 text-xs text-slate-500">
+            Esta taxonomía es propia de proveedores y no depende de Pricing.
+          </p>
+
+          {showLegacyNotice && (
+            <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+              Este proveedor aún usa clasificación legacy. Puedes reclasificarlo con la nueva taxonomía.
+            </div>
+          )}
+
+          {taxonomyTree.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              Todavía no hay taxonomía creada.{' '}
+              <Link href="/admin/proveedores/taxonomia" target="_blank" className="font-semibold text-mira-magenta hover:underline">
+                Crea el primer mercado de proveedor
+              </Link>.
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Mercado">
+                <select value={form.supplier_market_id ?? ''} onChange={(e) => setSupplierMarket(e.target.value)} className={inputCls}>
+                  <option value="">Sin clasificar</option>
+                  {taxonomyTree.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
+              </Field>
+
+              <Field label="Categoría">
+                <select
+                  value={form.supplier_category_id ?? ''}
+                  onChange={(e) => setSupplierCategory(e.target.value)}
+                  disabled={!selectedMarket}
+                  className={inputCls}
+                >
+                  <option value="">{selectedMarket ? 'Sin clasificar' : 'Selecciona un mercado primero'}</option>
+                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </Field>
+
+              <Field label="Familia">
+                <select
+                  value={form.supplier_family_id ?? ''}
+                  onChange={(e) => setSupplierFamily(e.target.value)}
+                  disabled={!selectedCategory}
+                  className={inputCls}
+                >
+                  <option value="">{selectedCategory ? 'Sin clasificar' : 'Selecciona una categoría primero'}</option>
+                  {families.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                </select>
+              </Field>
+
+              <Field label="Subfamilia">
+                <select
+                  value={form.supplier_subfamily_id ?? ''}
+                  onChange={(e) => set('supplier_subfamily_id', e.target.value)}
+                  disabled={!selectedFamily}
+                  className={inputCls}
+                >
+                  <option value="">{selectedFamily ? 'Sin clasificar' : 'Selecciona una familia primero'}</option>
+                  {subfamilies.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </Field>
+            </div>
+          )}
+        </div>
+
+        {/* ── Clasificación legacy (Pricing) ─────────────────────────────────── */}
+        <details className="col-span-2 mt-4 rounded-2xl border border-mira-line p-5">
+          <summary className="cursor-pointer text-sm font-bold text-slate-500">
+            Clasificación legacy (Pricing) — no es la clasificación principal
+          </summary>
+          <div className="mt-4 grid grid-cols-2 gap-4">
+            <Field label="Categoría (legacy)">
+              <input value={form.category ?? ''} onChange={(e) => set('category', e.target.value)} className={inputCls} placeholder="Lácteos, Cereales…" />
+            </Field>
+
+            <Field label="Mercado de Pricing (legacy)">
+              <select value={form.market_id ?? ''} onChange={(e) => set('market_id', e.target.value)} className={inputCls}>
+                <option value="">Sin mercado asignado</option>
+                {markets.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </Field>
+
+            <Field label="Familia (legacy)">
+              <input value={form.family ?? ''} onChange={(e) => set('family', e.target.value)} className={inputCls} placeholder="Familia" />
+            </Field>
+
+            <Field label="Subfamilia (legacy)">
+              <input value={form.subfamily ?? ''} onChange={(e) => set('subfamily', e.target.value)} className={inputCls} placeholder="Subfamilia" />
+            </Field>
+          </div>
+        </details>
       </MiraFormCard>
     </form>
   )

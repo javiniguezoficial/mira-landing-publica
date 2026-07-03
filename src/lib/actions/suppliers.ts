@@ -19,17 +19,29 @@ export interface Supplier {
   address: string | null
   latitude: number | null
   longitude: number | null
-  category: string | null
-  market_id: string | null
-  family: string | null
-  subfamily: string | null
+  category: string | null      // legacy — texto libre, no ligado a Pricing
+  market_id: string | null     // legacy — enlace a markets (Pricing)
+  family: string | null        // legacy — texto libre
+  subfamily: string | null     // legacy — texto libre
   produccion: string | null
   medida: string | null
   notes: string | null
   is_active: boolean
   created_at: string
   updated_at: string
-  market?: { id: string; name: string } | null
+  market?: { id: string; name: string } | null   // legacy (Pricing)
+  // Taxonomía propia de proveedores (P2), independiente de Pricing.
+  // Opcionales: listSuppliersFiltered() usa la RPC search_suppliers, que
+  // todavía no selecciona estas columnas (se añadirá en P2.4) — solo
+  // getSupplier() (ficha individual) las trae siempre informadas.
+  supplier_market_id?: string | null
+  supplier_category_id?: string | null
+  supplier_family_id?: string | null
+  supplier_subfamily_id?: string | null
+  supplier_market?: { id: string; name: string } | null
+  supplier_category?: { id: string; name: string } | null
+  supplier_family?: { id: string; name: string } | null
+  supplier_subfamily?: { id: string; name: string } | null
 }
 
 export interface SupplierFormData {
@@ -45,39 +57,104 @@ export interface SupplierFormData {
   address?: string
   latitude?: number | null
   longitude?: number | null
-  category?: string
-  market_id?: string | null
-  family?: string
-  subfamily?: string
+  category?: string          // legacy
+  market_id?: string | null  // legacy (Pricing) — no confundir con supplier_market_id
+  family?: string             // legacy
+  subfamily?: string          // legacy
   produccion?: string
   medida?: string
   notes?: string
   is_active?: boolean
+  // Taxonomía propia de proveedores (P2)
+  supplier_market_id?: string | null
+  supplier_category_id?: string | null
+  supplier_family_id?: string | null
+  supplier_subfamily_id?: string | null
 }
+
+export type SupplierActionResult = { id: string } | { error: string }
+export type SupplierVoidResult = { error: string } | void
 
 // ── Validación ────────────────────────────────────────────────────────────────
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const URL_RE   = /^https?:\/\/.+/
 
-function validateSupplierData(data: SupplierFormData) {
-  if (!data.name?.trim()) throw new Error('El nombre del proveedor es obligatorio')
+// Devuelve el mensaje de error como valor (no throw) — en producción Next.js
+// redacta el mensaje de cualquier Error lanzado desde un Server Action.
+function validateSupplierData(data: SupplierFormData): string | null {
+  if (!data.name?.trim()) return 'El nombre del proveedor es obligatorio'
 
   if (data.email?.trim() && !EMAIL_RE.test(data.email.trim())) {
-    throw new Error('El email no tiene un formato válido')
+    return 'El email no tiene un formato válido'
   }
 
   if (data.website?.trim() && !URL_RE.test(data.website.trim())) {
-    throw new Error('La web debe empezar por http:// o https://')
+    return 'La web debe empezar por http:// o https://'
   }
 
   if (data.latitude != null && isNaN(Number(data.latitude))) {
-    throw new Error('La latitud debe ser un número')
+    return 'La latitud debe ser un número'
   }
 
   if (data.longitude != null && isNaN(Number(data.longitude))) {
-    throw new Error('La longitud debe ser un número')
+    return 'La longitud debe ser un número'
   }
+
+  return null
+}
+
+// Valida que category_id pertenezca a market_id, family_id a category_id, y
+// subfamily_id a family_id. Si un nivel padre está vacío, sus hijos se
+// devuelven como null (nunca se guarda un hijo sin su padre). No usa
+// `market_id` de Pricing para nada de esto — es una jerarquía independiente.
+async function resolveSupplierTaxonomy(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  data: SupplierFormData,
+): Promise<
+  | { supplier_market_id: string | null; supplier_category_id: string | null; supplier_family_id: string | null; supplier_subfamily_id: string | null }
+  | { error: string }
+> {
+  const marketId = data.supplier_market_id || null
+  let categoryId = data.supplier_category_id || null
+  let familyId = data.supplier_family_id || null
+  let subfamilyId = data.supplier_subfamily_id || null
+
+  if (!marketId) {
+    // Sin mercado, ningún hijo puede quedar asignado.
+    return { supplier_market_id: null, supplier_category_id: null, supplier_family_id: null, supplier_subfamily_id: null }
+  }
+
+  if (categoryId) {
+    const { data: cat } = await supabase
+      .from('supplier_categories').select('supplier_market_id').eq('id', categoryId).single()
+    if (!cat || cat.supplier_market_id !== marketId) {
+      return { error: 'La categoría seleccionada no pertenece al mercado indicado' }
+    }
+  } else {
+    familyId = null
+    subfamilyId = null
+  }
+
+  if (familyId) {
+    const { data: fam } = await supabase
+      .from('supplier_families').select('supplier_category_id').eq('id', familyId).single()
+    if (!fam || fam.supplier_category_id !== categoryId) {
+      return { error: 'La familia seleccionada no pertenece a la categoría indicada' }
+    }
+  } else {
+    subfamilyId = null
+  }
+
+  if (subfamilyId) {
+    const { data: sub } = await supabase
+      .from('supplier_subfamilies').select('supplier_family_id').eq('id', subfamilyId).single()
+    if (!sub || sub.supplier_family_id !== familyId) {
+      return { error: 'La subfamilia seleccionada no pertenece a la familia indicada' }
+    }
+  }
+
+  return { supplier_market_id: marketId, supplier_category_id: categoryId, supplier_family_id: familyId, supplier_subfamily_id: subfamilyId }
 }
 
 // ── Guard: solo platform_admin ────────────────────────────────────────────────
@@ -98,11 +175,15 @@ async function requireAdmin(supabase: Awaited<ReturnType<typeof createClient>>) 
 
 // ── Admin: crear proveedor ────────────────────────────────────────────────────
 
-export async function createSupplier(data: SupplierFormData): Promise<{ id: string }> {
-  validateSupplierData(data)
+export async function createSupplier(data: SupplierFormData): Promise<SupplierActionResult> {
+  const basicError = validateSupplierData(data)
+  if (basicError) return { error: basicError }
 
   const supabase = await createClient()
   await requireAdmin(supabase)
+
+  const taxonomy = await resolveSupplierTaxonomy(supabase, data)
+  if ('error' in taxonomy) return taxonomy
 
   const { data: row, error } = await supabase
     .from('suppliers')
@@ -127,21 +208,26 @@ export async function createSupplier(data: SupplierFormData): Promise<{ id: stri
       medida:      data.medida?.trim() || null,
       notes:       data.notes?.trim() || null,
       is_active:   data.is_active ?? true,
+      ...taxonomy,
     })
     .select('id')
     .single()
 
-  if (error) throw new Error(error.message)
+  if (error) return { error: error.message }
   return { id: row.id }
 }
 
 // ── Admin: actualizar proveedor ───────────────────────────────────────────────
 
-export async function updateSupplier(id: string, data: SupplierFormData): Promise<void> {
-  validateSupplierData(data)
+export async function updateSupplier(id: string, data: SupplierFormData): Promise<SupplierVoidResult> {
+  const basicError = validateSupplierData(data)
+  if (basicError) return { error: basicError }
 
   const supabase = await createClient()
   await requireAdmin(supabase)
+
+  const taxonomy = await resolveSupplierTaxonomy(supabase, data)
+  if ('error' in taxonomy) return taxonomy
 
   const { error } = await supabase
     .from('suppliers')
@@ -166,10 +252,11 @@ export async function updateSupplier(id: string, data: SupplierFormData): Promis
       medida:      data.medida?.trim() || null,
       notes:       data.notes?.trim() || null,
       is_active:   data.is_active ?? true,
+      ...taxonomy,
     })
     .eq('id', id)
 
-  if (error) throw new Error(error.message)
+  if (error) return { error: error.message }
 }
 
 // ── Admin: activar/desactivar ─────────────────────────────────────────────────
@@ -189,11 +276,18 @@ export async function toggleSupplierActive(id: string, is_active: boolean): Prom
 // ── Queries ───────────────────────────────────────────────────────────────────
 
 // Columnas explícitas + join a markets — evita select('*') y trae market.name
+// Usada SOLO por getSupplier() (ficha individual) — listSuppliersFiltered()
+// usa la RPC search_suppliers, que no se toca en esta fase.
 const SUPPLIER_SELECT =
   'id, name, email, phone, website, tax_id, country, region, city, postal_code, ' +
   'address, latitude, longitude, category, market_id, family, subfamily, ' +
   'produccion, medida, notes, is_active, created_at, updated_at, ' +
-  'market:markets(id, name)'
+  'market:markets(id, name), ' +
+  'supplier_market_id, supplier_category_id, supplier_family_id, supplier_subfamily_id, ' +
+  'supplier_market:supplier_markets(id, name), ' +
+  'supplier_category:supplier_categories(id, name), ' +
+  'supplier_family:supplier_families(id, name), ' +
+  'supplier_subfamily:supplier_subfamilies(id, name)'
 
 export interface SupplierFilters {
   search?: string

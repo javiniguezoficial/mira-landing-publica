@@ -114,21 +114,18 @@ function friendlyDbError(error: { code?: string; message: string }, entityLabel:
 
 // ── Árbol completo (para la pantalla única) ───────────────────────────────────
 
-export async function getSupplierTaxonomyTree(): Promise<SupplierMarketNode[]> {
-  const supabase = await requireAdmin()
-
-  const [marketsRes, categoriesRes, familiesRes, subfamiliesRes] = await Promise.all([
-    supabase.from('supplier_markets').select('*').order('sort_order').order('name'),
-    supabase.from('supplier_categories').select('*').order('sort_order').order('name'),
-    supabase.from('supplier_families').select('*').order('sort_order').order('name'),
-    supabase.from('supplier_subfamilies').select('*').order('sort_order').order('name'),
-  ])
-
-  const markets = (marketsRes.data ?? []) as SupplierMarket[]
-  const categories = (categoriesRes.data ?? []) as SupplierCategory[]
-  const families = (familiesRes.data ?? []) as SupplierFamily[]
-  const subfamilies = (subfamiliesRes.data ?? []) as SupplierSubfamily[]
-
+// Anida los 4 niveles ya consultados. Compartido por getSupplierTaxonomyTree()
+// (admin: todo, activo e inactivo) y getActiveSupplierTaxonomyTree() (formulario
+// de proveedor: solo nodos activos). Si un padre no está en la lista de
+// mercados/categorías/familias pasada, sus hijos quedan naturalmente excluidos
+// del árbol — así basta con filtrar cada tabla por is_active para que la
+// jerarquía completa respete "activo en toda la cadena".
+function buildTaxonomyTree(
+  markets: SupplierMarket[],
+  categories: SupplierCategory[],
+  families: SupplierFamily[],
+  subfamilies: SupplierSubfamily[],
+): SupplierMarketNode[] {
   return markets.map((market) => ({
     ...market,
     categories: categories
@@ -143,6 +140,44 @@ export async function getSupplierTaxonomyTree(): Promise<SupplierMarketNode[]> {
           })),
       })),
   }))
+}
+
+export async function getSupplierTaxonomyTree(): Promise<SupplierMarketNode[]> {
+  const supabase = await requireAdmin()
+
+  const [marketsRes, categoriesRes, familiesRes, subfamiliesRes] = await Promise.all([
+    supabase.from('supplier_markets').select('*').order('sort_order').order('name'),
+    supabase.from('supplier_categories').select('*').order('sort_order').order('name'),
+    supabase.from('supplier_families').select('*').order('sort_order').order('name'),
+    supabase.from('supplier_subfamilies').select('*').order('sort_order').order('name'),
+  ])
+
+  return buildTaxonomyTree(
+    (marketsRes.data ?? []) as SupplierMarket[],
+    (categoriesRes.data ?? []) as SupplierCategory[],
+    (familiesRes.data ?? []) as SupplierFamily[],
+    (subfamiliesRes.data ?? []) as SupplierSubfamily[],
+  )
+}
+
+// Igual que getSupplierTaxonomyTree() pero solo con nodos activos — para
+// poblar los selects encadenados del formulario de crear/editar proveedor.
+export async function getActiveSupplierTaxonomyTree(): Promise<SupplierMarketNode[]> {
+  const supabase = await requireAdmin()
+
+  const [marketsRes, categoriesRes, familiesRes, subfamiliesRes] = await Promise.all([
+    supabase.from('supplier_markets').select('*').eq('is_active', true).order('sort_order').order('name'),
+    supabase.from('supplier_categories').select('*').eq('is_active', true).order('sort_order').order('name'),
+    supabase.from('supplier_families').select('*').eq('is_active', true).order('sort_order').order('name'),
+    supabase.from('supplier_subfamilies').select('*').eq('is_active', true).order('sort_order').order('name'),
+  ])
+
+  return buildTaxonomyTree(
+    (marketsRes.data ?? []) as SupplierMarket[],
+    (categoriesRes.data ?? []) as SupplierCategory[],
+    (familiesRes.data ?? []) as SupplierFamily[],
+    (subfamiliesRes.data ?? []) as SupplierSubfamily[],
+  )
 }
 
 // ── Mercado de proveedor ──────────────────────────────────────────────────────
