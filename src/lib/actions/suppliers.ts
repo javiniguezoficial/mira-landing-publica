@@ -205,6 +205,7 @@ export interface SupplierFilters {
   category?: string
   produccion?: string
   medida?: string
+  country?: string
   is_active?: boolean
   limit?: number
   offset?: number
@@ -221,12 +222,24 @@ export interface SuppliersPage {
 // case-insensitive Y sin acentos. Es SECURITY INVOKER, así que respeta la RLS
 // existente de `suppliers`. Devuelve `total_count` (count(*) OVER()) para la
 // paginación, manteniendo limit/offset.
+//
+// `country` NO es un parámetro de la RPC todavía (requeriría una migración
+// para añadir p_country). Como solución P1 sin tocar Supabase: cuando se
+// filtra por país, se pide a la RPC un lote más grande (hasta el tope de
+// 1000 ya existente en la app) y se aplica `.eq('country', …)` encadenado
+// sobre el resultado (PostgREST permite filtrar el output de una función que
+// devuelve `setof`/tabla). La paginación se recalcula en esta capa sobre el
+// lote ya filtrado. Limitación conocida: si los demás filtros por sí solos
+// superan 1000 coincidencias, el conteo de país puede quedar incompleto —
+// aceptable para el volumen actual; para escala real, mover el filtro de
+// país dentro de la función RPC (p_country) en una fase posterior.
 export async function listSuppliersFiltered(filters: SupplierFilters = {}): Promise<SuppliersPage> {
   const supabase = await createClient()
   const limit = Math.min(filters.limit ?? 200, 1000)
   const offset = filters.offset ?? 0
+  const countryFilter = filters.country?.trim() || null
 
-  const { data, error } = await supabase.rpc('search_suppliers', {
+  let query = supabase.rpc('search_suppliers', {
     p_search:     filters.search?.trim() || null,
     p_market_id:  filters.market_id || null,
     p_region:     filters.region?.trim() || null,
@@ -237,14 +250,28 @@ export async function listSuppliersFiltered(filters: SupplierFilters = {}): Prom
     p_produccion: filters.produccion?.trim() || null,
     p_medida:     filters.medida?.trim() || null,
     p_is_active:  filters.is_active ?? null,
-    p_limit:      limit,
-    p_offset:     offset,
+    // Sin filtro de país: paginación normal en la propia RPC.
+    // Con filtro de país: se pide el tope completo (1000) y se pagina en JS
+    // tras aplicar el filtro encadenado, para no perder coincidencias.
+    p_limit:      countryFilter ? 1000 : limit,
+    p_offset:     countryFilter ? 0 : offset,
   })
+
+  if (countryFilter) query = query.eq('country', countryFilter)
+
+  const { data, error } = await query
 
   if (error || !data) return { suppliers: [], total: 0, hasMore: false }
 
-  const rows = data as Array<Record<string, unknown>>
-  const total = rows.length > 0 ? Number(rows[0].total_count) : 0
+  let rows = data as Array<Record<string, unknown>>
+  let total: number
+
+  if (countryFilter) {
+    total = rows.length
+    rows = rows.slice(offset, offset + limit)
+  } else {
+    total = rows.length > 0 ? Number(rows[0].total_count) : 0
+  }
 
   const suppliers: Supplier[] = rows.map((r) => ({
     id:          r.id as string,
@@ -295,4 +322,33 @@ export async function getSupplier(id: string): Promise<Supplier | null> {
 
   if (error || !data) return null
   return data as unknown as Supplier
+}
+
+// ── Opciones de filtro (País / Provincia) ─────────────────────────────────────
+
+export interface SupplierFilterOptions {
+  countries: string[]
+  regions: string[]
+}
+
+// Valores reales distintos de país/provincia para poblar los <select> de
+// filtros. Consulta ligera (solo 2 columnas, tope 5000 filas) — mucho más
+// barata que listar proveedores completos, pero sigue leyendo N filas para
+// deduplicar en JS porque Postgres no expone `DISTINCT` vía PostgREST select
+// directo. Para volumen muy grande, mover a una función RPC dedicada
+// (SELECT DISTINCT) en una fase posterior.
+export async function getSupplierFilterOptions(onlyActive = true): Promise<SupplierFilterOptions> {
+  const supabase = await createClient()
+
+  let query = supabase.from('suppliers').select('country, region').limit(5000)
+  if (onlyActive) query = query.eq('is_active', true)
+
+  const { data, error } = await query
+  if (error || !data) return { countries: [], regions: [] }
+
+  const countries = Array.from(new Set(data.map((r) => r.country).filter(Boolean))).sort()
+  const regions = Array.from(new Set(data.map((r) => r.region).filter(Boolean))) as string[]
+  regions.sort()
+
+  return { countries, regions }
 }

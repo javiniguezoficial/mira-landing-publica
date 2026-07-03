@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Plus, Truck, Search, X, Upload } from 'lucide-react'
-import { listSuppliersFiltered, type SupplierFilters } from '@/lib/actions/suppliers'
+import { listSuppliersFiltered, getSupplierFilterOptions, type SupplierFilters } from '@/lib/actions/suppliers'
 import { getMarkets } from '@/lib/actions/markets'
 import { ToggleActiveSupplier } from './ToggleActiveSupplier'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
@@ -10,29 +10,47 @@ import { miraBtn, miraField } from '@/lib/miraButtons'
 
 export const dynamic = 'force-dynamic'
 
+const adminLabelCls = 'mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400'
+
 function formatDate(d: string) {
   return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+type AdminSP = {
+  q?: string
+  country?: string
+  region?: string
+  market_id?: string
+  category?: string
+  family?: string
+  subfamily?: string
+  produccion?: string
 }
 
 export default async function AdminSuppliersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; region?: string; market_id?: string; family?: string }>
+  searchParams: Promise<AdminSP>
 }) {
   const sp = await searchParams
   const filters: SupplierFilters = {
     search: sp.q || undefined,
+    country: sp.country || undefined,
     region: sp.region || undefined,
     market_id: sp.market_id || undefined,
+    category: sp.category || undefined,
     family: sp.family || undefined,
+    subfamily: sp.subfamily || undefined,
+    produccion: sp.produccion || undefined,
   }
 
-  const [{ suppliers, total, hasMore }, markets] = await Promise.all([
+  const [{ suppliers, total, hasMore }, markets, filterOptions] = await Promise.all([
     listSuppliersFiltered(filters),
     getMarkets(),
+    getSupplierFilterOptions(false),
   ])
 
-  const hasActiveFilters = !!(sp.q || sp.region || sp.market_id || sp.family)
+  const hasActiveFilters = Object.values(filters).some(Boolean)
 
   return (
     <div className="w-full space-y-6 p-4 md:p-6 xl:p-8">
@@ -56,12 +74,19 @@ export default async function AdminSuppliersPage({
         }
       />
 
-      {/* Filtros */}
-      <form method="GET" action="/admin/proveedores" className="mira-card rounded-2xl p-4">
-        <div className="flex flex-wrap items-end gap-3">
-          {/* Búsqueda por nombre */}
-          <div className="flex-1 min-w-[180px]">
-            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">Buscar</label>
+      {/* Filtros — key remonta el formulario cuando cambian los filtros
+          (incluido "Limpiar"), evitando que un <select>/<input> no
+          controlado se quede visualmente con el valor anterior. */}
+      <form
+        key={JSON.stringify(filters)}
+        method="GET"
+        action="/admin/proveedores"
+        className="mira-card space-y-4 rounded-2xl p-4"
+      >
+        {/* Fila superior */}
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <label className={adminLabelCls}>Nombre del proveedor</label>
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
@@ -73,32 +98,42 @@ export default async function AdminSuppliersPage({
             </div>
           </div>
 
-          {/* Provincia */}
-          <div className="flex-1 min-w-[140px]">
-            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">Provincia</label>
+          <div>
+            <label className={adminLabelCls}>País</label>
+            <select name="country" defaultValue={sp.country ?? ''} className={miraField}>
+              <option value="">Todos</option>
+              {filterOptions.countries.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className={adminLabelCls}>Provincia</label>
+            <select name="region" defaultValue={sp.region ?? ''} className={miraField}>
+              <option value="">Todas</option>
+              {filterOptions.regions.map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className={adminLabelCls}>Producción</label>
             <input
-              name="region"
-              defaultValue={sp.region ?? ''}
-              placeholder="Todas"
+              name="produccion"
+              defaultValue={sp.produccion ?? ''}
+              placeholder="Ej. 5000"
               className={miraField}
             />
           </div>
+        </div>
 
-          {/* Familia */}
-          <div className="flex-1 min-w-[140px]">
-            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">Familia</label>
-            <input
-              name="family"
-              defaultValue={sp.family ?? ''}
-              placeholder="Todas"
-              className={miraField}
-            />
-          </div>
-
-          {/* Mercado */}
+        {/* Fila inferior */}
+        <div className="grid gap-3 border-t border-mira-line pt-4 sm:grid-cols-2 lg:grid-cols-4">
           {markets.length > 0 && (
-            <div className="flex-1 min-w-[160px]">
-              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">Mercado</label>
+            <div>
+              <label className={adminLabelCls}>Mercado</label>
               <select name="market_id" defaultValue={sp.market_id ?? ''} className={miraField}>
                 <option value="">Todos</option>
                 {markets.map(m => (
@@ -108,24 +143,54 @@ export default async function AdminSuppliersPage({
             </div>
           )}
 
-          {/* Acciones */}
-          <div className="flex items-center gap-2">
-            <button type="submit" className={miraBtn.primary}>
-              <Search size={14} /> Buscar
-            </button>
-            {hasActiveFilters && (
-              <Link href="/admin/proveedores" className={miraBtn.ghost}>
-                <X size={14} /> Limpiar
-              </Link>
-            )}
+          <div>
+            <label className={adminLabelCls}>Categoría</label>
+            <input
+              name="category"
+              defaultValue={sp.category ?? ''}
+              placeholder="Todas"
+              className={miraField}
+            />
           </div>
+
+          <div>
+            <label className={adminLabelCls}>Familia</label>
+            <input
+              name="family"
+              defaultValue={sp.family ?? ''}
+              placeholder="Todas"
+              className={miraField}
+            />
+          </div>
+
+          <div>
+            <label className={adminLabelCls}>Subfamilia</label>
+            <input
+              name="subfamily"
+              defaultValue={sp.subfamily ?? ''}
+              placeholder="Todas"
+              className={miraField}
+            />
+          </div>
+        </div>
+
+        {/* Acciones */}
+        <div className="flex items-center gap-2 pt-1">
+          <button type="submit" className={miraBtn.primary}>
+            <Search size={14} /> Buscar
+          </button>
+          {hasActiveFilters && (
+            <Link href="/admin/proveedores" className={miraBtn.ghost}>
+              <X size={14} /> Limpiar
+            </Link>
+          )}
         </div>
       </form>
 
       {/* Indicador de límite */}
       {hasMore && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
-          Mostrando los primeros 500 de {total} proveedores. Usa los filtros para afinar la búsqueda.
+          Mostrando los primeros {suppliers.length} de {total} proveedores. Usa los filtros para afinar la búsqueda.
         </div>
       )}
 

@@ -17,14 +17,13 @@ const SupplierMap = dynamic(
 
 interface FilterValues {
   q?: string
+  country?: string
   region?: string
-  city?: string
   market_id?: string
+  category?: string
   family?: string
   subfamily?: string
   produccion?: string
-  medida?: string
-  category?: string
 }
 
 interface Props {
@@ -37,6 +36,8 @@ interface Props {
   nextUrl: string | null
   markets: { id: string; name: string }[]
   filters: FilterValues
+  countries: string[]
+  regions: string[]
 }
 
 export function SupplierListClient({
@@ -49,6 +50,8 @@ export function SupplierListClient({
   nextUrl,
   markets,
   filters,
+  countries,
+  regions,
 }: Props) {
   // Solo el toggle mapa/lista es estado local — el filtrado es 100% server-side
   const [view, setView] = useState<'list' | 'map'>('map')
@@ -81,12 +84,21 @@ export function SupplierListClient({
 
   return (
     <div className="space-y-5">
-      {/* Formulario de filtros — GET → server render */}
-      <form method="GET" action="/app/proveedores" className="mira-card rounded-2xl p-4">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {/* Búsqueda por nombre */}
-          <div className="sm:col-span-2 lg:col-span-1">
-            <label className={miraLabel}>Buscar proveedor</label>
+      {/* Formulario de filtros — GET → server render.
+          key=JSON.stringify(filters): fuerza el remonte de los <input>/<select>
+          no controlados cuando cambian los filtros (incluido "Limpiar filtros"),
+          para que defaultValue se re-sincronice y no queden valores visuales
+          obsoletos (p. ej. el mercado seleccionado tras limpiar). */}
+      <form
+        key={JSON.stringify(filters)}
+        method="GET"
+        action="/app/proveedores"
+        className="mira-card space-y-4 rounded-2xl p-4"
+      >
+        {/* Fila superior */}
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <label className={miraLabel}>Nombre del proveedor</label>
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
@@ -98,7 +110,40 @@ export function SupplierListClient({
             </div>
           </div>
 
-          {/* Mercado */}
+          <div>
+            <label className={miraLabel}>País</label>
+            <select name="country" defaultValue={filters.country ?? ''} className={miraField}>
+              <option value="">Todos</option>
+              {countries.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className={miraLabel}>Provincia</label>
+            <select name="region" defaultValue={filters.region ?? ''} className={miraField}>
+              <option value="">Todas</option>
+              {regions.map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className={miraLabel}>Producción</label>
+            <input
+              name="produccion"
+              defaultValue={filters.produccion ?? ''}
+              placeholder="Ej. 5000"
+              className={miraField}
+            />
+            <p className="mt-1 text-[11px] text-slate-400">Búsqueda por texto — no es un rango exacto.</p>
+          </div>
+        </div>
+
+        {/* Fila inferior */}
+        <div className="grid gap-3 border-t border-mira-line pt-4 sm:grid-cols-2 lg:grid-cols-4">
           {markets.length > 0 && (
             <div>
               <label className={miraLabel}>Mercado</label>
@@ -111,29 +156,16 @@ export function SupplierListClient({
             </div>
           )}
 
-          {/* Provincia */}
           <div>
-            <label className={miraLabel}>Provincia</label>
+            <label className={miraLabel}>Categoría</label>
             <input
-              name="region"
-              defaultValue={filters.region ?? ''}
-              placeholder="Ej. Valencia"
+              name="category"
+              defaultValue={filters.category ?? ''}
+              placeholder="Categoría"
               className={miraField}
             />
           </div>
 
-          {/* Localidad */}
-          <div>
-            <label className={miraLabel}>Localidad</label>
-            <input
-              name="city"
-              defaultValue={filters.city ?? ''}
-              placeholder="Ej. Alzira"
-              className={miraField}
-            />
-          </div>
-
-          {/* Familia */}
           <div>
             <label className={miraLabel}>Familia</label>
             <input
@@ -144,7 +176,6 @@ export function SupplierListClient({
             />
           </div>
 
-          {/* Subfamilia */}
           <div>
             <label className={miraLabel}>Subfamilia</label>
             <input
@@ -154,32 +185,10 @@ export function SupplierListClient({
               className={miraField}
             />
           </div>
-
-          {/* Producción */}
-          <div>
-            <label className={miraLabel}>Producción</label>
-            <input
-              name="produccion"
-              defaultValue={filters.produccion ?? ''}
-              placeholder="Ej. 5000 TN"
-              className={miraField}
-            />
-          </div>
-
-          {/* Medida */}
-          <div>
-            <label className={miraLabel}>Medida</label>
-            <input
-              name="medida"
-              defaultValue={filters.medida ?? ''}
-              placeholder="Ej. kg, TN"
-              className={miraField}
-            />
-          </div>
         </div>
 
         {/* Acciones del formulario */}
-        <div className="mt-3 flex items-center gap-2">
+        <div className="flex items-center gap-2 pt-1">
           <button type="submit" className={miraBtn.primary}>
             <Search size={14} /> Buscar
           </button>
