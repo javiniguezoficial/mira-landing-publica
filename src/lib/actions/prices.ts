@@ -280,6 +280,45 @@ export interface PriceListPage {
   hasMore: boolean
 }
 
+// Embed de jerarquía Pricing reutilizado por listPriceRecordsFiltered y
+// getPriceInsights: los filtros por punto (product.lonja, product.market.category_id…)
+// requieren que la relación esté presente en el select con !inner, aunque el
+// caller no necesite mostrar todos esos campos.
+const PRODUCT_HIERARCHY_SELECT = `product:products!inner(
+        id, name, slug, lonja, variedad, calibre, incoterm, tipo, market_id,
+        market:markets!inner(
+          id, name, category_id,
+          category:market_categories!inner(
+            id, name, strategic_market_id,
+            strategic_market:strategic_markets(id, name)
+          )
+        )
+      )`
+
+// Aplica los filtros de PriceListFilters sobre un query builder de
+// product_price_records ya seleccionado con PRODUCT_HIERARCHY_SELECT.
+// Compartido por listPriceRecordsFiltered y getPriceInsights para no duplicar
+// la lógica de filtrado server-side.
+function applyPriceListFilters<Q>(query: Q, filters: PriceListFilters): Q {
+  let q: any = query // eslint-disable-line @typescript-eslint/no-explicit-any
+  if (filters.product_id)          q = q.eq('product_id', filters.product_id)
+  if (filters.market_id)           q = q.eq('product.market_id', filters.market_id)
+  if (filters.category_id)         q = q.eq('product.market.category_id', filters.category_id)
+  if (filters.strategic_market_id) q = q.eq('product.market.category.strategic_market_id', filters.strategic_market_id)
+  if (filters.lonja)               q = q.eq('product.lonja', filters.lonja)
+  if (filters.variedad)            q = q.eq('product.variedad', filters.variedad)
+  if (filters.calibre)             q = q.eq('product.calibre', filters.calibre)
+  if (filters.incoterm)            q = q.eq('product.incoterm', filters.incoterm)
+  if (filters.tipo)                q = q.eq('product.tipo', filters.tipo)
+  if (filters.country)             q = q.eq('country', filters.country)
+  if (filters.currency)            q = q.eq('currency', filters.currency)
+  if (filters.unit)                q = q.eq('unit', filters.unit)
+  if (filters.region)              q = q.ilike('region', `%${filters.region}%`)
+  if (filters.date_from)           q = q.gte('recorded_at', filters.date_from)
+  if (filters.date_to)             q = q.lte('recorded_at', filters.date_to)
+  return q as Q
+}
+
 export async function listPriceRecordsFiltered(filters: PriceListFilters = {}): Promise<PriceListPage> {
   const supabase = await createClient()
   const limit = Math.min(filters.limit ?? 50, 500)
@@ -289,35 +328,11 @@ export async function listPriceRecordsFiltered(filters: PriceListFilters = {}): 
     .from('product_price_records')
     .select(`
       id, price, unit, currency, country, region, recorded_at, min_price, max_price, avg_price, volume,
-      product:products!inner(
-        id, name, slug, lonja, variedad, calibre, incoterm, tipo, market_id,
-        market:markets!inner(
-          id, name, category_id,
-          category:market_categories!inner(
-            id, name, strategic_market_id,
-            strategic_market:strategic_markets(id, name)
-          )
-        )
-      )
+      ${PRODUCT_HIERARCHY_SELECT}
     `, { count: 'exact' })
     .order('recorded_at', { ascending: false })
 
-  if (filters.product_id)          query = query.eq('product_id', filters.product_id)
-  if (filters.market_id)           query = query.eq('product.market_id', filters.market_id)
-  if (filters.category_id)         query = query.eq('product.market.category_id', filters.category_id)
-  if (filters.strategic_market_id) query = query.eq('product.market.category.strategic_market_id', filters.strategic_market_id)
-  if (filters.lonja)               query = query.eq('product.lonja', filters.lonja)
-  if (filters.variedad)            query = query.eq('product.variedad', filters.variedad)
-  if (filters.calibre)             query = query.eq('product.calibre', filters.calibre)
-  if (filters.incoterm)            query = query.eq('product.incoterm', filters.incoterm)
-  if (filters.tipo)                query = query.eq('product.tipo', filters.tipo)
-  if (filters.country)             query = query.eq('country', filters.country)
-  if (filters.currency)            query = query.eq('currency', filters.currency)
-  if (filters.unit)                query = query.eq('unit', filters.unit)
-  if (filters.region)              query = query.ilike('region', `%${filters.region}%`)
-  if (filters.date_from)           query = query.gte('recorded_at', filters.date_from)
-  if (filters.date_to)             query = query.lte('recorded_at', filters.date_to)
-
+  query = applyPriceListFilters(query, filters)
   query = query.range(offset, offset + limit - 1)
 
   const { data, error, count } = await query
@@ -349,6 +364,97 @@ export async function listPriceRecordsFiltered(filters: PriceListFilters = {}): 
 
   const total = count ?? 0
   return { rows, total, hasMore: total > offset + limit }
+}
+
+// ── Resumen + serie temporal para vista cliente/admin (PR3.2) ──────────────────
+// Cota de filas usadas para calcular resumen/gráfico: evita traer toda la tabla
+// si los filtros son muy amplios. Se ordena por recorded_at DESC y se toma la
+// "cabeza" (los más recientes) para que "última fecha" y la tendencia mostrada
+// sean siempre exactas y relevantes aunque el total supere la cota.
+const PRICE_INSIGHTS_CAP = 2000
+
+export interface PriceSeriesPoint {
+  date: string
+  avgPrice: number
+}
+
+export interface PriceInsights {
+  count: number                // total exacto que cumple los filtros (no limitado por la cota)
+  min: number | null
+  max: number | null
+  avg: number | null
+  lastDate: string | null
+  unit: string | null          // null → varias unidades distintas en la muestra
+  currency: string | null      // null → varias monedas distintas en la muestra
+  capped: boolean              // true si count > sampleSize (resumen sobre una muestra reciente, no el total)
+  sampleSize: number
+  series: PriceSeriesPoint[]   // agregado por fecha (promedio del día), orden ascendente
+}
+
+const EMPTY_INSIGHTS: Omit<PriceInsights, 'count' | 'capped'> = {
+  min: null, max: null, avg: null, lastDate: null, unit: null, currency: null, sampleSize: 0, series: [],
+}
+
+export async function getPriceInsights(filters: PriceListFilters = {}): Promise<PriceInsights> {
+  const supabase = await createClient()
+
+  // Select liviano (sin min/max/avg/volume/country/region/nombres): solo lo
+  // necesario para el resumen y el gráfico. El embed de jerarquía se mantiene
+  // porque los filtros por punto (product.lonja, product.market_id…) lo requieren.
+  let query = supabase
+    .from('product_price_records')
+    .select(`
+      price, recorded_at, unit, currency,
+      ${PRODUCT_HIERARCHY_SELECT}
+    `, { count: 'exact' })
+    .order('recorded_at', { ascending: false })
+
+  query = applyPriceListFilters(query, filters)
+  query = query.range(0, PRICE_INSIGHTS_CAP - 1)
+
+  const { data, error, count } = await query
+  const total = count ?? 0
+  if (error || !data || data.length === 0) return { count: total, capped: false, ...EMPTY_INSIGHTS }
+
+  const rows = (data as Array<Record<string, any>>).map((r) => ({
+    price: parseFloat(r.price),
+    recorded_at: r.recorded_at as string,
+    unit: r.unit as string,
+    currency: r.currency as string,
+  }))
+
+  const prices = rows.map((r) => r.price)
+  const min = Math.min(...prices)
+  const max = Math.max(...prices)
+  const avg = prices.reduce((s, p) => s + p, 0) / prices.length
+
+  const units = new Set(rows.map((r) => r.unit))
+  const currencies = new Set(rows.map((r) => r.currency))
+
+  // Agrupado por fecha (promedio del día) para el gráfico de evolución.
+  const byDate = new Map<string, { sum: number; n: number }>()
+  for (const r of rows) {
+    const acc = byDate.get(r.recorded_at) ?? { sum: 0, n: 0 }
+    acc.sum += r.price
+    acc.n += 1
+    byDate.set(r.recorded_at, acc)
+  }
+  const series: PriceSeriesPoint[] = Array.from(byDate.entries())
+    .map(([date, { sum, n }]) => ({ date, avgPrice: Math.round((sum / n) * 10000) / 10000 }))
+    .sort((a, b) => a.date.localeCompare(b.date))
+
+  return {
+    count: total,
+    min,
+    max,
+    avg: Math.round(avg * 10000) / 10000,
+    lastDate: rows[0].recorded_at, // primer elemento: viene ordenado por recorded_at DESC
+    unit: units.size === 1 ? rows[0].unit : null,
+    currency: currencies.size === 1 ? rows[0].currency : null,
+    capped: total > rows.length,
+    sampleSize: rows.length,
+    series,
+  }
 }
 
 // ── Alta manual global de precio (patrón { error }, no throw) ──────────────────

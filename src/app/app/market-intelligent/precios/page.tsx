@@ -1,9 +1,12 @@
 import Link from 'next/link'
 import { ArrowLeft, DollarSign, Search, X, ChevronLeft, ChevronRight } from 'lucide-react'
-import { listPriceRecordsFiltered, getPricingTree, type PriceListFilters } from '@/lib/actions/prices'
+import { listPriceRecordsFiltered, getPricingTree, getPriceInsights, type PriceListFilters } from '@/lib/actions/prices'
 import { PricingHierarchySelects } from '@/components/admin/prices/PricingHierarchySelects'
 import { PriceExtraFilters } from '@/components/admin/prices/PriceExtraFilters'
+import { PriceSummaryCards } from '@/components/admin/prices/PriceSummaryCards'
+import { PriceEvolutionChart } from '@/components/admin/prices/PriceEvolutionChart'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
+import { MiraChartCard } from '@/components/mira/MiraChartCard'
 import { MiraTable, MiraTr, MiraTd } from '@/components/mira/MiraTable'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { miraBtn, miraField, miraLabel } from '@/lib/miraButtons'
@@ -68,9 +71,10 @@ export default async function ClientPreciosPage({ searchParams }: { searchParams
     currency: sp.currency || undefined,
   }
 
-  const [{ rows, total, hasMore }, hierarchy] = await Promise.all([
+  const [{ rows, total, hasMore }, hierarchy, insights] = await Promise.all([
     listPriceRecordsFiltered({ ...filters, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE }),
     getPricingTree(),
+    getPriceInsights(filters),
   ])
 
   const hasActiveFilters = Object.values(filters).some(Boolean)
@@ -153,6 +157,15 @@ export default async function ClientPreciosPage({ searchParams }: { searchParams
         </div>
       ) : (
         <>
+          <PriceSummaryCards insights={insights} />
+
+          <MiraChartCard
+            title="Evolución de precios"
+            subtitle="Precio promedio diario según los filtros aplicados"
+          >
+            <PriceEvolutionChart series={insights.series} unit={insights.unit} currency={insights.currency} />
+          </MiraChartCard>
+
           <MiraTable
             headers={[
               'Fecha',

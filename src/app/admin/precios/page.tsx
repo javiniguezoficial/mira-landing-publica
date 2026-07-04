@@ -1,8 +1,9 @@
 import Link from 'next/link'
 import { Plus, Upload, DollarSign, Search, X, ChevronLeft, ChevronRight } from 'lucide-react'
-import { listPriceRecordsFiltered, getPricingTree, type PriceListFilters } from '@/lib/actions/prices'
+import { listPriceRecordsFiltered, getPricingTree, getPriceInsights, type PriceListFilters } from '@/lib/actions/prices'
 import { PricingHierarchySelects } from '@/components/admin/prices/PricingHierarchySelects'
 import { PriceExtraFilters } from '@/components/admin/prices/PriceExtraFilters'
+import { PriceSummaryCards } from '@/components/admin/prices/PriceSummaryCards'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 import { MiraTable, MiraTr, MiraTd } from '@/components/mira/MiraTable'
 import { EmptyState } from '@/components/shared/EmptyState'
@@ -69,9 +70,10 @@ export default async function AdminPreciosPage({ searchParams }: { searchParams:
     currency: sp.currency || undefined,
   }
 
-  const [{ rows, total, hasMore }, hierarchy] = await Promise.all([
+  const [{ rows, total, hasMore }, hierarchy, insights] = await Promise.all([
     listPriceRecordsFiltered({ ...filters, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE }),
     getPricingTree(),
+    getPriceInsights(filters),
   ])
 
   const hasActiveFilters = Object.values(filters).some(Boolean)
@@ -160,6 +162,8 @@ export default async function AdminPreciosPage({ searchParams }: { searchParams:
         </div>
       ) : (
         <>
+          <PriceSummaryCards insights={insights} />
+
           <MiraTable
             headers={[
               'Fecha',
