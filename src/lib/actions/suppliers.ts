@@ -23,7 +23,9 @@ export interface Supplier {
   market_id: string | null     // legacy — enlace a markets (Pricing)
   family: string | null        // legacy — texto libre
   subfamily: string | null     // legacy — texto libre
-  produccion: string | null
+  produccion: string | null       // legacy — texto libre
+  produccion_value: number | null // normalizado (P3) para filtro de rango
+  produccion_unit: string | null  // unidad detectada (kg / TN)
   medida: string | null
   notes: string | null
   is_active: boolean
@@ -61,7 +63,9 @@ export interface SupplierFormData {
   market_id?: string | null  // legacy (Pricing) — no confundir con supplier_market_id
   family?: string             // legacy
   subfamily?: string          // legacy
-  produccion?: string
+  produccion?: string          // legacy texto libre
+  produccion_value?: number | null
+  produccion_unit?: string
   medida?: string
   notes?: string
   is_active?: boolean
@@ -205,6 +209,8 @@ export async function createSupplier(data: SupplierFormData): Promise<SupplierAc
       family:      data.family?.trim() || null,
       subfamily:   data.subfamily?.trim() || null,
       produccion:  data.produccion?.trim() || null,
+      produccion_value: data.produccion_value ?? null,
+      produccion_unit:  data.produccion_unit?.trim() || null,
       medida:      data.medida?.trim() || null,
       notes:       data.notes?.trim() || null,
       is_active:   data.is_active ?? true,
@@ -249,6 +255,8 @@ export async function updateSupplier(id: string, data: SupplierFormData): Promis
       family:      data.family?.trim() || null,
       subfamily:   data.subfamily?.trim() || null,
       produccion:  data.produccion?.trim() || null,
+      produccion_value: data.produccion_value ?? null,
+      produccion_unit:  data.produccion_unit?.trim() || null,
       medida:      data.medida?.trim() || null,
       notes:       data.notes?.trim() || null,
       is_active:   data.is_active ?? true,
@@ -273,6 +281,25 @@ export async function toggleSupplierActive(id: string, is_active: boolean): Prom
   if (error) throw new Error(error.message)
 }
 
+// ── Admin: eliminar proveedor ──────────────────────────────────────────────────
+// Borrado real. La única FK entrante (rfq_responses.supplier_id) es ON DELETE
+// SET NULL, así que no borra RFQs ni respuestas: el snapshot del proveedor en
+// la respuesta se conserva y solo se anula el enlace. Si una futura FK bloquea
+// el borrado (23503), se devuelve un mensaje amigable en vez de romper.
+export async function deleteSupplier(id: string): Promise<SupplierVoidResult> {
+  const supabase = await createClient()
+  await requireAdmin(supabase)
+
+  const { error } = await supabase.from('suppliers').delete().eq('id', id)
+
+  if (error) {
+    if (error.code === '23503') {
+      return { error: 'No se puede eliminar porque tiene datos asociados. Puedes dejarlo inactivo.' }
+    }
+    return { error: error.message }
+  }
+}
+
 // ── Queries ───────────────────────────────────────────────────────────────────
 
 // Columnas explícitas + join a markets — evita select('*') y trae market.name
@@ -281,7 +308,7 @@ export async function toggleSupplierActive(id: string, is_active: boolean): Prom
 const SUPPLIER_SELECT =
   'id, name, email, phone, website, tax_id, country, region, city, postal_code, ' +
   'address, latitude, longitude, category, market_id, family, subfamily, ' +
-  'produccion, medida, notes, is_active, created_at, updated_at, ' +
+  'produccion, produccion_value, produccion_unit, medida, notes, is_active, created_at, updated_at, ' +
   'market:markets(id, name), ' +
   'supplier_market_id, supplier_category_id, supplier_family_id, supplier_subfamily_id, ' +
   'supplier_market:supplier_markets(id, name), ' +
@@ -297,7 +324,9 @@ export interface SupplierFilters {
   region?: string
   city?: string
   category?: string        // legacy (texto libre)
-  produccion?: string
+  produccion?: string      // legacy (texto libre, ilike)
+  produccion_min?: number  // filtro rango sobre produccion_value (P3)
+  produccion_max?: number
   medida?: string
   country?: string
   // Taxonomía propia de proveedores (P2.4)
@@ -345,6 +374,8 @@ export async function listSuppliersFiltered(filters: SupplierFilters = {}): Prom
     p_supplier_category_id:  filters.supplier_category_id || null,
     p_supplier_family_id:    filters.supplier_family_id || null,
     p_supplier_subfamily_id: filters.supplier_subfamily_id || null,
+    p_produccion_min:        filters.produccion_min ?? null,
+    p_produccion_max:        filters.produccion_max ?? null,
   })
 
   if (error || !data) return { suppliers: [], total: 0, hasMore: false }
@@ -371,6 +402,8 @@ export async function listSuppliersFiltered(filters: SupplierFilters = {}): Prom
     family:      (r.family as string | null) ?? null,
     subfamily:   (r.subfamily as string | null) ?? null,
     produccion:  (r.produccion as string | null) ?? null,
+    produccion_value: r.produccion_value != null ? Number(r.produccion_value) : null,
+    produccion_unit:  (r.produccion_unit as string | null) ?? null,
     medida:      (r.medida as string | null) ?? null,
     notes:       (r.notes as string | null) ?? null,
     is_active:   r.is_active as boolean,

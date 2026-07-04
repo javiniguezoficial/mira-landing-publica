@@ -50,7 +50,9 @@ export interface ValidatedSupplierRow {
   category: string | null
   family: string | null
   subfamily: string | null
-  produccion: string | null
+  produccion: string | null       // legacy texto libre
+  produccion_value: number | null // normalizado best-effort (P3)
+  produccion_unit: string | null
   medida: string | null
   notes: string | null
   is_active: boolean

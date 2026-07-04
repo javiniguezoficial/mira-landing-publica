@@ -4,6 +4,7 @@ import { listSuppliersFiltered, getSupplierFilterOptions, type SupplierFilters, 
 import { getActiveSupplierTaxonomyTree } from '@/lib/actions/supplier-taxonomy'
 import { SupplierTaxonomyFilterSelects } from '@/components/admin/suppliers/SupplierTaxonomyFilterSelects'
 import { ToggleActiveSupplier } from './ToggleActiveSupplier'
+import { DeleteSupplierButton } from './DeleteSupplierButton'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 import { MiraTable, MiraTr, MiraTd } from '@/components/mira/MiraTable'
 import { EmptyState } from '@/components/shared/EmptyState'
@@ -32,11 +33,18 @@ type AdminSP = {
   q?: string
   country?: string
   region?: string
-  produccion?: string
+  produccion_min?: string
+  produccion_max?: string
   supplier_market_id?: string
   supplier_category_id?: string
   supplier_family_id?: string
   supplier_subfamily_id?: string
+}
+
+function toNum(s?: string): number | undefined {
+  if (!s || s.trim() === '') return undefined
+  const n = parseFloat(s.replace(',', '.'))
+  return Number.isNaN(n) ? undefined : n
 }
 
 export default async function AdminSuppliersPage({
@@ -49,11 +57,12 @@ export default async function AdminSuppliersPage({
     search: sp.q || undefined,
     country: sp.country || undefined,
     region: sp.region || undefined,
-    produccion: sp.produccion || undefined,
     supplier_market_id: sp.supplier_market_id || undefined,
     supplier_category_id: sp.supplier_category_id || undefined,
     supplier_family_id: sp.supplier_family_id || undefined,
     supplier_subfamily_id: sp.supplier_subfamily_id || undefined,
+    produccion_min: toNum(sp.produccion_min),
+    produccion_max: toNum(sp.produccion_max),
   }
 
   const [{ suppliers, total, hasMore }, taxonomyTree, filterOptions] = await Promise.all([
@@ -134,13 +143,12 @@ export default async function AdminSuppliersPage({
           </div>
 
           <div>
-            <label className={adminLabelCls}>Producción</label>
-            <input
-              name="produccion"
-              defaultValue={sp.produccion ?? ''}
-              placeholder="Ej. 5000"
-              className={miraField}
-            />
+            <label className={adminLabelCls}>Producción (rango)</label>
+            <div className="flex items-center gap-2">
+              <input name="produccion_min" type="number" min="0" step="any" defaultValue={sp.produccion_min ?? ''} placeholder="mín" className={miraField} />
+              <span className="text-slate-400">–</span>
+              <input name="produccion_max" type="number" min="0" step="any" defaultValue={sp.produccion_max ?? ''} placeholder="máx" className={miraField} />
+            </div>
           </div>
         </div>
 
@@ -248,6 +256,7 @@ export default async function AdminSuppliersPage({
                   >
                     Ver →
                   </Link>
+                  <DeleteSupplierButton id={s.id} name={s.name} variant="icon" />
                 </div>
               </MiraTd>
             </MiraTr>

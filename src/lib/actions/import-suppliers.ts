@@ -73,6 +73,30 @@ function matchNode<T extends TaxNode>(rows: T[], input: string): T | undefined {
   return rows.find((r) => norm(r.name) === n || norm(r.slug) === n)
 }
 
+// Parseo best-effort de producción → valor numérico (misma lógica que la
+// migración 017). Formatos ES: "5000", "5.000", "5,5", "12.000 TN". Null si
+// no se puede parsear con seguridad.
+function parseProduccionValue(p: string | null): number | null {
+  if (!p) return null
+  const m = p.match(/[0-9][0-9.,]*/)
+  if (!m) return null
+  const tok = m[0]
+  let normed: string
+  if (tok.includes(',')) normed = tok.replace(/\./g, '').replace(',', '.')       // coma decimal
+  else if (/^\d{1,3}(\.\d{3})+$/.test(tok)) normed = tok.replace(/\./g, '')       // puntos de millar
+  else normed = tok                                                              // entero o decimal con punto
+  const n = parseFloat(normed)
+  return Number.isNaN(n) ? null : n
+}
+
+function parseProduccionUnit(p: string | null): string | null {
+  if (!p) return null
+  const s = p.toLowerCase()
+  if (/tonelad/.test(s) || /(^|[^a-z])(tn|ton)([^a-z]|$)/.test(s)) return 'TN'
+  if (/(^|[^a-z])kg([^a-z]|$)/.test(s) || /kilo/.test(s)) return 'kg'
+  return null
+}
+
 // ── Acción: parsear y validar archivo ─────────────────────────────────────────
 
 export async function parseAndValidateSupplierFile(
@@ -288,6 +312,8 @@ export async function parseAndValidateSupplierFile(
       family:      familyInputRaw || null,
       subfamily:   subfamilyInputRaw || null,
       produccion:  cellStr(raw['produccion']) || null,
+      produccion_value: parseProduccionValue(cellStr(raw['produccion']) || null),
+      produccion_unit:  parseProduccionUnit(cellStr(raw['produccion']) || null),
       medida:      cellStr(raw['medida']) || null,
       notes:       cellStr(raw['notas']) || null,
       is_active:   parseActivo(cellStr(raw['activo'])),
@@ -337,6 +363,8 @@ export async function importSuppliers(
     family:      r.family,
     subfamily:   r.subfamily,
     produccion:  r.produccion,
+    produccion_value: r.produccion_value,
+    produccion_unit:  r.produccion_unit,
     medida:      r.medida,
     notes:       r.notes,
     is_active:   r.is_active,

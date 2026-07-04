@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { ArrowLeft, Pencil, Truck, ListTree } from 'lucide-react'
 import { getSupplier } from '@/lib/actions/suppliers'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
+import { DeleteSupplierButton } from '../DeleteSupplierButton'
 import { miraBtn } from '@/lib/miraButtons'
 
 function Field({ label, value }: { label: string; value?: string | null }) {
@@ -44,6 +45,7 @@ export default async function AdminSupplierDetailPage({ params }: { params: Prom
                 <Pencil size={12} />
                 Editar
               </Link>
+              <DeleteSupplierButton id={supplier.id} name={supplier.name} redirectTo="/admin/proveedores" />
             </>
           }
         />
@@ -86,7 +88,12 @@ export default async function AdminSupplierDetailPage({ params }: { params: Prom
           <Field label="Provincia" value={supplier.region} />
           <Field label="Localidad" value={supplier.city} />
           <Field label="Código postal" value={supplier.postal_code} />
-          <Field label="Producción" value={supplier.produccion} />
+          <Field
+            label="Producción"
+            value={supplier.produccion_value != null
+              ? `${supplier.produccion_value.toLocaleString('es-ES')}${supplier.produccion_unit ? ` ${supplier.produccion_unit}` : ''}`
+              : supplier.produccion}
+          />
           <Field label="Medida" value={supplier.medida} />
           <div className="col-span-2">
             <Field label="Dirección" value={supplier.address} />

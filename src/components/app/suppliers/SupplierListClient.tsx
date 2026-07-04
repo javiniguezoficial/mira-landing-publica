@@ -34,11 +34,20 @@ interface FilterValues {
   q?: string
   country?: string
   region?: string
-  produccion?: string
+  produccion_min?: string
+  produccion_max?: string
   supplier_market_id?: string
   supplier_category_id?: string
   supplier_family_id?: string
   supplier_subfamily_id?: string
+}
+
+// Producción mostrada: valor normalizado + unidad, o fallback al texto legacy.
+function produccionLabel(s: Supplier): string | null {
+  if (s.produccion_value != null) {
+    return `${s.produccion_value.toLocaleString('es-ES')}${s.produccion_unit ? ` ${s.produccion_unit}` : ''}`
+  }
+  return s.produccion
 }
 
 interface Props {
@@ -91,7 +100,7 @@ export function SupplierListClient({
     market: s.market ?? null,
     family: s.family,
     subfamily: s.subfamily,
-    produccion: s.produccion,
+    produccion: produccionLabel(s),
     medida: s.medida,
     latitude: s.latitude,
     longitude: s.longitude,
@@ -148,14 +157,29 @@ export function SupplierListClient({
           </div>
 
           <div>
-            <label className={miraLabel}>Producción</label>
-            <input
-              name="produccion"
-              defaultValue={filters.produccion ?? ''}
-              placeholder="Ej. 5000"
-              className={miraField}
-            />
-            <p className="mt-1 text-[11px] text-slate-400">Búsqueda por texto — no es un rango exacto.</p>
+            <label className={miraLabel}>Producción (rango)</label>
+            <div className="flex items-center gap-2">
+              <input
+                name="produccion_min"
+                type="number"
+                min="0"
+                step="any"
+                defaultValue={filters.produccion_min ?? ''}
+                placeholder="mín"
+                className={miraField}
+              />
+              <span className="text-slate-400">–</span>
+              <input
+                name="produccion_max"
+                type="number"
+                min="0"
+                step="any"
+                defaultValue={filters.produccion_max ?? ''}
+                placeholder="máx"
+                className={miraField}
+              />
+            </div>
+            <p className="mt-1 text-[11px] text-slate-400">Filtra por producción numérica normalizada.</p>
           </div>
         </div>
 
@@ -285,9 +309,9 @@ export function SupplierListClient({
                       </span>
                     )}
                   </div>
-                  {s.produccion && (
+                  {produccionLabel(s) && (
                     <p className="mt-1 text-[11px] text-slate-400">
-                      Producción: {s.produccion}{s.medida ? ` · ${s.medida}` : ''}
+                      Producción: {produccionLabel(s)}{s.medida ? ` · ${s.medida}` : ''}
                     </p>
                   )}
                   {(s.email || s.phone) && (

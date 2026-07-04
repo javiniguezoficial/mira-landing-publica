@@ -35,6 +35,8 @@ const EMPTY: SupplierFormData = {
   family: '',
   subfamily: '',
   produccion: '',
+  produccion_value: null,
+  produccion_unit: '',
   medida: '',
   notes: '',
   is_active: true,
@@ -169,12 +171,30 @@ export function SupplierForm({ defaultValues, markets = [], taxonomyTree, onSubm
           <input value={form.postal_code ?? ''} onChange={(e) => set('postal_code', e.target.value)} className={inputCls} placeholder="47400" />
         </Field>
 
-        <Field label="Producción">
-          <input value={form.produccion ?? ''} onChange={(e) => set('produccion', e.target.value)} className={inputCls} placeholder="Capacidad / producción" />
+        <Field label="Producción (texto)">
+          <input value={form.produccion ?? ''} onChange={(e) => set('produccion', e.target.value)} className={inputCls} placeholder="Ej. 5.000 TN (texto libre)" />
         </Field>
 
         <Field label="Medida">
           <input value={form.medida ?? ''} onChange={(e) => set('medida', e.target.value)} className={inputCls} placeholder="kg, TN, litro…" />
+        </Field>
+
+        <Field label="Producción (valor)">
+          <input
+            type="number" step="any" min="0"
+            value={form.produccion_value ?? ''}
+            onChange={(e) => set('produccion_value', e.target.value === '' ? null : parseFloat(e.target.value))}
+            className={inputCls}
+            placeholder="5000"
+          />
+        </Field>
+
+        <Field label="Unidad de producción">
+          <select value={form.produccion_unit ?? ''} onChange={(e) => set('produccion_unit', e.target.value)} className={inputCls}>
+            <option value="">—</option>
+            <option value="kg">kg</option>
+            <option value="TN">TN</option>
+          </select>
         </Field>
 
         <div className="col-span-2">

@@ -12,12 +12,19 @@ type SP = {
   q?: string
   country?: string
   region?: string
-  produccion?: string
+  produccion_min?: string
+  produccion_max?: string
   supplier_market_id?: string
   supplier_category_id?: string
   supplier_family_id?: string
   supplier_subfamily_id?: string
   page?: string
+}
+
+function toNum(s?: string): number | undefined {
+  if (!s || s.trim() === '') return undefined
+  const n = parseFloat(s.replace(',', '.'))
+  return Number.isNaN(n) ? undefined : n
 }
 
 function buildUrl(base: string, params: Record<string, string | number | undefined>) {
@@ -42,7 +49,8 @@ export default async function ClientSuppliersPage({
     q: sp.q || undefined,
     country: sp.country || undefined,
     region: sp.region || undefined,
-    produccion: sp.produccion || undefined,
+    produccion_min: sp.produccion_min || undefined,
+    produccion_max: sp.produccion_max || undefined,
     supplier_market_id: sp.supplier_market_id || undefined,
     supplier_category_id: sp.supplier_category_id || undefined,
     supplier_family_id: sp.supplier_family_id || undefined,
@@ -54,7 +62,8 @@ export default async function ClientSuppliersPage({
       search: filterParams.q,        // SupplierFilters usa 'search', la URL usa 'q'
       country: filterParams.country,
       region: filterParams.region,
-      produccion: filterParams.produccion,
+      produccion_min: toNum(filterParams.produccion_min),
+      produccion_max: toNum(filterParams.produccion_max),
       supplier_market_id: filterParams.supplier_market_id,
       supplier_category_id: filterParams.supplier_category_id,
       supplier_family_id: filterParams.supplier_family_id,

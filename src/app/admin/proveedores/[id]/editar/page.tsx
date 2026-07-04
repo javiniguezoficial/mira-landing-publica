@@ -45,6 +45,8 @@ export default async function EditSupplierPage({ params }: { params: Promise<{ i
             family:      supplier.family ?? '',
             subfamily:   supplier.subfamily ?? '',
             produccion:  supplier.produccion ?? '',
+            produccion_value: supplier.produccion_value,
+            produccion_unit:  supplier.produccion_unit ?? '',
             medida:      supplier.medida ?? '',
             notes:       supplier.notes ?? '',
             is_active:   supplier.is_active,
