@@ -1,8 +1,9 @@
 import Link from 'next/link'
 import { Plus, Truck, Search, X, Upload, ListTree } from 'lucide-react'
-import { listSuppliersFiltered, getSupplierFilterOptions, type SupplierFilters, type Supplier } from '@/lib/actions/suppliers'
+import { listSuppliersFiltered, getSupplierFilterOptions, getSupplierProductionBounds, type SupplierFilters, type Supplier } from '@/lib/actions/suppliers'
 import { getActiveSupplierTaxonomyTree } from '@/lib/actions/supplier-taxonomy'
 import { SupplierTaxonomyFilterSelects } from '@/components/admin/suppliers/SupplierTaxonomyFilterSelects'
+import { ProductionRangeFilter } from '@/components/app/suppliers/ProductionRangeFilter'
 import { ToggleActiveSupplier } from './ToggleActiveSupplier'
 import { DeleteSupplierButton } from './DeleteSupplierButton'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
@@ -65,10 +66,11 @@ export default async function AdminSuppliersPage({
     produccion_max: toNum(sp.produccion_max),
   }
 
-  const [{ suppliers, total, hasMore }, taxonomyTree, filterOptions] = await Promise.all([
+  const [{ suppliers, total, hasMore }, taxonomyTree, filterOptions, productionBounds] = await Promise.all([
     listSuppliersFiltered(filters),
     getActiveSupplierTaxonomyTree(),
     getSupplierFilterOptions(false),
+    getSupplierProductionBounds(),
   ])
 
   const hasActiveFilters = Object.values(filters).some(Boolean)
@@ -142,14 +144,12 @@ export default async function AdminSuppliersPage({
             </select>
           </div>
 
-          <div>
-            <label className={adminLabelCls}>Producción (rango)</label>
-            <div className="flex items-center gap-2">
-              <input name="produccion_min" type="number" min="0" step="any" defaultValue={sp.produccion_min ?? ''} placeholder="mín" className={miraField} />
-              <span className="text-slate-400">–</span>
-              <input name="produccion_max" type="number" min="0" step="any" defaultValue={sp.produccion_max ?? ''} placeholder="máx" className={miraField} />
-            </div>
-          </div>
+          <ProductionRangeFilter
+            max={productionBounds.max}
+            initialMin={sp.produccion_min}
+            initialMax={sp.produccion_max}
+            labelClassName={adminLabelCls}
+          />
         </div>
 
         {/* Fila inferior — taxonomía propia de proveedores (selects encadenados) */}
@@ -206,61 +206,66 @@ export default async function AdminSuppliersPage({
           headers={[
             'Nombre',
             'Clasificación',
-            'Provincia · Localidad',
+            'Ubicación',
             'Contacto',
-            'Alta',
-            'Estado',
-            { label: '', align: 'right' },
+            { label: 'Estado / Acciones', align: 'right' },
           ]}
         >
-          {suppliers.map((s) => (
-            <MiraTr key={s.id}>
-              <MiraTd>
-                <Link
-                  href={`/admin/proveedores/${s.id}`}
-                  className="font-bold text-mira-ink hover:text-mira-magenta"
-                >
-                  {s.name}
-                </Link>
-                {s.tax_id && <p className="text-xs text-slate-400">{s.tax_id}</p>}
-              </MiraTd>
-              <MiraTd>
-                {taxonomyBreadcrumb(s) ? (
-                  <div className="text-sm font-medium text-mira-ink">{taxonomyBreadcrumb(s)}</div>
-                ) : legacyLabel(s) ? (
-                  <div className="text-xs text-slate-400">
-                    <span className="mr-1 rounded bg-slate-100 px-1 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">legacy</span>
-                    {legacyLabel(s)}
-                  </div>
-                ) : (
-                  <span className="text-slate-300">Sin clasificar</span>
-                )}
-              </MiraTd>
-              <MiraTd>
-                <div className="text-sm text-slate-600">{s.region ?? '—'}</div>
-                {s.city && <div className="text-xs text-slate-400">{s.city}</div>}
-              </MiraTd>
-              <MiraTd>
-                <div className="text-sm text-slate-600">{s.email || '—'}</div>
-                {s.phone && <div className="text-xs text-slate-400">{s.phone}</div>}
-              </MiraTd>
-              <MiraTd className="text-slate-500">{formatDate(s.created_at)}</MiraTd>
-              <MiraTd>
-                <ToggleActiveSupplier id={s.id} isActive={s.is_active} />
-              </MiraTd>
-              <MiraTd align="right">
-                <div className="flex items-center justify-end gap-2">
+          {suppliers.map((s) => {
+            const clasif = taxonomyBreadcrumb(s) ?? legacyLabel(s)
+            const isLegacy = !taxonomyBreadcrumb(s) && !!legacyLabel(s)
+            return (
+              <MiraTr key={s.id}>
+                <MiraTd className="max-w-[200px]">
                   <Link
                     href={`/admin/proveedores/${s.id}`}
-                    className="whitespace-nowrap text-xs font-bold text-mira-magenta hover:underline"
+                    className="block truncate font-bold text-mira-ink hover:text-mira-magenta"
+                    title={s.name}
                   >
-                    Ver →
+                    {s.name}
                   </Link>
-                  <DeleteSupplierButton id={s.id} name={s.name} variant="icon" />
-                </div>
-              </MiraTd>
-            </MiraTr>
-          ))}
+                  {s.tax_id && <p className="truncate text-xs text-slate-400">{s.tax_id}</p>}
+                </MiraTd>
+                <MiraTd className="max-w-[240px]">
+                  {clasif ? (
+                    <div className="flex items-center gap-1.5">
+                      {isLegacy && (
+                        <span className="shrink-0 rounded bg-slate-100 px-1 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">legacy</span>
+                      )}
+                      <span className={`truncate text-sm ${isLegacy ? 'text-slate-500' : 'font-medium text-mira-ink'}`} title={clasif}>
+                        {clasif}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-slate-300">Sin clasificar</span>
+                  )}
+                </MiraTd>
+                <MiraTd className="max-w-[160px]">
+                  <div className="truncate text-sm text-slate-600">{s.region ?? '—'}</div>
+                  {s.city && <div className="truncate text-xs text-slate-400">{s.city}</div>}
+                </MiraTd>
+                <MiraTd className="max-w-[200px]">
+                  <div className="truncate text-sm text-slate-600" title={s.email ?? undefined}>{s.email || '—'}</div>
+                  {s.phone && <div className="truncate text-xs text-slate-400">{s.phone}</div>}
+                </MiraTd>
+                <MiraTd align="right">
+                  <div className="flex items-center justify-end gap-3">
+                    <div className="flex flex-col items-end gap-1">
+                      <ToggleActiveSupplier id={s.id} isActive={s.is_active} />
+                      <span className="whitespace-nowrap text-[10px] text-slate-400">Alta {formatDate(s.created_at)}</span>
+                    </div>
+                    <Link
+                      href={`/admin/proveedores/${s.id}`}
+                      className="whitespace-nowrap text-xs font-bold text-mira-magenta hover:underline"
+                    >
+                      Ver →
+                    </Link>
+                    <DeleteSupplierButton id={s.id} name={s.name} variant="icon" />
+                  </div>
+                </MiraTd>
+              </MiraTr>
+            )
+          })}
         </MiraTable>
       )}
     </div>

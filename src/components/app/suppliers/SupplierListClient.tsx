@@ -9,6 +9,7 @@ import type { SupplierMarketNode } from '@/lib/actions/supplier-taxonomy'
 import type { MapSupplier } from './SupplierMap'
 import { MiraViewToggle } from '@/components/mira/MiraViewToggle'
 import { SupplierTaxonomyFilterSelects } from '@/components/admin/suppliers/SupplierTaxonomyFilterSelects'
+import { ProductionRangeFilter } from './ProductionRangeFilter'
 import { miraField, miraLabel, miraBtn } from '@/lib/miraButtons'
 
 // Breadcrumb de la taxonomía propia de proveedores, o null si no está clasificado.
@@ -62,6 +63,7 @@ interface Props {
   countries: string[]
   regions: string[]
   taxonomyTree: SupplierMarketNode[]
+  productionMax: number
 }
 
 export function SupplierListClient({
@@ -76,6 +78,7 @@ export function SupplierListClient({
   countries,
   regions,
   taxonomyTree,
+  productionMax,
 }: Props) {
   // Solo el toggle mapa/lista es estado local — el filtrado es 100% server-side
   const [view, setView] = useState<'list' | 'map'>('map')
@@ -156,31 +159,11 @@ export function SupplierListClient({
             </select>
           </div>
 
-          <div>
-            <label className={miraLabel}>Producción (rango)</label>
-            <div className="flex items-center gap-2">
-              <input
-                name="produccion_min"
-                type="number"
-                min="0"
-                step="any"
-                defaultValue={filters.produccion_min ?? ''}
-                placeholder="mín"
-                className={miraField}
-              />
-              <span className="text-slate-400">–</span>
-              <input
-                name="produccion_max"
-                type="number"
-                min="0"
-                step="any"
-                defaultValue={filters.produccion_max ?? ''}
-                placeholder="máx"
-                className={miraField}
-              />
-            </div>
-            <p className="mt-1 text-[11px] text-slate-400">Filtra por producción numérica normalizada.</p>
-          </div>
+          <ProductionRangeFilter
+            max={productionMax}
+            initialMin={filters.produccion_min}
+            initialMax={filters.produccion_max}
+          />
         </div>
 
         {/* Fila inferior — taxonomía propia de proveedores (selects encadenados) */}

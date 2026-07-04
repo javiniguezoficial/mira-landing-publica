@@ -444,6 +444,24 @@ export async function getSupplier(id: string): Promise<Supplier | null> {
   return data as unknown as Supplier
 }
 
+// ── Límite superior de producción (para el slider de rango) ───────────────────
+// Consulta ligera: 1 sola fila (el mayor produccion_value). No carga todos los
+// proveedores. Devuelve { min: 0, max } con un fallback si no hay datos.
+export async function getSupplierProductionBounds(): Promise<{ min: number; max: number }> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('suppliers')
+    .select('produccion_value')
+    .not('produccion_value', 'is', null)
+    .order('produccion_value', { ascending: false })
+    .limit(1)
+
+  const raw = data?.[0]?.produccion_value != null ? Number(data[0].produccion_value) : 0
+  // Redondea hacia arriba a un valor "bonito" para el tope del slider.
+  const max = raw > 0 ? Math.max(100, Math.ceil(raw / 100) * 100) : 100000
+  return { min: 0, max }
+}
+
 // ── Opciones de filtro (País / Provincia) ─────────────────────────────────────
 
 export interface SupplierFilterOptions {

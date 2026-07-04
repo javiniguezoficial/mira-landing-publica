@@ -1,5 +1,5 @@
 import { MapPin } from 'lucide-react'
-import { listSuppliersFiltered, getSupplierFilterOptions } from '@/lib/actions/suppliers'
+import { listSuppliersFiltered, getSupplierFilterOptions, getSupplierProductionBounds } from '@/lib/actions/suppliers'
 import { getSupplierTaxonomyTreeForClient } from '@/lib/actions/supplier-taxonomy'
 import { SupplierListClient } from '@/components/app/suppliers/SupplierListClient'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
@@ -76,6 +76,8 @@ export default async function ClientSuppliersPage({
     getSupplierTaxonomyTreeForClient(),
   ])
 
+  const productionBounds = await getSupplierProductionBounds()
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const prevUrl = page > 1 ? buildUrl('/app/proveedores', { ...filterParams, page: page - 1 }) : null
   const nextUrl = hasMore ? buildUrl('/app/proveedores', { ...filterParams, page: page + 1 }) : null
@@ -104,6 +106,7 @@ export default async function ClientSuppliersPage({
         countries={filterOptions.countries}
         regions={filterOptions.regions}
         taxonomyTree={taxonomyTree}
+        productionMax={productionBounds.max}
       />
     </div>
   )
