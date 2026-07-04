@@ -1,9 +1,10 @@
 import Link from 'next/link'
-import { TrendingUp, Package, ArrowRight } from 'lucide-react'
+import { TrendingUp, Package, ArrowRight, DollarSign } from 'lucide-react'
 import { getStrategicMarketGroups } from '@/lib/queries/markets'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 import { MiraCategoryCard } from '@/components/mira/MiraCategoryCard'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { miraBtn } from '@/lib/miraButtons'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,6 +19,11 @@ export default async function MarketIntelligentPage() {
         icon={TrendingUp}
         title="Market Intelligence"
         subtitle="Mercados y referencias disponibles en tu plan"
+        actions={
+          <Link href="/app/market-intelligent/precios" className={miraBtn.primary}>
+            <DollarSign size={14} /> Ver y filtrar precios
+          </Link>
+        }
       />
 
       {!hasCategories ? (

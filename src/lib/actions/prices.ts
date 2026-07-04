@@ -158,3 +158,190 @@ export async function deletePriceRecord(id: string): Promise<void> {
     .from('product_price_records').delete().eq('id', id)
   if (error) throw new Error(error.message)
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PRECIOS GLOBAL — jerarquía Pricing, alta manual y listado filtrado (P2.6/PR1/PR2)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── Jerarquía Pricing (activa) para selects encadenados ────────────────────────
+// Arrays planos con referencia al padre → el encadenado se hace en cliente y
+// "Todos" muestra todos los hijos del ancestro seleccionado. Usa createClient
+// (no requireAdmin) + is_active: sirve tanto para admin como para cliente (RLS
+// de strategic_markets/market_categories/markets/products filtra por cadena
+// activa en el área cliente).
+export interface PricingHierarchy {
+  strategicMarkets: { id: string; name: string }[]
+  categories: { id: string; name: string; strategic_market_id: string | null }[]
+  markets: { id: string; name: string; category_id: string }[]
+  products: { id: string; name: string; unit: string; market_id: string }[]
+}
+
+export async function getPricingTree(): Promise<PricingHierarchy> {
+  const supabase = await createClient()
+  const [sm, cat, mk, pr] = await Promise.all([
+    supabase.from('strategic_markets').select('id, name').eq('is_active', true).order('sort_order').order('name'),
+    supabase.from('market_categories').select('id, name, strategic_market_id').eq('is_active', true).order('sort_order').order('name'),
+    supabase.from('markets').select('id, name, category_id').eq('is_active', true).order('name'),
+    supabase.from('products').select('id, name, unit, market_id').eq('is_active', true).order('name'),
+  ])
+  return {
+    strategicMarkets: (sm.data ?? []) as PricingHierarchy['strategicMarkets'],
+    categories: (cat.data ?? []) as PricingHierarchy['categories'],
+    markets: (mk.data ?? []) as PricingHierarchy['markets'],
+    products: (pr.data ?? []) as PricingHierarchy['products'],
+  }
+}
+
+// ── Listado global de precios con filtros server-side ──────────────────────────
+// createClient (no requireAdmin): admin ve todo (policy admin_all) y cliente solo
+// precios de cadena activa (policy client_read). Filtra por jerarquía Pricing vía
+// embeds !inner, rango de fechas, país y moneda. Paginado con count exact.
+export interface PriceListFilters {
+  strategic_market_id?: string
+  category_id?: string
+  market_id?: string
+  product_id?: string
+  date_from?: string
+  date_to?: string
+  country?: string
+  currency?: string
+  limit?: number
+  offset?: number
+}
+
+export interface PriceListRow {
+  id: string
+  price: number
+  unit: string
+  currency: string
+  country: string
+  region: string | null
+  recorded_at: string
+  min_price: number | null
+  max_price: number | null
+  product: { id: string; name: string; slug: string; lonja: string | null; variedad: string | null; calibre: string | null; incoterm: string | null; tipo: string | null } | null
+  market: { id: string; name: string } | null
+  category: { id: string; name: string } | null
+  strategic: { id: string; name: string } | null
+}
+
+export interface PriceListPage {
+  rows: PriceListRow[]
+  total: number
+  hasMore: boolean
+}
+
+export async function listPriceRecordsFiltered(filters: PriceListFilters = {}): Promise<PriceListPage> {
+  const supabase = await createClient()
+  const limit = Math.min(filters.limit ?? 50, 500)
+  const offset = filters.offset ?? 0
+
+  let query = supabase
+    .from('product_price_records')
+    .select(`
+      id, price, unit, currency, country, region, recorded_at, min_price, max_price,
+      product:products!inner(
+        id, name, slug, lonja, variedad, calibre, incoterm, tipo, market_id,
+        market:markets!inner(
+          id, name, category_id,
+          category:market_categories!inner(
+            id, name, strategic_market_id,
+            strategic_market:strategic_markets(id, name)
+          )
+        )
+      )
+    `, { count: 'exact' })
+    .order('recorded_at', { ascending: false })
+
+  if (filters.product_id)          query = query.eq('product_id', filters.product_id)
+  if (filters.market_id)           query = query.eq('product.market_id', filters.market_id)
+  if (filters.category_id)         query = query.eq('product.market.category_id', filters.category_id)
+  if (filters.strategic_market_id) query = query.eq('product.market.category.strategic_market_id', filters.strategic_market_id)
+  if (filters.country)             query = query.eq('country', filters.country)
+  if (filters.currency)            query = query.eq('currency', filters.currency)
+  if (filters.date_from)           query = query.gte('recorded_at', filters.date_from)
+  if (filters.date_to)             query = query.lte('recorded_at', filters.date_to)
+
+  query = query.range(offset, offset + limit - 1)
+
+  const { data, error, count } = await query
+  if (error || !data) return { rows: [], total: 0, hasMore: false }
+
+  const rows: PriceListRow[] = (data as Array<Record<string, any>>).map((r) => {
+    const product = Array.isArray(r.product) ? r.product[0] : r.product
+    const market = product && (Array.isArray(product.market) ? product.market[0] : product.market)
+    const category = market && (Array.isArray(market.category) ? market.category[0] : market.category)
+    const strategic = category && (Array.isArray(category.strategic_market) ? category.strategic_market[0] : category.strategic_market)
+    return {
+      id: r.id,
+      price: parseFloat(r.price),
+      unit: r.unit,
+      currency: r.currency,
+      country: r.country,
+      region: r.region ?? null,
+      recorded_at: r.recorded_at,
+      min_price: r.min_price != null ? parseFloat(r.min_price) : null,
+      max_price: r.max_price != null ? parseFloat(r.max_price) : null,
+      product: product ? { id: product.id, name: product.name, slug: product.slug, lonja: product.lonja ?? null, variedad: product.variedad ?? null, calibre: product.calibre ?? null, incoterm: product.incoterm ?? null, tipo: product.tipo ?? null } : null,
+      market: market ? { id: market.id, name: market.name } : null,
+      category: category ? { id: category.id, name: category.name } : null,
+      strategic: strategic ? { id: strategic.id, name: strategic.name } : null,
+    }
+  })
+
+  const total = count ?? 0
+  return { rows, total, hasMore: total > offset + limit }
+}
+
+// ── Alta manual global de precio (patrón { error }, no throw) ──────────────────
+export interface ManualPriceFormData {
+  recorded_at: string
+  price: number
+  unit: string
+  currency?: string
+  country?: string
+  region?: string
+  min_price?: number | null
+  max_price?: number | null
+  avg_price?: number | null
+  source_name?: string   // → metadata.source_name
+  notes?: string         // → metadata.notes
+}
+
+export async function createPriceManual(
+  productId: string,
+  form: ManualPriceFormData,
+): Promise<{ id: string } | { error: string }> {
+  const supabase = await requireAdmin()
+
+  if (!productId) return { error: 'Debes seleccionar una referencia / producto' }
+  if (!form.recorded_at) return { error: 'La fecha es obligatoria' }
+  if (form.price == null || Number.isNaN(form.price)) return { error: 'El precio es obligatorio y debe ser numérico' }
+  if (form.price < 0) return { error: 'El precio no puede ser negativo' }
+  if (!form.unit?.trim()) return { error: 'La unidad es obligatoria' }
+
+  const metadata: Record<string, unknown> = {}
+  if (form.source_name?.trim()) metadata.source_name = form.source_name.trim()
+  if (form.notes?.trim()) metadata.notes = form.notes.trim()
+
+  const { data, error } = await supabase
+    .from('product_price_records')
+    .insert({
+      product_id:  productId,
+      price:       form.price,
+      unit:        form.unit.trim(),
+      currency:    form.currency?.trim() || 'EUR',
+      country:     form.country?.trim() || 'ES',
+      region:      form.region?.trim() || null,
+      recorded_at: form.recorded_at,
+      min_price:   form.min_price ?? null,
+      max_price:   form.max_price ?? null,
+      avg_price:   form.avg_price ?? null,
+      metadata:    Object.keys(metadata).length ? metadata : null,
+    })
+    .select('id')
+    .single()
+
+  if (error) return { error: error.message }
+  return { id: data.id }
+}
