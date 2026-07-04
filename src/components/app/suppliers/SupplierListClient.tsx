@@ -3,11 +3,26 @@
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useState } from 'react'
-import { MapPin, List, Building2, Mail, Phone, Tag, Search, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { MapPin, List, Building2, Mail, Phone, Tag, Search, X, ChevronLeft, ChevronRight, ListTree } from 'lucide-react'
 import type { Supplier } from '@/lib/actions/suppliers'
+import type { SupplierMarketNode } from '@/lib/actions/supplier-taxonomy'
 import type { MapSupplier } from './SupplierMap'
 import { MiraViewToggle } from '@/components/mira/MiraViewToggle'
+import { SupplierTaxonomyFilterSelects } from '@/components/admin/suppliers/SupplierTaxonomyFilterSelects'
 import { miraField, miraLabel, miraBtn } from '@/lib/miraButtons'
+
+// Breadcrumb de la taxonomía propia de proveedores, o null si no está clasificado.
+function taxonomyBreadcrumb(s: Supplier): string | null {
+  if (!s.supplier_market) return null
+  return [s.supplier_market?.name, s.supplier_category?.name, s.supplier_family?.name, s.supplier_subfamily?.name]
+    .filter(Boolean).join(' › ')
+}
+
+// Clasificación legacy (Pricing / texto libre), o null si no hay nada.
+function legacyLabel(s: Supplier): string | null {
+  const parts = [s.market?.name, s.category, s.family, s.subfamily].filter(Boolean)
+  return parts.length ? parts.join(' · ') : null
+}
 
 // Dynamic import con ssr:false — Leaflet usa window/document directamente
 const SupplierMap = dynamic(
@@ -19,11 +34,11 @@ interface FilterValues {
   q?: string
   country?: string
   region?: string
-  market_id?: string
-  category?: string
-  family?: string
-  subfamily?: string
   produccion?: string
+  supplier_market_id?: string
+  supplier_category_id?: string
+  supplier_family_id?: string
+  supplier_subfamily_id?: string
 }
 
 interface Props {
@@ -34,10 +49,10 @@ interface Props {
   totalPages: number
   prevUrl: string | null
   nextUrl: string | null
-  markets: { id: string; name: string }[]
   filters: FilterValues
   countries: string[]
   regions: string[]
+  taxonomyTree: SupplierMarketNode[]
 }
 
 export function SupplierListClient({
@@ -48,10 +63,10 @@ export function SupplierListClient({
   totalPages,
   prevUrl,
   nextUrl,
-  markets,
   filters,
   countries,
   regions,
+  taxonomyTree,
 }: Props) {
   // Solo el toggle mapa/lista es estado local — el filtrado es 100% server-side
   const [view, setView] = useState<'list' | 'map'>('map')
@@ -80,6 +95,8 @@ export function SupplierListClient({
     medida: s.medida,
     latitude: s.latitude,
     longitude: s.longitude,
+    taxonomy: taxonomyBreadcrumb(s),
+    legacy: legacyLabel(s),
   }))
 
   return (
@@ -142,49 +159,17 @@ export function SupplierListClient({
           </div>
         </div>
 
-        {/* Fila inferior */}
-        <div className="grid gap-3 border-t border-mira-line pt-4 sm:grid-cols-2 lg:grid-cols-4">
-          {markets.length > 0 && (
-            <div>
-              <label className={miraLabel}>Mercado</label>
-              <select name="market_id" defaultValue={filters.market_id ?? ''} className={miraField}>
-                <option value="">Todos</option>
-                {markets.map((m) => (
-                  <option key={m.id} value={m.id}>{m.name}</option>
-                ))}
-              </select>
+        {/* Fila inferior — taxonomía propia de proveedores (selects encadenados) */}
+        <div className="border-t border-mira-line pt-4">
+          {taxonomyTree.length === 0 ? (
+            <p className="text-xs text-slate-400">
+              Todavía no hay taxonomía de proveedores disponible para filtrar.
+            </p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <SupplierTaxonomyFilterSelects tree={taxonomyTree} values={filters} />
             </div>
           )}
-
-          <div>
-            <label className={miraLabel}>Categoría</label>
-            <input
-              name="category"
-              defaultValue={filters.category ?? ''}
-              placeholder="Categoría"
-              className={miraField}
-            />
-          </div>
-
-          <div>
-            <label className={miraLabel}>Familia</label>
-            <input
-              name="family"
-              defaultValue={filters.family ?? ''}
-              placeholder="Familia"
-              className={miraField}
-            />
-          </div>
-
-          <div>
-            <label className={miraLabel}>Subfamilia</label>
-            <input
-              name="subfamily"
-              defaultValue={filters.subfamily ?? ''}
-              placeholder="Subfamilia"
-              className={miraField}
-            />
-          </div>
         </div>
 
         {/* Acciones del formulario */}
@@ -284,21 +269,15 @@ export function SupplierListClient({
                     )}
                   </div>
                   <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                    {s.market?.name && (
+                    {taxonomyBreadcrumb(s) ? (
                       <span className="inline-flex items-center gap-1 rounded-md bg-mira-magenta-soft px-2 py-0.5 text-[11px] font-semibold text-mira-magenta">
-                        {s.market.name}
+                        <ListTree size={10} /> {taxonomyBreadcrumb(s)}
                       </span>
-                    )}
-                    {s.category && (
-                      <span className="inline-flex items-center gap-1 rounded-md bg-mira-canvas px-2 py-0.5 text-[11px] font-semibold text-slate-600">
-                        <Tag size={10} /> {s.category}
+                    ) : legacyLabel(s) ? (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-mira-canvas px-2 py-0.5 text-[11px] font-semibold text-slate-500">
+                        <Tag size={10} /> {legacyLabel(s)}
                       </span>
-                    )}
-                    {(s.family || s.subfamily) && (
-                      <span className="inline-flex items-center gap-1 rounded-md bg-mira-canvas px-2 py-0.5 text-[11px] font-semibold text-slate-600">
-                        {[s.family, s.subfamily].filter(Boolean).join(' · ')}
-                      </span>
-                    )}
+                    ) : null}
                     {(s.city || s.country) && (
                       <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">
                         <MapPin size={10} />

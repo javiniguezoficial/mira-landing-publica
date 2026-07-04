@@ -36,6 +36,9 @@ export interface MapSupplier {
   medida: string | null
   latitude: number
   longitude: number
+  // Clasificación: breadcrumb de taxonomía propia (P2) y fallback legacy
+  taxonomy?: string | null
+  legacy?: string | null
 }
 
 interface Props {
@@ -124,19 +127,12 @@ export function SupplierMap({ suppliers }: Props) {
                 {/* Nombre */}
                 <p className="text-sm font-bold text-slate-800 leading-tight">{s.name}</p>
 
-                {/* Mercado / Categoría */}
-                {(s.market?.name || s.category) && (
-                  <p className="text-xs text-mira-magenta font-semibold">
-                    {[s.market?.name, s.category].filter(Boolean).join(' · ')}
-                  </p>
-                )}
-
-                {/* Familia / Subfamilia */}
-                {(s.family || s.subfamily) && (
-                  <p className="text-xs text-slate-500">
-                    {[s.family, s.subfamily].filter(Boolean).join(' · ')}
-                  </p>
-                )}
+                {/* Clasificación: taxonomía propia (P2) o fallback legacy */}
+                {s.taxonomy ? (
+                  <p className="text-xs text-mira-magenta font-semibold">{s.taxonomy}</p>
+                ) : s.legacy ? (
+                  <p className="text-xs text-slate-500">{s.legacy}</p>
+                ) : null}
 
                 {/* Localidad / Provincia */}
                 {(s.city || s.region) && (

@@ -252,7 +252,7 @@ export function ImportSupplierForm() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-slate-100">
-                  {['Fila', 'Nombre', 'Provincia', 'Localidad', 'Mercado', 'Familia', 'Activo'].map(h => (
+                  {['Fila', 'Nombre', 'Provincia', 'Localidad', 'Taxonomía', 'Activo'].map(h => (
                     <th key={h} className="text-left px-3 py-2 font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -265,9 +265,10 @@ export function ImportSupplierForm() {
                     <td className="px-3 py-2 text-slate-500">{fmt(r.region)}</td>
                     <td className="px-3 py-2 text-slate-500">{fmt(r.city)}</td>
                     <td className="px-3 py-2 text-slate-500">
-                      {r.market_id ? fmt(r.market_input) : <span className="text-amber-500">{r.market_input ? 'no encontrado' : '—'}</span>}
+                      {r.taxonomyLabel
+                        ? <span className="text-mira-magenta font-semibold">{r.taxonomyLabel}</span>
+                        : <span className="text-slate-300">Sin clasificar</span>}
                     </td>
-                    <td className="px-3 py-2 text-slate-500">{fmt(r.family)}</td>
                     <td className="px-3 py-2">
                       {r.is_active
                         ? <span className="text-green-600 font-semibold">Sí</span>

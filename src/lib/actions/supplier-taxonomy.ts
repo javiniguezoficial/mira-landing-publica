@@ -164,7 +164,22 @@ export async function getSupplierTaxonomyTree(): Promise<SupplierMarketNode[]> {
 // poblar los selects encadenados del formulario de crear/editar proveedor.
 export async function getActiveSupplierTaxonomyTree(): Promise<SupplierMarketNode[]> {
   const supabase = await requireAdmin()
+  return fetchActiveTaxonomyTree(supabase)
+}
 
+// Versión para el ÁREA CLIENTE (/app/proveedores): sin requireAdmin, apoyada en
+// las policies RLS `client_read_supplier_*` (P2.1), que ya exponen a usuarios
+// autenticados solo los nodos activos con toda la cadena superior activa.
+// El .eq('is_active', true) explícito garantiza que un admin que visite /app
+// tampoco vea inactivos (su policy admin_all vería todo).
+export async function getSupplierTaxonomyTreeForClient(): Promise<SupplierMarketNode[]> {
+  const supabase = await createClient()
+  return fetchActiveTaxonomyTree(supabase)
+}
+
+async function fetchActiveTaxonomyTree(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<SupplierMarketNode[]> {
   const [marketsRes, categoriesRes, familiesRes, subfamiliesRes] = await Promise.all([
     supabase.from('supplier_markets').select('*').eq('is_active', true).order('sort_order').order('name'),
     supabase.from('supplier_categories').select('*').eq('is_active', true).order('sort_order').order('name'),

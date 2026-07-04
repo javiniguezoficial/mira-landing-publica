@@ -57,6 +57,22 @@ function dupKey(name: string, region: string | null, city: string | null): strin
   return `${name.toLowerCase()}|${(region ?? '').toLowerCase()}|${(city ?? '').toLowerCase()}`
 }
 
+// Normaliza para comparar sin acentos ni mayúsculas.
+function norm(s: string): string {
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim()
+}
+
+type TaxNode = { id: string; name: string; slug: string }
+type TaxCategory = TaxNode & { supplier_market_id: string }
+type TaxFamily = TaxNode & { supplier_category_id: string }
+type TaxSubfamily = TaxNode & { supplier_family_id: string }
+
+// Busca por nombre o slug (normalizado), opcionalmente dentro de un padre.
+function matchNode<T extends TaxNode>(rows: T[], input: string): T | undefined {
+  const n = norm(input)
+  return rows.find((r) => norm(r.name) === n || norm(r.slug) === n)
+}
+
 // ── Acción: parsear y validar archivo ─────────────────────────────────────────
 
 export async function parseAndValidateSupplierFile(
@@ -113,16 +129,17 @@ export async function parseAndValidateSupplierFile(
     ? { missing: [], extra }
     : null
 
-  // ── Catálogo de mercados (resolución por nombre, case-insensitive) ──────────
-  const { data: marketRows } = await supabase
-    .from('markets')
-    .select('id, name')
-    .eq('is_active', true)
-
-  const marketMap = new Map<string, { id: string; name: string }>()
-  for (const m of marketRows ?? []) {
-    marketMap.set(m.name.toLowerCase(), { id: m.id, name: m.name })
-  }
+  // ── Taxonomía propia de proveedores (activa) para resolución en cascada ─────
+  const [smRes, scRes, sfRes, ssfRes] = await Promise.all([
+    supabase.from('supplier_markets').select('id, name, slug').eq('is_active', true),
+    supabase.from('supplier_categories').select('id, name, slug, supplier_market_id').eq('is_active', true),
+    supabase.from('supplier_families').select('id, name, slug, supplier_category_id').eq('is_active', true),
+    supabase.from('supplier_subfamilies').select('id, name, slug, supplier_family_id').eq('is_active', true),
+  ])
+  const smRows  = (smRes.data ?? []) as TaxNode[]
+  const scRows  = (scRes.data ?? []) as TaxCategory[]
+  const sfRows  = (sfRes.data ?? []) as TaxFamily[]
+  const ssfRows = (ssfRes.data ?? []) as TaxSubfamily[]
 
   // ── Proveedores existentes (detección de duplicados por nombre+prov+localidad)
   const { data: existingRows } = await supabase
@@ -187,14 +204,50 @@ export async function parseAndValidateSupplierFile(
     const region = cellStr(raw['provincia']) || null
     const city   = cellStr(raw['localidad']) || null
 
-    // Resolución de mercado por nombre
-    const marketInputRaw = cellStr(raw['mercado'])
-    let market_id: string | null = null
+    // Resolución en cascada contra la taxonomía propia de proveedores.
+    // Si un nivel no existe, warning + ese nivel y sus hijos quedan sin asignar.
+    // NUNCA se crea taxonomía automáticamente. No se usa market_id de Pricing.
+    const marketInputRaw    = cellStr(raw['mercado'])
+    const categoryInputRaw  = cellStr(raw['categoria'])
+    const familyInputRaw    = cellStr(raw['familia'])
+    const subfamilyInputRaw = cellStr(raw['subfamilia'])
+
+    let sMarket: TaxNode | undefined
+    let sCategory: TaxCategory | undefined
+    let sFamily: TaxFamily | undefined
+    let sSubfamily: TaxSubfamily | undefined
+
     if (marketInputRaw) {
-      const found = marketMap.get(marketInputRaw.toLowerCase())
-      if (found) market_id = found.id
-      else warnings.push(`Mercado no encontrado: "${marketInputRaw}" — se deja sin asignar`)
+      sMarket = matchNode(smRows, marketInputRaw)
+      if (!sMarket) warnings.push(`Mercado de proveedor no encontrado: "${marketInputRaw}" — sin clasificar`)
     }
+    if (categoryInputRaw) {
+      if (!sMarket) {
+        warnings.push(`Categoría "${categoryInputRaw}" ignorada: falta un mercado válido`)
+      } else {
+        sCategory = matchNode(scRows.filter((c) => c.supplier_market_id === sMarket!.id), categoryInputRaw)
+        if (!sCategory) warnings.push(`Categoría no encontrada en "${sMarket.name}": "${categoryInputRaw}"`)
+      }
+    }
+    if (familyInputRaw) {
+      if (!sCategory) {
+        warnings.push(`Familia "${familyInputRaw}" ignorada: falta una categoría válida`)
+      } else {
+        sFamily = matchNode(sfRows.filter((f) => f.supplier_category_id === sCategory!.id), familyInputRaw)
+        if (!sFamily) warnings.push(`Familia no encontrada en "${sCategory.name}": "${familyInputRaw}"`)
+      }
+    }
+    if (subfamilyInputRaw) {
+      if (!sFamily) {
+        warnings.push(`Subfamilia "${subfamilyInputRaw}" ignorada: falta una familia válida`)
+      } else {
+        sSubfamily = matchNode(ssfRows.filter((s) => s.supplier_family_id === sFamily!.id), subfamilyInputRaw)
+        if (!sSubfamily) warnings.push(`Subfamilia no encontrada en "${sFamily.name}": "${subfamilyInputRaw}"`)
+      }
+    }
+
+    const taxonomyLabel =
+      [sMarket?.name, sCategory?.name, sFamily?.name, sSubfamily?.name].filter(Boolean).join(' › ') || null
 
     // Warning: duplicado (BD o dentro del archivo) → se omitirá en la inserción
     const key = dupKey(name, region, city)
@@ -230,15 +283,20 @@ export async function parseAndValidateSupplierFile(
       address:     cellStr(raw['direccion']) || null,
       latitude,
       longitude,
-      category:    cellStr(raw['categoria']) || null,
-      market_id,
-      market_input: marketInputRaw || null,
-      family:      cellStr(raw['familia']) || null,
-      subfamily:   cellStr(raw['subfamilia']) || null,
+      // Legacy (texto libre): se conservan tal cual venían del CSV
+      category:    categoryInputRaw || null,
+      family:      familyInputRaw || null,
+      subfamily:   subfamilyInputRaw || null,
       produccion:  cellStr(raw['produccion']) || null,
       medida:      cellStr(raw['medida']) || null,
       notes:       cellStr(raw['notas']) || null,
       is_active:   parseActivo(cellStr(raw['activo'])),
+      // Taxonomía propia de proveedores (ids resueltos en cascada)
+      supplier_market_id:    sMarket?.id ?? null,
+      supplier_category_id:  sCategory?.id ?? null,
+      supplier_family_id:    sFamily?.id ?? null,
+      supplier_subfamily_id: sSubfamily?.id ?? null,
+      taxonomyLabel,
       warnings,
       isDuplicate,
     })
@@ -274,14 +332,19 @@ export async function importSuppliers(
     address:     r.address,
     latitude:    r.latitude,
     longitude:   r.longitude,
+    // Legacy texto libre (sin market_id de Pricing — la clasificación va por taxonomía propia)
     category:    r.category,
-    market_id:   r.market_id,
     family:      r.family,
     subfamily:   r.subfamily,
     produccion:  r.produccion,
     medida:      r.medida,
     notes:       r.notes,
     is_active:   r.is_active,
+    // Taxonomía propia de proveedores
+    supplier_market_id:    r.supplier_market_id,
+    supplier_category_id:  r.supplier_category_id,
+    supplier_family_id:    r.supplier_family_id,
+    supplier_subfamily_id: r.supplier_subfamily_id,
   }))
 
   // Inserción por lotes de 500 para no enviar arrays enormes en una sola llamada

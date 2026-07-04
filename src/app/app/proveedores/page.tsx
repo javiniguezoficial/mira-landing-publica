@@ -1,6 +1,6 @@
 import { MapPin } from 'lucide-react'
 import { listSuppliersFiltered, getSupplierFilterOptions } from '@/lib/actions/suppliers'
-import { getMarketsForClient } from '@/lib/actions/markets'
+import { getSupplierTaxonomyTreeForClient } from '@/lib/actions/supplier-taxonomy'
 import { SupplierListClient } from '@/components/app/suppliers/SupplierListClient'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 
@@ -12,11 +12,11 @@ type SP = {
   q?: string
   country?: string
   region?: string
-  market_id?: string
-  category?: string
-  family?: string
-  subfamily?: string
   produccion?: string
+  supplier_market_id?: string
+  supplier_category_id?: string
+  supplier_family_id?: string
+  supplier_subfamily_id?: string
   page?: string
 }
 
@@ -37,34 +37,34 @@ export default async function ClientSuppliersPage({
   const sp = await searchParams
   const page = Math.max(1, parseInt(sp.page ?? '1') || 1)
 
-  // filterParams usa 'q' como clave URL (nombre del input del formulario)
+  // 'q' es la clave URL para el nombre; el resto coinciden con SupplierFilters.
   const filterParams = {
     q: sp.q || undefined,
     country: sp.country || undefined,
     region: sp.region || undefined,
-    market_id: sp.market_id || undefined,
-    category: sp.category || undefined,
-    family: sp.family || undefined,
-    subfamily: sp.subfamily || undefined,
     produccion: sp.produccion || undefined,
+    supplier_market_id: sp.supplier_market_id || undefined,
+    supplier_category_id: sp.supplier_category_id || undefined,
+    supplier_family_id: sp.supplier_family_id || undefined,
+    supplier_subfamily_id: sp.supplier_subfamily_id || undefined,
   }
 
-  const [{ suppliers, total, hasMore }, markets, filterOptions] = await Promise.all([
+  const [{ suppliers, total, hasMore }, filterOptions, taxonomyTree] = await Promise.all([
     listSuppliersFiltered({
       search: filterParams.q,        // SupplierFilters usa 'search', la URL usa 'q'
       country: filterParams.country,
       region: filterParams.region,
-      market_id: filterParams.market_id,
-      category: filterParams.category,
-      family: filterParams.family,
-      subfamily: filterParams.subfamily,
       produccion: filterParams.produccion,
+      supplier_market_id: filterParams.supplier_market_id,
+      supplier_category_id: filterParams.supplier_category_id,
+      supplier_family_id: filterParams.supplier_family_id,
+      supplier_subfamily_id: filterParams.supplier_subfamily_id,
       is_active: true,
       limit: PAGE_SIZE,
       offset: (page - 1) * PAGE_SIZE,
     }),
-    getMarketsForClient(),
     getSupplierFilterOptions(true),
+    getSupplierTaxonomyTreeForClient(),
   ])
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
@@ -91,10 +91,10 @@ export default async function ClientSuppliersPage({
         totalPages={totalPages}
         prevUrl={prevUrl}
         nextUrl={nextUrl}
-        markets={markets}
         filters={filterParams}
         countries={filterOptions.countries}
         regions={filterOptions.regions}
+        taxonomyTree={taxonomyTree}
       />
     </div>
   )

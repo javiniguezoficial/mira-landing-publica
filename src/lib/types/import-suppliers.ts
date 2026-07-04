@@ -46,15 +46,20 @@ export interface ValidatedSupplierRow {
   address: string | null
   latitude: number | null
   longitude: number | null
+  // Legacy (texto libre) — se siguen guardando desde el CSV para no perder datos
   category: string | null
-  market_id: string | null
-  market_input: string | null   // nombre de mercado tal como vino en el archivo
   family: string | null
   subfamily: string | null
   produccion: string | null
   medida: string | null
   notes: string | null
   is_active: boolean
+  // Taxonomía propia de proveedores (P2.5): ids resueltos en cascada
+  supplier_market_id: string | null
+  supplier_category_id: string | null
+  supplier_family_id: string | null
+  supplier_subfamily_id: string | null
+  taxonomyLabel: string | null   // breadcrumb resuelto (para previsualización)
   warnings: string[]
   isDuplicate: boolean          // duplicado por nombre + provincia/localidad → se omite
 }

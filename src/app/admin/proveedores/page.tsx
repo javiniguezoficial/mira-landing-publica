@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import { Plus, Truck, Search, X, Upload, ListTree } from 'lucide-react'
-import { listSuppliersFiltered, getSupplierFilterOptions, type SupplierFilters } from '@/lib/actions/suppliers'
-import { getMarkets } from '@/lib/actions/markets'
+import { listSuppliersFiltered, getSupplierFilterOptions, type SupplierFilters, type Supplier } from '@/lib/actions/suppliers'
+import { getActiveSupplierTaxonomyTree } from '@/lib/actions/supplier-taxonomy'
+import { SupplierTaxonomyFilterSelects } from '@/components/admin/suppliers/SupplierTaxonomyFilterSelects'
 import { ToggleActiveSupplier } from './ToggleActiveSupplier'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 import { MiraTable, MiraTr, MiraTd } from '@/components/mira/MiraTable'
@@ -16,15 +17,26 @@ function formatDate(d: string) {
   return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+function taxonomyBreadcrumb(s: Supplier): string | null {
+  if (!s.supplier_market) return null
+  return [s.supplier_market?.name, s.supplier_category?.name, s.supplier_family?.name, s.supplier_subfamily?.name]
+    .filter(Boolean).join(' › ')
+}
+
+function legacyLabel(s: Supplier): string | null {
+  const parts = [s.market?.name, s.category, s.family, s.subfamily].filter(Boolean)
+  return parts.length ? parts.join(' · ') : null
+}
+
 type AdminSP = {
   q?: string
   country?: string
   region?: string
-  market_id?: string
-  category?: string
-  family?: string
-  subfamily?: string
   produccion?: string
+  supplier_market_id?: string
+  supplier_category_id?: string
+  supplier_family_id?: string
+  supplier_subfamily_id?: string
 }
 
 export default async function AdminSuppliersPage({
@@ -37,16 +49,16 @@ export default async function AdminSuppliersPage({
     search: sp.q || undefined,
     country: sp.country || undefined,
     region: sp.region || undefined,
-    market_id: sp.market_id || undefined,
-    category: sp.category || undefined,
-    family: sp.family || undefined,
-    subfamily: sp.subfamily || undefined,
     produccion: sp.produccion || undefined,
+    supplier_market_id: sp.supplier_market_id || undefined,
+    supplier_category_id: sp.supplier_category_id || undefined,
+    supplier_family_id: sp.supplier_family_id || undefined,
+    supplier_subfamily_id: sp.supplier_subfamily_id || undefined,
   }
 
-  const [{ suppliers, total, hasMore }, markets, filterOptions] = await Promise.all([
+  const [{ suppliers, total, hasMore }, taxonomyTree, filterOptions] = await Promise.all([
     listSuppliersFiltered(filters),
-    getMarkets(),
+    getActiveSupplierTaxonomyTree(),
     getSupplierFilterOptions(false),
   ])
 
@@ -132,49 +144,20 @@ export default async function AdminSuppliersPage({
           </div>
         </div>
 
-        {/* Fila inferior */}
-        <div className="grid gap-3 border-t border-mira-line pt-4 sm:grid-cols-2 lg:grid-cols-4">
-          {markets.length > 0 && (
-            <div>
-              <label className={adminLabelCls}>Mercado</label>
-              <select name="market_id" defaultValue={sp.market_id ?? ''} className={miraField}>
-                <option value="">Todos</option>
-                {markets.map(m => (
-                  <option key={m.id} value={m.id}>{m.name}</option>
-                ))}
-              </select>
+        {/* Fila inferior — taxonomía propia de proveedores (selects encadenados) */}
+        <div className="border-t border-mira-line pt-4">
+          {taxonomyTree.length === 0 ? (
+            <p className="text-xs text-slate-400">
+              Todavía no hay taxonomía de proveedores.{' '}
+              <Link href="/admin/proveedores/taxonomia" className="font-semibold text-mira-magenta hover:underline">
+                Créala aquí
+              </Link>.
+            </p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <SupplierTaxonomyFilterSelects tree={taxonomyTree} values={sp} labelClassName={adminLabelCls} />
             </div>
           )}
-
-          <div>
-            <label className={adminLabelCls}>Categoría</label>
-            <input
-              name="category"
-              defaultValue={sp.category ?? ''}
-              placeholder="Todas"
-              className={miraField}
-            />
-          </div>
-
-          <div>
-            <label className={adminLabelCls}>Familia</label>
-            <input
-              name="family"
-              defaultValue={sp.family ?? ''}
-              placeholder="Todas"
-              className={miraField}
-            />
-          </div>
-
-          <div>
-            <label className={adminLabelCls}>Subfamilia</label>
-            <input
-              name="subfamily"
-              defaultValue={sp.subfamily ?? ''}
-              placeholder="Todas"
-              className={miraField}
-            />
-          </div>
         </div>
 
         {/* Acciones */}
@@ -214,9 +197,8 @@ export default async function AdminSuppliersPage({
         <MiraTable
           headers={[
             'Nombre',
-            'Mercado / Categoría',
+            'Clasificación',
             'Provincia · Localidad',
-            'Familia / Subfamilia',
             'Contacto',
             'Alta',
             'Estado',
@@ -235,21 +217,20 @@ export default async function AdminSuppliersPage({
                 {s.tax_id && <p className="text-xs text-slate-400">{s.tax_id}</p>}
               </MiraTd>
               <MiraTd>
-                <div className="text-sm text-slate-700">{s.market?.name ?? '—'}</div>
-                {s.category && <div className="text-xs text-slate-400">{s.category}</div>}
+                {taxonomyBreadcrumb(s) ? (
+                  <div className="text-sm font-medium text-mira-ink">{taxonomyBreadcrumb(s)}</div>
+                ) : legacyLabel(s) ? (
+                  <div className="text-xs text-slate-400">
+                    <span className="mr-1 rounded bg-slate-100 px-1 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">legacy</span>
+                    {legacyLabel(s)}
+                  </div>
+                ) : (
+                  <span className="text-slate-300">Sin clasificar</span>
+                )}
               </MiraTd>
               <MiraTd>
                 <div className="text-sm text-slate-600">{s.region ?? '—'}</div>
                 {s.city && <div className="text-xs text-slate-400">{s.city}</div>}
-              </MiraTd>
-              <MiraTd>
-                {(s.family || s.subfamily) ? (
-                  <div className="text-sm text-slate-600">
-                    {[s.family, s.subfamily].filter(Boolean).join(' · ')}
-                  </div>
-                ) : (
-                  <span className="text-slate-300">—</span>
-                )}
               </MiraTd>
               <MiraTd>
                 <div className="text-sm text-slate-600">{s.email || '—'}</div>

@@ -291,15 +291,20 @@ const SUPPLIER_SELECT =
 
 export interface SupplierFilters {
   search?: string
-  market_id?: string
-  family?: string
-  subfamily?: string
+  market_id?: string       // legacy (Pricing)
+  family?: string          // legacy (texto libre)
+  subfamily?: string       // legacy (texto libre)
   region?: string
   city?: string
-  category?: string
+  category?: string        // legacy (texto libre)
   produccion?: string
   medida?: string
   country?: string
+  // Taxonomía propia de proveedores (P2.4)
+  supplier_market_id?: string
+  supplier_category_id?: string
+  supplier_family_id?: string
+  supplier_subfamily_id?: string
   is_active?: boolean
   limit?: number
   offset?: number
@@ -311,29 +316,18 @@ export interface SuppliersPage {
   hasMore: boolean
 }
 
-// Búsqueda server-side vía la función RPC `search_suppliers` (migración 012).
-// La RPC normaliza con unaccent(lower(...)) en columna e input → filtros
-// case-insensitive Y sin acentos. Es SECURITY INVOKER, así que respeta la RLS
-// existente de `suppliers`. Devuelve `total_count` (count(*) OVER()) para la
-// paginación, manteniendo limit/offset.
-//
-// `country` NO es un parámetro de la RPC todavía (requeriría una migración
-// para añadir p_country). Como solución P1 sin tocar Supabase: cuando se
-// filtra por país, se pide a la RPC un lote más grande (hasta el tope de
-// 1000 ya existente en la app) y se aplica `.eq('country', …)` encadenado
-// sobre el resultado (PostgREST permite filtrar el output de una función que
-// devuelve `setof`/tabla). La paginación se recalcula en esta capa sobre el
-// lote ya filtrado. Limitación conocida: si los demás filtros por sí solos
-// superan 1000 coincidencias, el conteo de país puede quedar incompleto —
-// aceptable para el volumen actual; para escala real, mover el filtro de
-// país dentro de la función RPC (p_country) en una fase posterior.
+// Búsqueda server-side vía la función RPC `search_suppliers` (migraciones
+// 012 → 016). Normaliza con unaccent(lower(...)) → filtros case/accent-
+// insensitive. Es SECURITY INVOKER, respeta la RLS de `suppliers`. Devuelve
+// `total_count` (count(*) OVER()) para paginación. Desde 016 filtra por país
+// y por la taxonomía propia de proveedores dentro de la propia función (ya no
+// hay workaround de país en JS).
 export async function listSuppliersFiltered(filters: SupplierFilters = {}): Promise<SuppliersPage> {
   const supabase = await createClient()
   const limit = Math.min(filters.limit ?? 200, 1000)
   const offset = filters.offset ?? 0
-  const countryFilter = filters.country?.trim() || null
 
-  let query = supabase.rpc('search_suppliers', {
+  const { data, error } = await supabase.rpc('search_suppliers', {
     p_search:     filters.search?.trim() || null,
     p_market_id:  filters.market_id || null,
     p_region:     filters.region?.trim() || null,
@@ -344,28 +338,19 @@ export async function listSuppliersFiltered(filters: SupplierFilters = {}): Prom
     p_produccion: filters.produccion?.trim() || null,
     p_medida:     filters.medida?.trim() || null,
     p_is_active:  filters.is_active ?? null,
-    // Sin filtro de país: paginación normal en la propia RPC.
-    // Con filtro de país: se pide el tope completo (1000) y se pagina en JS
-    // tras aplicar el filtro encadenado, para no perder coincidencias.
-    p_limit:      countryFilter ? 1000 : limit,
-    p_offset:     countryFilter ? 0 : offset,
+    p_limit:      limit,
+    p_offset:     offset,
+    p_country:    filters.country?.trim() || null,
+    p_supplier_market_id:    filters.supplier_market_id || null,
+    p_supplier_category_id:  filters.supplier_category_id || null,
+    p_supplier_family_id:    filters.supplier_family_id || null,
+    p_supplier_subfamily_id: filters.supplier_subfamily_id || null,
   })
-
-  if (countryFilter) query = query.eq('country', countryFilter)
-
-  const { data, error } = await query
 
   if (error || !data) return { suppliers: [], total: 0, hasMore: false }
 
-  let rows = data as Array<Record<string, unknown>>
-  let total: number
-
-  if (countryFilter) {
-    total = rows.length
-    rows = rows.slice(offset, offset + limit)
-  } else {
-    total = rows.length > 0 ? Number(rows[0].total_count) : 0
-  }
+  const rows = data as Array<Record<string, unknown>>
+  const total = rows.length > 0 ? Number(rows[0].total_count) : 0
 
   const suppliers: Supplier[] = rows.map((r) => ({
     id:          r.id as string,
@@ -392,6 +377,14 @@ export async function listSuppliersFiltered(filters: SupplierFilters = {}): Prom
     created_at:  r.created_at as string,
     updated_at:  r.updated_at as string,
     market:      r.market_id ? { id: r.market_id as string, name: r.market_name as string } : null,
+    supplier_market_id:    (r.supplier_market_id as string | null) ?? null,
+    supplier_category_id:  (r.supplier_category_id as string | null) ?? null,
+    supplier_family_id:    (r.supplier_family_id as string | null) ?? null,
+    supplier_subfamily_id: (r.supplier_subfamily_id as string | null) ?? null,
+    supplier_market:    r.supplier_market_id ? { id: r.supplier_market_id as string, name: r.supplier_market_name as string } : null,
+    supplier_category:  r.supplier_category_id ? { id: r.supplier_category_id as string, name: r.supplier_category_name as string } : null,
+    supplier_family:    r.supplier_family_id ? { id: r.supplier_family_id as string, name: r.supplier_family_name as string } : null,
+    supplier_subfamily: r.supplier_subfamily_id ? { id: r.supplier_subfamily_id as string, name: r.supplier_subfamily_name as string } : null,
   }))
 
   return { suppliers, total, hasMore: total > offset + limit }
