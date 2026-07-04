@@ -169,26 +169,64 @@ export async function deletePriceRecord(id: string): Promise<void> {
 // (no requireAdmin) + is_active: sirve tanto para admin como para cliente (RLS
 // de strategic_markets/market_categories/markets/products filtra por cadena
 // activa en el área cliente).
+// Valores distintos existentes de los atributos de producto → alimentan los
+// selects de filtro (lonja/variedad/calibre/incoterm/tipo/unidad) sin migración.
+export interface PricingFacets {
+  lonjas: string[]
+  variedades: string[]
+  calibres: string[]
+  incoterms: string[]
+  tipos: string[]
+  units: string[]
+}
+
 export interface PricingHierarchy {
   strategicMarkets: { id: string; name: string }[]
   categories: { id: string; name: string; strategic_market_id: string | null }[]
   markets: { id: string; name: string; category_id: string }[]
   products: { id: string; name: string; unit: string; market_id: string }[]
+  facets: PricingFacets
 }
 
 export async function getPricingTree(): Promise<PricingHierarchy> {
   const supabase = await createClient()
-  const [sm, cat, mk, pr] = await Promise.all([
+  const [sm, cat, mk, pr, ppr] = await Promise.all([
     supabase.from('strategic_markets').select('id, name').eq('is_active', true).order('sort_order').order('name'),
     supabase.from('market_categories').select('id, name, strategic_market_id').eq('is_active', true).order('sort_order').order('name'),
     supabase.from('markets').select('id, name, category_id').eq('is_active', true).order('name'),
-    supabase.from('products').select('id, name, unit, market_id').eq('is_active', true).order('name'),
+    supabase.from('products').select('id, name, unit, market_id, lonja, variedad, calibre, incoterm, tipo').eq('is_active', true).order('name'),
+    // unit vive también en products, pero con otro significado (precio/medida del
+    // producto, p.ej. "€/kg"). El filtro real se aplica sobre product_price_records.unit
+    // (p.ej. "kg", "ton"), así que el facet de unidades debe salir de esta tabla.
+    supabase.from('product_price_records').select('unit'),
   ])
+
+  const rawProducts = (pr.data ?? []) as Array<{
+    id: string; name: string; unit: string; market_id: string
+    lonja: string | null; variedad: string | null; calibre: string | null; incoterm: string | null; tipo: string | null
+  }>
+
+  // Valores únicos, sin nulos/vacíos, ordenados (para los selects de filtro).
+  const uniq = (vals: (string | null | undefined)[]): string[] =>
+    Array.from(new Set(vals.map((v) => v?.trim()).filter((v): v is string => !!v)))
+      .sort((a, b) => a.localeCompare(b, 'es'))
+
+  const facets: PricingFacets = {
+    lonjas:     uniq(rawProducts.map((p) => p.lonja)),
+    variedades: uniq(rawProducts.map((p) => p.variedad)),
+    calibres:   uniq(rawProducts.map((p) => p.calibre)),
+    incoterms:  uniq(rawProducts.map((p) => p.incoterm)),
+    tipos:      uniq(rawProducts.map((p) => p.tipo)),
+    units:      uniq(((ppr.data ?? []) as Array<{ unit: string | null }>).map((r) => r.unit)),
+  }
+
   return {
     strategicMarkets: (sm.data ?? []) as PricingHierarchy['strategicMarkets'],
     categories: (cat.data ?? []) as PricingHierarchy['categories'],
     markets: (mk.data ?? []) as PricingHierarchy['markets'],
-    products: (pr.data ?? []) as PricingHierarchy['products'],
+    // Payload liviano al cliente: solo lo que usan los selects encadenados.
+    products: rawProducts.map((p) => ({ id: p.id, name: p.name, unit: p.unit, market_id: p.market_id })),
+    facets,
   }
 }
 
@@ -201,6 +239,15 @@ export interface PriceListFilters {
   category_id?: string
   market_id?: string
   product_id?: string
+  // Atributos de producto (viven en products, se filtran vía embed !inner)
+  lonja?: string
+  variedad?: string
+  calibre?: string
+  incoterm?: string
+  tipo?: string
+  // Atributos del registro de precio (product_price_records)
+  region?: string
+  unit?: string
   date_from?: string
   date_to?: string
   country?: string
@@ -219,6 +266,8 @@ export interface PriceListRow {
   recorded_at: string
   min_price: number | null
   max_price: number | null
+  avg_price: number | null
+  volume: number | null
   product: { id: string; name: string; slug: string; lonja: string | null; variedad: string | null; calibre: string | null; incoterm: string | null; tipo: string | null } | null
   market: { id: string; name: string } | null
   category: { id: string; name: string } | null
@@ -239,7 +288,7 @@ export async function listPriceRecordsFiltered(filters: PriceListFilters = {}): 
   let query = supabase
     .from('product_price_records')
     .select(`
-      id, price, unit, currency, country, region, recorded_at, min_price, max_price,
+      id, price, unit, currency, country, region, recorded_at, min_price, max_price, avg_price, volume,
       product:products!inner(
         id, name, slug, lonja, variedad, calibre, incoterm, tipo, market_id,
         market:markets!inner(
@@ -257,8 +306,15 @@ export async function listPriceRecordsFiltered(filters: PriceListFilters = {}): 
   if (filters.market_id)           query = query.eq('product.market_id', filters.market_id)
   if (filters.category_id)         query = query.eq('product.market.category_id', filters.category_id)
   if (filters.strategic_market_id) query = query.eq('product.market.category.strategic_market_id', filters.strategic_market_id)
+  if (filters.lonja)               query = query.eq('product.lonja', filters.lonja)
+  if (filters.variedad)            query = query.eq('product.variedad', filters.variedad)
+  if (filters.calibre)             query = query.eq('product.calibre', filters.calibre)
+  if (filters.incoterm)            query = query.eq('product.incoterm', filters.incoterm)
+  if (filters.tipo)                query = query.eq('product.tipo', filters.tipo)
   if (filters.country)             query = query.eq('country', filters.country)
   if (filters.currency)            query = query.eq('currency', filters.currency)
+  if (filters.unit)                query = query.eq('unit', filters.unit)
+  if (filters.region)              query = query.ilike('region', `%${filters.region}%`)
   if (filters.date_from)           query = query.gte('recorded_at', filters.date_from)
   if (filters.date_to)             query = query.lte('recorded_at', filters.date_to)
 
@@ -282,6 +338,8 @@ export async function listPriceRecordsFiltered(filters: PriceListFilters = {}): 
       recorded_at: r.recorded_at,
       min_price: r.min_price != null ? parseFloat(r.min_price) : null,
       max_price: r.max_price != null ? parseFloat(r.max_price) : null,
+      avg_price: r.avg_price != null ? parseFloat(r.avg_price) : null,
+      volume:    r.volume    != null ? parseFloat(r.volume)    : null,
       product: product ? { id: product.id, name: product.name, slug: product.slug, lonja: product.lonja ?? null, variedad: product.variedad ?? null, calibre: product.calibre ?? null, incoterm: product.incoterm ?? null, tipo: product.tipo ?? null } : null,
       market: market ? { id: market.id, name: market.name } : null,
       category: category ? { id: category.id, name: category.name } : null,
