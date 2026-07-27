@@ -120,7 +120,7 @@ async function resolveSupplierTaxonomy(
   | { error: string }
 > {
   const marketId = data.supplier_market_id || null
-  let categoryId = data.supplier_category_id || null
+  const categoryId = data.supplier_category_id || null
   let familyId = data.supplier_family_id || null
   let subfamilyId = data.supplier_subfamily_id || null
 
