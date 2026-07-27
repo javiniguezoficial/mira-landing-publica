@@ -2,6 +2,11 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import {
+  buildSupplierFilterOptions,
+  type SupplierFacetRow,
+  type SupplierFilterOptions,
+} from '@/lib/supplier-filters'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -464,29 +469,35 @@ export async function getSupplierProductionBounds(): Promise<{ min: number; max:
 
 // ── Opciones de filtro (País / Provincia) ─────────────────────────────────────
 
-export interface SupplierFilterOptions {
-  countries: string[]
-  regions: string[]
-}
+export type { SupplierFilterOptions }
 
-// Valores reales distintos de país/provincia para poblar los <select> de
-// filtros. Consulta ligera (solo 2 columnas, tope 5000 filas) — mucho más
-// barata que listar proveedores completos, pero sigue leyendo N filas para
-// deduplicar en JS porque Postgres no expone `DISTINCT` vía PostgREST select
-// directo. Para volumen muy grande, mover a una función RPC dedicada
-// (SELECT DISTINCT) en una fase posterior.
+// Valores distintos de país/provincia para poblar los <select> de filtros, vía
+// la RPC `get_supplier_filter_options` (migración 018).
+//
+// Antes se descargaban hasta 5.000 filas de `suppliers` y se deduplicaba en JS.
+// Con 12.288 proveedores eso ocultaba valores reales: de 112 países distintos
+// solo llegaban 38 (Italia, con 893 proveedores, no aparecía). Además la
+// consulta no llevaba ORDER BY, así que qué 5.000 filas se leían dependía del
+// orden físico de la tabla. La RPC devuelve ~206 filas y es exacta.
+//
+// `onlyActive` viaja como p_active_only. Es una restricción adicional, no un
+// permiso: la RPC es SECURITY INVOKER, así que la RLS de `suppliers` sigue
+// siendo el límite real (un cliente nunca verá inactivos aunque pase false).
 export async function getSupplierFilterOptions(onlyActive = true): Promise<SupplierFilterOptions> {
   const supabase = await createClient()
 
-  let query = supabase.from('suppliers').select('country, region').limit(5000)
-  if (onlyActive) query = query.eq('is_active', true)
+  const { data, error } = await supabase.rpc('get_supplier_filter_options', {
+    p_active_only: onlyActive,
+  })
 
-  const { data, error } = await query
-  if (error || !data) return { countries: [], regions: [] }
+  if (error) {
+    // Degradación controlada: los desplegables quedan vacíos y la página sigue
+    // funcionando. NO se recurre a leer la tabla completa como respaldo: eso
+    // reintroduciría el problema que esta RPC viene a resolver.
+    // Causa más probable si esto salta: la migración 018 aún no está aplicada.
+    console.error('[getSupplierFilterOptions] RPC get_supplier_filter_options falló:', error.message)
+    return { countries: [], regions: [] }
+  }
 
-  const countries = Array.from(new Set(data.map((r) => r.country).filter(Boolean))).sort()
-  const regions = Array.from(new Set(data.map((r) => r.region).filter(Boolean))) as string[]
-  regions.sort()
-
-  return { countries, regions }
+  return buildSupplierFilterOptions(data as SupplierFacetRow[] | null)
 }
