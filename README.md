@@ -128,10 +128,42 @@ docs/                       # Documentación técnica del proyecto
 
 ## Requisitos previos
 
-- **Node.js** >= 20
-- **npm** >= 10.8
+| | Versión oficial del proyecto | Dónde se define |
+|---|---|---|
+| **Node.js** | **20.x** | `engines` en `package.json` · imagen `node:20-alpine` del Dockerfile |
+| **npm** | **10.8.2** | `packageManager` y `engines` en `package.json` · es el npm que trae `node:20-alpine` |
+
 - Proyecto [Supabase](https://supabase.com/) activo con el esquema de la plataforma aplicado
 - Archivo `.env.local` configurado (ver sección siguiente)
+
+> **Coolify compila con Node 20 y npm 10.8.2.** Si desarrollas con una versión distinta (p. ej. Node 24 + npm 11), `npm install` genera un `package-lock.json` que **npm 10.8.2 rechaza** y el deploy falla en `npm ci`. Ya ha ocurrido tres veces. Ver [Contrato de versiones](#contrato-de-versiones-node--npm).
+
+---
+
+## Contrato de versiones (Node + npm)
+
+**Las dependencias se instalan siempre con npm 10.8.2**, la misma versión que ejecuta Coolify.
+
+Antes de cualquier commit que toque `package.json` o `package-lock.json`:
+
+```bash
+npm run ci:install-check
+```
+
+Ese script ejecuta `npx --yes npm@10.8.2 ci --dry-run`: valida la instalación limpia **exactamente igual que Docker**, sin modificar `package-lock.json` ni `node_modules`. Devuelve código de salida ≠ 0 si `package.json` y `package-lock.json` no están sincronizados.
+
+**Reglas:**
+
+1. Todo cambio en `package.json` o `package-lock.json` debe pasar `npm run ci:install-check` **antes de push y antes de deploy**.
+2. Si el gate falla, regenerar el lockfile **con la versión correcta**:
+   ```bash
+   npx --yes npm@10.8.2 install --package-lock-only
+   ```
+   Nunca con el `npm install` del sistema si tu npm no es 10.8.x.
+3. **No ejecutar `npm audit fix`, `--force` ni `--legacy-peer-deps`** sin revisión del equipo principal: reescriben el árbol de dependencias y pueden introducir cambios de versión no intencionados.
+4. `package.json` y `package-lock.json` se commitean **siempre juntos**.
+
+> `engines` solo produce un aviso `EBADENGINE`, no bloquea la instalación; y `packageManager` solo se impone si Corepack está activo (`corepack enable`). Son un contrato **declarativo**: el que realmente detecta el problema es el gate `ci:install-check`.
 
 ---
 

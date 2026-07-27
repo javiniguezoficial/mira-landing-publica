@@ -2,6 +2,11 @@
   "name": "mira-platform",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "npm@10.8.2",
+  "engines": {
+    "node": "20.x",
+    "npm": "10.8.x"
+  },
   "scripts": {
     "dev": "next dev --port 3000",
     "build": "next build",
@@ -10,7 +15,8 @@
     "type-check": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:watch": "vitest watch"
+    "test:watch": "vitest watch",
+    "ci:install-check": "npx --yes npm@10.8.2 ci --dry-run"
   },
   "dependencies": {
     "@supabase/ssr": "^0.6.1",

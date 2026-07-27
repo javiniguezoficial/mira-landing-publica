@@ -90,20 +90,38 @@ Las variables se configuran en el panel de Coolify → app `mirapricing-demo` �
 
 ### 1. `package-lock.json` desincronizado
 
-**Síntoma:** El stage Builder falla con `npm ci` por diferencias entre `package.json` y `package-lock.json`.
+**Síntoma:** El stage `deps` falla con `npm ci` y errores `EUSAGE` del tipo
+`Missing: <paquete> from lock file` o `Invalid: lock file's <paquete>@X no satisface Y`.
 
-**Causa:** `npm install` local actualiza `package-lock.json` pero el commit no lo incluye, o hay diferencias de versión entre entornos.
+**Causa real (ocurrida tres veces):** **desajuste de versión de npm entre el desarrollo local y el contenedor.**
+`node:20-alpine` trae **npm 10.8.2**. Si el lockfile se genera con otra versión —por ejemplo npm 11 sobre
+Node 24— npm 11 escribe un árbol que npm 10.8.2 considera incompleto: le faltan entradas de paquetes
+transitivos (típicamente bindings opcionales `wasm32-wasi` como `@emnapi/*`, o `@floating-ui/*`) y algunas
+versiones no satisfacen los rangos declarados por sus propios padres dentro del mismo lockfile.
 
-**Solución:**
+El build local seguía pasando porque `npm run build` usa el `node_modules` ya instalado y **nunca revalida
+el lockfile**; solo `npm ci` comprueba la sincronía. Por eso el fallo no se detectaba hasta el deploy.
+
+**Solución — regenerar con la versión correcta, no con la del sistema:**
 ```bash
-# En local, regenerar el lock file limpio
-rm -rf node_modules package-lock.json
-npm install
-git add package-lock.json
-git commit -m "fix: regenerate package-lock.json"
+# 1. Regenerar el lockfile con la MISMA versión de npm que usa Coolify
+npx --yes npm@10.8.2 install --package-lock-only
+
+# 2. Verificar que la instalación limpia de Docker funcionaría
+npm run ci:install-check
+
+# 3. Commitear package.json y package-lock.json juntos
+git add package.json package-lock.json
 ```
 
-> `npm ci` requiere que `package-lock.json` esté sincronizado con `package.json`. Siempre hacer commit de ambos juntos.
+> ⚠️ **No usar `rm -rf node_modules package-lock.json && npm install`** si tu npm local no es 10.8.x:
+> es justo lo que reintroduce el problema.
+> Tampoco `npm audit fix`, `--force` ni `--legacy-peer-deps` sin revisión.
+
+**Prevención:** el script `ci:install-check` (`npx --yes npm@10.8.2 ci --dry-run`) reproduce la instalación
+del contenedor sin tocar `package-lock.json` ni `node_modules`, y devuelve código ≠ 0 si hay
+desincronización. Ejecutarlo **antes de cada push o deploy que toque dependencias**. El contrato de
+versiones está en el [README](../README.md#contrato-de-versiones-node--npm).
 
 ### 2. Falta la carpeta `public/`
 
