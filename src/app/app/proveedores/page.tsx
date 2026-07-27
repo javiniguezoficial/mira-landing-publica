@@ -3,6 +3,7 @@ import { listSuppliersFiltered, getSupplierFilterOptions, getSupplierProductionB
 import { getSupplierTaxonomyTreeForClient } from '@/lib/actions/supplier-taxonomy'
 import { SupplierListClient } from '@/components/app/suppliers/SupplierListClient'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
+import { parsePage, pageOffset, totalPages, toNum, buildUrl } from '@/lib/pagination'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,28 +22,13 @@ type SP = {
   page?: string
 }
 
-function toNum(s?: string): number | undefined {
-  if (!s || s.trim() === '') return undefined
-  const n = parseFloat(s.replace(',', '.'))
-  return Number.isNaN(n) ? undefined : n
-}
-
-function buildUrl(base: string, params: Record<string, string | number | undefined>) {
-  const sp = new URLSearchParams()
-  for (const [k, v] of Object.entries(params)) {
-    if (v !== undefined && v !== '') sp.set(k, String(v))
-  }
-  const qs = sp.toString()
-  return `${base}${qs ? `?${qs}` : ''}`
-}
-
 export default async function ClientSuppliersPage({
   searchParams,
 }: {
   searchParams: Promise<SP>
 }) {
   const sp = await searchParams
-  const page = Math.max(1, parseInt(sp.page ?? '1') || 1)
+  const page = parsePage(sp.page)
 
   // 'q' es la clave URL para el nombre; el resto coinciden con SupplierFilters.
   const filterParams = {
@@ -70,7 +56,7 @@ export default async function ClientSuppliersPage({
       supplier_subfamily_id: filterParams.supplier_subfamily_id,
       is_active: true,
       limit: PAGE_SIZE,
-      offset: (page - 1) * PAGE_SIZE,
+      offset: pageOffset(page, PAGE_SIZE),
     }),
     getSupplierFilterOptions(true),
     getSupplierTaxonomyTreeForClient(),
@@ -78,7 +64,7 @@ export default async function ClientSuppliersPage({
 
   const productionBounds = await getSupplierProductionBounds()
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const pages = totalPages(total, PAGE_SIZE)
   const prevUrl = page > 1 ? buildUrl('/app/proveedores', { ...filterParams, page: page - 1 }) : null
   const nextUrl = hasMore ? buildUrl('/app/proveedores', { ...filterParams, page: page + 1 }) : null
   const hasActiveFilters = Object.values(filterParams).some(Boolean)
@@ -99,7 +85,7 @@ export default async function ClientSuppliersPage({
         total={total}
         hasMore={hasMore}
         page={page}
-        totalPages={totalPages}
+        totalPages={pages}
         prevUrl={prevUrl}
         nextUrl={nextUrl}
         filters={filterParams}
