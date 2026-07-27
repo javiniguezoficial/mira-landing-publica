@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -10,7 +11,7 @@ interface Props {
 /** Logo circular MIRA recreado en CSS (sin assets externos). */
 export function MiraBrand({ tagline = true, size = 64, className }: Props) {
   return (
-    <a href="/" className={cn('flex flex-col items-center gap-2', className)}>
+    <Link href="/" className={cn('flex flex-col items-center gap-2', className)}>
       <span
         className="mira-logo-ring flex items-center justify-center rounded-full"
         style={{ width: size, height: size }}
@@ -27,6 +28,6 @@ export function MiraBrand({ tagline = true, size = 64, className }: Props) {
           Conéctate. Compite. Crece.
         </span>
       )}
-    </a>
+    </Link>
   )
 }
