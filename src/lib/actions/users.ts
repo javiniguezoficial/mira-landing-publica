@@ -7,7 +7,7 @@ import { redirect } from 'next/navigation'
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
-export type GlobalRole = 'platform_admin' | 'client_owner' | 'client_member'
+export type GlobalRole = 'platform_admin' | 'user' | 'client_owner' | 'client_member'
 export type OrgMemberRole = 'client_owner' | 'client_member'
 
 export interface UserProfile {

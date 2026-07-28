@@ -14,8 +14,7 @@ import type { UserProfile, GlobalRole } from '@/lib/actions/users'
 const ROLE_OPTIONS: { value: GlobalRole | ''; label: string }[] = [
   { value: '',               label: 'Todos los roles' },
   { value: 'platform_admin', label: 'Admin' },
-  { value: 'client_owner',   label: 'Client Owner' },
-  { value: 'client_member',  label: 'Client Member' },
+  { value: 'user',           label: 'Usuario' },
 ]
 
 function fmt(dateStr: string) {

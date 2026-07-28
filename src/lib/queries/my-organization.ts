@@ -1,9 +1,13 @@
 import { createClient } from '@/lib/supabase/server'
+import { resolveMemberRoles, type OrganizationRole } from '@/lib/identity'
 
 export interface OrgMember {
   id: string
   user_id: string
+  /** Rol legacy (`client_owner`/`client_member`). Se conserva por compatibilidad. */
   role: string
+  /** Rol canónico ya normalizado. Es el que debe usar la interfaz. */
+  orgRole: OrganizationRole | null
   joined_at: string
   profile: {
     first_name: string | null
@@ -44,7 +48,7 @@ export async function getMyOrganization(): Promise<MyOrgResult> {
   // Obtener membresía del usuario actual
   const { data: membership, error: memErr } = await supabase
     .from('organization_members')
-    .select('organization_id, role')
+    .select('organization_id, role, org_role')
     .eq('user_id', user.id)
     .limit(1)
     .single()
@@ -68,20 +72,34 @@ export async function getMyOrganization(): Promise<MyOrgResult> {
 
   if (orgErr || !org) return { status: 'no_org' }
 
-  // Cargar miembros con sus perfiles (habilitado por la policy 008)
-  const { data: membersRaw } = await supabase
+  // Cargar miembros con sus perfiles (habilitado por la policy 008).
+  //
+  // El embed DEBE desambiguarse con el nombre de la clave ajena:
+  // `organization_members` tiene DOS FK hacia `profiles` (`user_id` e
+  // `invited_by`), así que un `profile:profiles(...)` genérico hace que
+  // PostgREST devuelva el error PGRST201 ("Could not embed because more than
+  // one relationship was found") en lugar de datos. Como este error se estaba
+  // ignorando, la lista de miembros salía vacía en silencio.
+  const { data: membersRaw, error: membersErr } = await supabase
     .from('organization_members')
     .select(`
-      id, user_id, role, joined_at,
-      profile:profiles(first_name, last_name, phone)
+      id, user_id, role, org_role, joined_at,
+      profile:profiles!organization_members_user_id_fkey(first_name, last_name, phone)
     `)
     .eq('organization_id', orgId)
     .order('joined_at', { ascending: true })
 
-  const members: OrgMember[] = (membersRaw ?? []).map((m) => ({
+  // Nunca fallar en silencio: una lista de miembros vacía debe significar que
+  // no hay miembros, no que la consulta falló.
+  if (membersErr) {
+    console.error('[getMyOrganization] error al cargar miembros:', membersErr.message)
+  }
+
+  const members: OrgMember[] = resolveMemberRoles(membersRaw ?? []).map((m) => ({
     id: m.id,
     user_id: m.user_id,
     role: m.role,
+    orgRole: m.orgRole,
     joined_at: m.joined_at,
     profile: Array.isArray(m.profile) ? (m.profile[0] ?? null) : (m.profile as OrgMember['profile']),
   }))
@@ -93,6 +111,7 @@ export async function getMyOrganization(): Promise<MyOrgResult> {
     status: 'ok',
     org: { ...org, plan } as OrgDetail,
     members,
-    userRole: membership.role,
+    // Prioriza el modelo canónico; cae al legacy si `org_role` aún no existiera.
+    userRole: membership.org_role ?? membership.role,
   }
 }

@@ -4,14 +4,16 @@ import Link from 'next/link'
 import { redirect, notFound } from 'next/navigation'
 import { ArrowLeft, Building2, Loader2 } from 'lucide-react'
 import { OrgEditForm } from './OrgEditForm'
+import { isOwner } from '@/lib/identity'
 
 export default async function EditarMiOrganizacionPage() {
   const result = await getMyOrganization()
 
   if (result.status === 'no_org') notFound()
 
-  // Solo client_owner puede acceder a esta página
-  if (result.userRole !== 'client_owner') redirect('/app/mi-organizacion')
+  // Solo el propietario puede acceder. isOwner() acepta el rol canónico
+  // ('owner') y el legacy ('client_owner') durante la transición.
+  if (!isOwner(result.userRole)) redirect('/app/mi-organizacion')
 
   const { org } = result
 

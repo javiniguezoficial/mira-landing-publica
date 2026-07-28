@@ -6,11 +6,7 @@ import { Trash2, ChevronDown } from 'lucide-react'
 import { removeOrganizationMember, updateOrganizationMemberRole } from '@/lib/actions/users'
 import { MiraStatusBadge } from '@/components/mira/MiraStatusBadge'
 import type { OrgMember, OrgMemberRole } from '@/lib/actions/users'
-
-const ROLE_LABELS: Record<OrgMemberRole, string> = {
-  client_owner:  'Owner',
-  client_member: 'Member',
-}
+import { organizationRoleLabel } from '@/lib/identity'
 
 function fmt(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -82,7 +78,7 @@ function MemberRow({ member, onMutate }: { member: OrgMember; onMutate: () => vo
                     onClick={() => handleRoleChange(r)}
                     className={`w-full px-3 py-2 text-left text-xs transition-colors hover:bg-mira-canvas ${member.role === r ? 'font-bold text-mira-magenta' : 'text-slate-700'}`}
                   >
-                    {ROLE_LABELS[r]}
+                    {organizationRoleLabel(r)}
                   </button>
                 ))}
               </div>

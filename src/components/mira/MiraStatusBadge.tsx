@@ -30,6 +30,11 @@ const MAPS: Record<Kind, Record<string, { label: string; cls: string }>> = {
   },
   role: {
     platform_admin: { label: 'Admin',       cls: 'bg-mira-magenta-soft text-mira-magenta' },
+    user:           { label: 'Usuario',     cls: 'bg-slate-100 text-slate-600' },
+    // Roles de organización (owner/admin/member) y legacy de perfil.
+    owner:          { label: 'Propietario', cls: 'bg-violet-100 text-violet-700' },
+    admin:          { label: 'Administrador', cls: 'bg-blue-100 text-blue-700' },
+    member:         { label: 'Miembro',     cls: 'bg-slate-100 text-slate-600' },
     client_owner:   { label: 'Propietario', cls: 'bg-violet-100 text-violet-700' },
     client_member:  { label: 'Miembro',     cls: 'bg-slate-100 text-slate-600' },
   },

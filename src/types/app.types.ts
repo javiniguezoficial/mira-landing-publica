@@ -1,4 +1,4 @@
-export type UserRole = 'platform_admin' | 'client_owner' | 'client_member'
+export type UserRole = 'platform_admin' | 'user' | 'client_owner' | 'client_member'
 
 export type SubscriptionStatus = 'trial' | 'active' | 'past_due' | 'cancelled' | 'expired'
 

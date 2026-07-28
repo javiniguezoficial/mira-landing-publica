@@ -25,7 +25,7 @@ const nav: NavItem[] = [
   { href: '/app/ayuda',           label: 'Ayuda',           icon: HelpCircle },
 ]
 
-const ROLE_LABELS: Record<string, string> = { client_owner: 'Propietario', client_member: 'Miembro' }
+const ROLE_LABELS: Record<string, string> = { user: 'Usuario', client_owner: 'Propietario', client_member: 'Miembro' }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<MiraUser>({ name: 'Usuario', meta: '', initial: 'U' })

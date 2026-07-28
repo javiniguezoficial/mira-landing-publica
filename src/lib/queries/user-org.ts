@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 
-export type MemberRole = 'org_owner' | 'org_admin' | 'org_member' | 'client_owner' | 'client_member'
+export type MemberRole = 'owner' | 'admin' | 'member' | 'client_owner' | 'client_member'
 export type SubscriptionStatus = 'trial' | 'active' | 'past_due' | 'cancelled' | 'expired'
 
 export interface ActiveOrg {

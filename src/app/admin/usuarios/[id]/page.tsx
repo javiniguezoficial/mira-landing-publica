@@ -3,13 +3,9 @@ import { notFound } from 'next/navigation'
 import { ChevronLeft, Mail, Phone, Building2 } from 'lucide-react'
 import { getProfileById, getUserOrganizations } from '@/lib/actions/users'
 import { MiraStatusBadge } from '@/components/mira/MiraStatusBadge'
+import { organizationRoleLabel } from '@/lib/identity'
 
 export const dynamic = 'force-dynamic'
-
-const ORG_ROLE_LABEL: Record<string, string> = {
-  client_owner:  'Owner',
-  client_member: 'Member',
-}
 
 function fmt(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })
@@ -113,7 +109,7 @@ export default async function UsuarioDetailPage({ params }: { params: Promise<{ 
                         </td>
                         <td className="whitespace-nowrap px-4 py-3">
                           <span className="inline-flex items-center rounded-lg bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">
-                            {ORG_ROLE_LABEL[m.role] ?? m.role}
+                            {organizationRoleLabel(m.role)}
                           </span>
                         </td>
                         <td className="whitespace-nowrap px-4 py-3">

@@ -20,7 +20,7 @@ import { RFQ_COLORS } from '@/components/mira/charts/palette'
 
 export const dynamic = 'force-dynamic'
 
-const ROLE_LABELS: Record<string, string> = { client_owner: 'Propietario', client_member: 'Miembro' }
+const ROLE_LABELS: Record<string, string> = { user: 'Usuario', client_owner: 'Propietario', client_member: 'Miembro' }
 
 function timeAgo(iso: string) {
   const d = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)

@@ -9,11 +9,7 @@ import { MiraStatusBadge } from '@/components/mira/MiraStatusBadge'
 import { MiraTable, MiraTr, MiraTd } from '@/components/mira/MiraTable'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { miraBtn } from '@/lib/miraButtons'
-
-const ROLE_LABELS: Record<string, string> = {
-  client_owner: 'Propietario', client_member: 'Miembro',
-  org_owner: 'Propietario', org_admin: 'Administrador', org_member: 'Miembro',
-}
+import { organizationRoleLabel, isOwner as isOwnerRole } from '@/lib/identity'
 
 function Field({ label, value }: { label: string; value?: string | null }) {
   return (
@@ -53,7 +49,7 @@ export default async function MiOrganizacionPage() {
   }
 
   const { org, members, userRole } = result
-  const isOwner = userRole === 'client_owner'
+  const isOwner = isOwnerRole(userRole)
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6 p-4 md:p-6 xl:p-8">
@@ -148,7 +144,7 @@ export default async function MiOrganizacionPage() {
           <MiraTable headers={['Nombre', 'Rol', 'Miembro desde']}>
             {members.map((m) => {
               const name = [m.profile?.first_name, m.profile?.last_name].filter(Boolean).join(' ') || '—'
-              const isOwnerRole = m.role === 'client_owner' || m.role === 'org_owner'
+              const memberIsOwner = m.orgRole === 'owner'
               return (
                 <MiraTr key={m.id}>
                   <MiraTd>
@@ -160,9 +156,9 @@ export default async function MiOrganizacionPage() {
                     </div>
                   </MiraTd>
                   <MiraTd>
-                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${isOwnerRole ? 'bg-mira-magenta-soft text-mira-magenta' : 'bg-slate-100 text-slate-600'}`}>
-                      {isOwnerRole && <BadgeCheck size={10} />}
-                      {ROLE_LABELS[m.role] ?? m.role}
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${memberIsOwner ? 'bg-mira-magenta-soft text-mira-magenta' : 'bg-slate-100 text-slate-600'}`}>
+                      {memberIsOwner && <BadgeCheck size={10} />}
+                      {organizationRoleLabel(m.orgRole)}
                     </span>
                   </MiraTd>
                   <MiraTd className="text-slate-500">
