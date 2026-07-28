@@ -11,7 +11,7 @@
 // comercial existen y están probadas, pero NINGÚN guard las invoca todavía:
 // se conectan en 6B.2 (estados), 6B.4 (capacidades) y 6B.5 (middleware).
 
-import { isOrgAdmin, isOwner, type OrganizationRole } from '@/lib/identity'
+import { isOrgAdmin, isOwner, type OrganizationRole, type PlatformRole } from '@/lib/identity'
 import type { AuthorizationCode } from './errors'
 import type { AuthContext, AuthMembership } from './types'
 
@@ -22,20 +22,33 @@ export function evaluateSession(context: AuthContext | null): AuthorizationCode 
 }
 
 /**
- * Administrador de plataforma.
+ * Decisión mínima sobre el rol global. Recibe el rol YA normalizado.
  *
- * Un rol que no se reconoce devuelve `INVALID_ROLE`, no `FORBIDDEN`: ambos
- * deniegan igual, pero distinguirlos hace visible en los registros que hay un
- * valor corrupto en base de datos en lugar de un usuario normal.
+ * Existe aparte de `evaluatePlatformAdmin` porque el middleware corre en el
+ * Edge Runtime y no puede construir un `AuthContext` completo (no tiene acceso
+ * a `next/headers`). Ambas superficies comparten así exactamente el mismo
+ * criterio en lugar de reimplementarlo.
+ *
+ * FAIL-CLOSED: `null` —rol desconocido, perfil ausente o consulta con error—
+ * devuelve `INVALID_ROLE` y por tanto DENIEGA. Un error nunca es un permiso.
+ *
+ * Se distingue `INVALID_ROLE` de `FORBIDDEN` porque ambos deniegan igual, pero
+ * el primero hace visible en los registros que hay un valor corrupto o una
+ * consulta fallida, y no simplemente un usuario normal.
  */
+export function evaluatePlatformRole(
+  platformRole: PlatformRole | null,
+): AuthorizationCode | null {
+  if (platformRole === null) return 'INVALID_ROLE'
+  if (platformRole !== 'platform_admin') return 'FORBIDDEN'
+  return null
+}
+
+/** Administrador de plataforma, a partir del contexto completo. */
 export function evaluatePlatformAdmin(context: AuthContext | null): AuthorizationCode | null {
   const sinSesion = evaluateSession(context)
   if (sinSesion) return sinSesion
-
-  const role = context!.platformRole
-  if (role === null) return 'INVALID_ROLE'
-  if (role !== 'platform_admin') return 'FORBIDDEN'
-  return null
+  return evaluatePlatformRole(context!.platformRole)
 }
 
 /** Existe una pertenencia utilizable. */

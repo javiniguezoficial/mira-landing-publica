@@ -1,5 +1,37 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { normalizePlatformRole } from '@/lib/identity'
+import { evaluatePlatformRole } from '@/lib/auth/policy'
+
+/**
+ * Rol global del usuario, resuelto FAIL-CLOSED.
+ *
+ * Devuelve `null` —que deniega— si la consulta falla, si no hay fila o si el
+ * valor almacenado no se reconoce. Un error de consulta NUNCA puede
+ * interpretarse como permiso.
+ *
+ * El middleware corre en el Edge Runtime y no puede usar `getAuthContext()`
+ * (depende de `next/headers`), así que construye su propia consulta mínima
+ * pero delega la DECISIÓN en `evaluatePlatformRole`, la misma que usan los
+ * guards de servidor.
+ */
+async function resolvePlatformRole(
+  supabase: ReturnType<typeof createServerClient>,
+  userId: string,
+) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (error) {
+    console.error('[middleware] error al cargar el perfil; se deniega:', error.message)
+    return null
+  }
+
+  return normalizePlatformRole(data?.role)
+}
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
@@ -42,36 +74,35 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
-  // Rutas privadas: usuario autenticado → verificar rol
-  if ((isAppRoute || isAdminRoute) && user) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
+  // Rutas de administración: solo platform_admin.
+  //
+  // La comprobación es fail-closed en toda la cadena: sin perfil, con error de
+  // consulta o con un rol que no se reconoce, `evaluatePlatformRole` devuelve
+  // un código de denegación y el usuario sale de /admin.
+  if (isAdminRoute && user) {
+    const platformRole = await resolvePlatformRole(supabase, user.id)
 
-    // Cliente intentando entrar a /admin/* → /app/dashboard
-    if (isAdminRoute && profile?.role !== 'platform_admin') {
+    if (evaluatePlatformRole(platformRole) !== null) {
       const redirectUrl = request.nextUrl.clone()
       redirectUrl.pathname = '/app/dashboard'
+      redirectUrl.search = ''
       return NextResponse.redirect(redirectUrl)
     }
   }
 
-  // Usuario autenticado en /login o /registro → redirigir a su dashboard
+  // Usuario autenticado en /login o /registro → redirigir a su dashboard.
+  // Aquí un rol desconocido NO deniega nada: solo elige destino, y el destino
+  // seguro es el área de cliente.
   const isAuthRoute = pathname === '/login' || pathname === '/registro'
   if (isAuthRoute && user) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
+    const platformRole = await resolvePlatformRole(supabase, user.id)
 
     const destination =
-      profile?.role === 'platform_admin' ? '/admin/dashboard' : '/app/dashboard'
+      platformRole === 'platform_admin' ? '/admin/dashboard' : '/app/dashboard'
 
     const redirectUrl = request.nextUrl.clone()
     redirectUrl.pathname = destination
+    redirectUrl.search = ''
     return NextResponse.redirect(redirectUrl)
   }
 
