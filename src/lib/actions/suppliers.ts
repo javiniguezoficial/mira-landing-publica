@@ -1,7 +1,7 @@
 'use server'
 
+import { requirePlatformAdmin } from '@/lib/auth/guards'
 import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
 import {
   buildSupplierFilterOptions,
   type SupplierFacetRow,
@@ -166,21 +166,6 @@ async function resolveSupplierTaxonomy(
   return { supplier_market_id: marketId, supplier_category_id: categoryId, supplier_family_id: familyId, supplier_subfamily_id: subfamilyId }
 }
 
-// ── Guard: solo platform_admin ────────────────────────────────────────────────
-
-async function requireAdmin(supabase: Awaited<ReturnType<typeof createClient>>) {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-
-  if (profile?.role !== 'platform_admin') throw new Error('No tienes permiso de administrador')
-  return user
-}
 
 // ── Admin: crear proveedor ────────────────────────────────────────────────────
 
@@ -188,8 +173,7 @@ export async function createSupplier(data: SupplierFormData): Promise<SupplierAc
   const basicError = validateSupplierData(data)
   if (basicError) return { error: basicError }
 
-  const supabase = await createClient()
-  await requireAdmin(supabase)
+  const { supabase } = await requirePlatformAdmin('throw')
 
   const taxonomy = await resolveSupplierTaxonomy(supabase, data)
   if ('error' in taxonomy) return taxonomy
@@ -234,8 +218,7 @@ export async function updateSupplier(id: string, data: SupplierFormData): Promis
   const basicError = validateSupplierData(data)
   if (basicError) return { error: basicError }
 
-  const supabase = await createClient()
-  await requireAdmin(supabase)
+  const { supabase } = await requirePlatformAdmin('throw')
 
   const taxonomy = await resolveSupplierTaxonomy(supabase, data)
   if ('error' in taxonomy) return taxonomy
@@ -275,8 +258,7 @@ export async function updateSupplier(id: string, data: SupplierFormData): Promis
 // ── Admin: activar/desactivar ─────────────────────────────────────────────────
 
 export async function toggleSupplierActive(id: string, is_active: boolean): Promise<void> {
-  const supabase = await createClient()
-  await requireAdmin(supabase)
+  const { supabase } = await requirePlatformAdmin('throw')
 
   const { error } = await supabase
     .from('suppliers')
@@ -292,8 +274,7 @@ export async function toggleSupplierActive(id: string, is_active: boolean): Prom
 // la respuesta se conserva y solo se anula el enlace. Si una futura FK bloquea
 // el borrado (23503), se devuelve un mensaje amigable en vez de romper.
 export async function deleteSupplier(id: string): Promise<SupplierVoidResult> {
-  const supabase = await createClient()
-  await requireAdmin(supabase)
+  const { supabase } = await requirePlatformAdmin('throw')
 
   const { error } = await supabase.from('suppliers').delete().eq('id', id)
 

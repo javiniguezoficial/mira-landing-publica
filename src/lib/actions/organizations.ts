@@ -1,7 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
+import { requirePlatformAdmin } from '@/lib/auth/guards'
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -46,27 +45,11 @@ export interface OrgFormData {
   subscription_status?: SubscriptionStatus
 }
 
-// ── Guard: solo platform_admin ────────────────────────────────────────────────
-
-async function requireAdmin() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-
-  if (profile?.role !== 'platform_admin') redirect('/app/dashboard')
-  return supabase
-}
 
 // ── Listado ───────────────────────────────────────────────────────────────────
 
 export async function getOrganizations(): Promise<Organization[]> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
 
   const { data, error } = await supabase
     .from('organizations')
@@ -83,7 +66,7 @@ export async function getOrganizations(): Promise<Organization[]> {
 // ── Detalle ───────────────────────────────────────────────────────────────────
 
 export async function getOrganizationById(id: string): Promise<Organization | null> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
 
   const { data, error } = await supabase
     .from('organizations')
@@ -101,7 +84,7 @@ export async function getOrganizationById(id: string): Promise<Organization | nu
 // ── Obtener planes disponibles ────────────────────────────────────────────────
 
 export async function getPlans() {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
 
   const { data } = await supabase
     .from('plans')
@@ -115,7 +98,7 @@ export async function getPlans() {
 // ── Crear organización ────────────────────────────────────────────────────────
 
 export async function createOrganization(formData: OrgFormData): Promise<{ id: string }> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
 
   // Si no se selecciona plan, usar Starter por defecto
   let planId = formData.plan_id || null
@@ -155,7 +138,7 @@ export async function createOrganization(formData: OrgFormData): Promise<{ id: s
 // ── Editar organización ───────────────────────────────────────────────────────
 
 export async function updateOrganization(id: string, formData: OrgFormData): Promise<void> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
 
   const { error } = await supabase
     .from('organizations')

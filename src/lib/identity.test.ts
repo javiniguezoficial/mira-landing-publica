@@ -16,6 +16,10 @@ import {
   commercialProfileLabel,
   capabilitiesLabel,
   pickOwnerUserId,
+  normalizeProfileStatus,
+  normalizeOrganizationStatus,
+  normalizeMembershipStatus,
+  normalizeCommercialProfile,
 } from '@/lib/identity'
 
 // Estos helpers deciden quién puede administrar una organización y quién puede
@@ -344,5 +348,43 @@ describe('pickOwnerUserId — elección determinista del propietario', () => {
     const sinRol = { user_id: 'aaaa1111', joined_at: '2026-06-04T18:47:41Z' }
     const admin  = { user_id: 'bbbb2222', joined_at: '2026-06-03T00:00:00Z', platform_role: 'platform_admin' }
     expect(pickOwnerUserId([admin, sinRol])).toBe('aaaa1111')
+  })
+})
+
+// ── Normalizadores de estado (6B.1) ─────────────────────────────────────────
+
+describe('normalizadores de estado', () => {
+  it('normalizeProfileStatus acepta los cuatro estados canónicos', () => {
+    expect(normalizeProfileStatus('pending')).toBe('pending')
+    expect(normalizeProfileStatus('active')).toBe('active')
+    expect(normalizeProfileStatus('suspended')).toBe('suspended')
+    expect(normalizeProfileStatus('rejected')).toBe('rejected')
+  })
+
+  it('normalizeProfileStatus devuelve null ante lo desconocido', () => {
+    expect(normalizeProfileStatus('activo')).toBeNull()
+    expect(normalizeProfileStatus('')).toBeNull()
+    expect(normalizeProfileStatus(null)).toBeNull()
+    expect(normalizeProfileStatus(undefined)).toBeNull()
+  })
+
+  it('normalizeOrganizationStatus acepta los estados canónicos', () => {
+    expect(normalizeOrganizationStatus('active')).toBe('active')
+    expect(normalizeOrganizationStatus('suspended')).toBe('suspended')
+    expect(normalizeOrganizationStatus('invited')).toBeNull()
+  })
+
+  it('normalizeMembershipStatus distingue invited de los demás', () => {
+    expect(normalizeMembershipStatus('invited')).toBe('invited')
+    expect(normalizeMembershipStatus('active')).toBe('active')
+    expect(normalizeMembershipStatus('suspended')).toBe('suspended')
+    expect(normalizeMembershipStatus('rejected')).toBeNull()
+  })
+
+  it('normalizeCommercialProfile acepta los tres perfiles', () => {
+    expect(normalizeCommercialProfile('buyer')).toBe('buyer')
+    expect(normalizeCommercialProfile('seller')).toBe('seller')
+    expect(normalizeCommercialProfile('buyer_seller')).toBe('buyer_seller')
+    expect(normalizeCommercialProfile('comprador')).toBeNull()
   })
 })

@@ -1,6 +1,6 @@
 import Link from 'next/link'
-import { notFound, redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { notFound } from 'next/navigation'
+import { requirePlatformAdmin } from '@/lib/auth/guards'
 import { getTicket } from '@/lib/queries/support'
 import { TicketDetail } from './TicketDetail'
 import { ArrowLeft, User, Building2, Calendar, Tag, MessageSquare, Info } from 'lucide-react'
@@ -20,12 +20,8 @@ interface PageProps {
 }
 
 export default async function AdminSoporteDetailPage({ params }: PageProps) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'platform_admin') redirect('/login')
+  // Página de administración: el guard redirige, nunca responde JSON.
+  await requirePlatformAdmin('redirect-login')
 
   const { id } = await params
   const ticket = await getTicket(id)

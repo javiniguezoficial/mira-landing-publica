@@ -1,7 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
+import { requirePlatformAdmin } from '@/lib/auth/guards'
 import * as XLSX from 'xlsx'
 import {
   MAX_FILE_SIZE_BYTES,
@@ -15,17 +14,6 @@ import {
   type ImportResult,
 } from '@/lib/types/import-suppliers'
 
-// ── Guard ─────────────────────────────────────────────────────────────────────
-
-async function requireAdmin() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-  const { data: profile } = await supabase
-    .from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'platform_admin') redirect('/app/dashboard')
-  return supabase
-}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -102,7 +90,7 @@ function parseProduccionUnit(p: string | null): string | null {
 export async function parseAndValidateSupplierFile(
   formData: FormData,
 ): Promise<ParseResult> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
 
   const file = formData.get('file') as File | null
   if (!file) throw new Error('No se ha recibido ningún archivo.')
@@ -336,7 +324,7 @@ export async function parseAndValidateSupplierFile(
 export async function importSuppliers(
   rows: ValidatedSupplierRow[],
 ): Promise<ImportResult> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
 
   // Solo insertamos filas válidas no duplicadas
   const toInsert = rows.filter(r => !r.isDuplicate)

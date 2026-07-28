@@ -1,4 +1,5 @@
-import { createClient } from '@/lib/supabase/server'
+import { loadAuthContext } from '@/lib/auth/context'
+import { resolveFallbackMembership } from '@/lib/auth/membership'
 import { resolveMemberRoles, type OrganizationRole } from '@/lib/identity'
 
 export interface OrgMember {
@@ -38,24 +39,19 @@ export interface OrgDetail {
 
 export type MyOrgResult =
   | { status: 'no_org' }
-  | { status: 'ok'; org: OrgDetail; members: OrgMember[]; userRole: string }
+  | { status: 'ok'; org: OrgDetail; members: OrgMember[]; userRole: OrganizationRole | null }
 
 export async function getMyOrganization(): Promise<MyOrgResult> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { status: 'no_org' }
+  const { supabase, context } = await loadAuthContext()
+  if (!context) return { status: 'no_org' }
 
-  // Obtener membresía del usuario actual
-  const { data: membership, error: memErr } = await supabase
-    .from('organization_members')
-    .select('organization_id, role, org_role')
-    .eq('user_id', user.id)
-    .limit(1)
-    .single()
+  // Elección determinista de la pertenencia. Antes era `.limit(1)` sin ORDER
+  // BY: con más de una pertenencia el resultado dependía del orden que
+  // devolviera Postgres. Ver `resolveFallbackMembership`.
+  const membership = resolveFallbackMembership(context.memberships)
+  if (!membership) return { status: 'no_org' }
 
-  if (memErr || !membership) return { status: 'no_org' }
-
-  const orgId = membership.organization_id
+  const orgId = membership.organizationId
 
   // Cargar organización completa + plan
   const { data: org, error: orgErr } = await supabase
@@ -111,7 +107,7 @@ export async function getMyOrganization(): Promise<MyOrgResult> {
     status: 'ok',
     org: { ...org, plan } as OrgDetail,
     members,
-    // Prioriza el modelo canónico; cae al legacy si `org_role` aún no existiera.
-    userRole: membership.org_role ?? membership.role,
+    // Rol canónico ya normalizado por el contexto de autorización.
+    userRole: membership.orgRole,
   }
 }

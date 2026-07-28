@@ -1,7 +1,7 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
+import { requirePlatformAdmin } from '@/lib/auth/guards'
+import type { ServerSupabaseClient } from '@/lib/auth/context'
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -29,27 +29,10 @@ export interface ActionResult {
   success?: string
 }
 
-// ─── Helper: verificar platform_admin ────────────────────────────────────────
-
-async function requirePlatformAdmin() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-
-  if (profile?.role !== 'platform_admin') redirect('/login')
-
-  return { supabase, user }
-}
 
 // ─── Helper: obtener o crear fila singleton de platform_settings ─────────────
 
-async function getOrCreateSettings(supabase: Awaited<ReturnType<typeof createClient>>) {
+async function getOrCreateSettings(supabase: ServerSupabaseClient) {
   const { data, error } = await supabase
     .from('platform_settings')
     .select('*')
@@ -80,24 +63,24 @@ async function getOrCreateSettings(supabase: Awaited<ReturnType<typeof createCli
 // ─── getAdminConfig ───────────────────────────────────────────────────────────
 
 export async function getAdminConfig(): Promise<AdminConfig> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+  const { supabase, context } = await requirePlatformAdmin('redirect-login')
 
+  // La autorización ya está resuelta por el guard. Esta consulta es de DATOS:
+  // trae los campos del perfil que la pantalla necesita mostrar.
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id, role, first_name, last_name, phone, avatar_url')
-    .eq('id', user.id)
+    .select('id, first_name, last_name, phone, avatar_url')
+    .eq('id', context.user.id)
     .single()
 
-  if (profile?.role !== 'platform_admin') redirect('/login')
+  if (!profile) throw new Error('No se ha podido cargar el perfil.')
 
   const settings = await getOrCreateSettings(supabase)
 
   return {
     profile: {
       id: profile.id,
-      email: user.email ?? '',
+      email: context.user.email ?? '',
       first_name: profile.first_name,
       last_name: profile.last_name,
       phone: profile.phone,
@@ -120,7 +103,7 @@ export async function updateAdminProfile(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
-  const { supabase, user } = await requirePlatformAdmin()
+  const { supabase, userId } = await requirePlatformAdmin('redirect-login')
 
   const first_name = (formData.get('first_name') as string)?.trim()
   const last_name  = (formData.get('last_name')  as string)?.trim() || null
@@ -131,7 +114,7 @@ export async function updateAdminProfile(
   const { error } = await supabase
     .from('profiles')
     .update({ first_name, last_name, phone })
-    .eq('id', user.id)
+    .eq('id', userId)
 
   if (error) return { error: error.message }
 
@@ -144,7 +127,7 @@ export async function updatePlatformSettings(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
-  const { supabase } = await requirePlatformAdmin()
+  const { supabase } = await requirePlatformAdmin('redirect-login')
 
   const platform_name    = (formData.get('platform_name')    as string)?.trim()
   const support_email    = (formData.get('support_email')    as string)?.trim() || null

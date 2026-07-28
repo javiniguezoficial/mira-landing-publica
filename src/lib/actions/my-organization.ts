@@ -1,6 +1,7 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { requireSession, resolveMembership } from '@/lib/auth/guards'
+import { isOwner } from '@/lib/identity'
 import { redirect } from 'next/navigation'
 
 // Solo estos campos son editables desde el cliente
@@ -14,27 +15,25 @@ export interface UpdateOrgBasicResult {
 export async function updateOrgBasic(
   formData: FormData
 ): Promise<UpdateOrgBasicResult> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+  const { supabase, context } = await requireSession()
 
-  // Verificar que el usuario es client_owner de su organización
-  const { data: membership } = await supabase
-    .from('organization_members')
-    .select('organization_id, role')
-    .eq('user_id', user.id)
-    .limit(1)
-    .single()
+  // Pertenencia resuelta de forma determinista, no por la primera fila que
+  // devuelva Postgres.
+  const membership = resolveMembership(context)
 
   if (!membership) {
     return { error: 'No tienes una organización asignada.' }
   }
 
-  if (membership.role !== 'client_owner') {
+  // `isOwner` acepta el rol canónico ('owner') y el legacy ('client_owner')
+  // durante la transición. La comparación literal anterior contra
+  // 'client_owner' habría rechazado a un propietario creado ya en el modelo
+  // canónico.
+  if (!isOwner(membership.orgRole)) {
     return { error: 'Solo el propietario de la organización puede editar estos datos.' }
   }
 
-  const orgId = membership.organization_id
+  const orgId = membership.organizationId
 
   // Construir payload solo con campos permitidos
   const payload: Partial<Record<EditableField, string | null>> = {}

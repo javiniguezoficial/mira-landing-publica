@@ -5,6 +5,7 @@ import {
 import { currencySymbol, unitLabel } from '@/lib/utils'
 import { redirect } from 'next/navigation'
 import { getActiveOrg } from '@/lib/queries/user-org'
+import { organizationRoleLabel } from '@/lib/identity'
 import { getClientDashboardData } from '@/lib/queries/client-dashboard'
 import { getLatestPrices } from '@/lib/queries/admin-dashboard'
 import { createClient } from '@/lib/supabase/server'
@@ -20,7 +21,8 @@ import { RFQ_COLORS } from '@/components/mira/charts/palette'
 
 export const dynamic = 'force-dynamic'
 
-const ROLE_LABELS: Record<string, string> = { user: 'Usuario', client_owner: 'Propietario', client_member: 'Miembro' }
+// El rol llega ya normalizado desde `getActiveOrg`; `organizationRoleLabel`
+// traduce tanto el valor canónico como el legacy a la misma etiqueta visible.
 
 function timeAgo(iso: string) {
   const d = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
@@ -58,7 +60,7 @@ export default async function AppDashboard() {
     getLatestPrices(5),
   ])
 
-  const roleLabel = ROLE_LABELS[org.userRole] ?? org.userRole
+  const roleLabel = organizationRoleLabel(org.userRole)
   const rfqDonut = data.rfqStatusCounts.map(d => ({ label: d.label, value: d.count, color: RFQ_COLORS[d.status] ?? '#94A3B8' }))
   const priceBars = latestPrices.map(p => ({
     label: p.product,

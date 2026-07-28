@@ -1,9 +1,8 @@
 'use server'
 
 import { createServerClient } from '@supabase/ssr'
-import { createClient } from '@/lib/supabase/server'
+import { requirePlatformAdmin } from '@/lib/auth/guards'
 import { cookies } from 'next/headers'
-import { redirect } from 'next/navigation'
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -33,6 +32,19 @@ export interface OrgMember {
 }
 
 // ── Cliente con service role (solo servidor) ─────────────────────────────────
+//
+// El service role IGNORA RLS por completo. Por eso queda deliberadamente
+// aislado (6B.1):
+//
+//   · NO forma parte de AuthContext;
+//   · NO lo devuelve ningún guard;
+//   · NO se comparte entre acciones;
+//   · NO se usa NUNCA para decidir si alguien es administrador — esa decisión
+//     la toma `requirePlatformAdmin()` con el cliente normal, sujeto a RLS;
+//   · se crea solo dentro de la función que lo necesita, DESPUÉS de autorizar.
+//
+// Su único uso sigue siendo leer los emails de `auth.users`, que no es
+// accesible desde el cliente normal.
 
 async function createAdminClient() {
   const cookieStore = await cookies()
@@ -46,23 +58,6 @@ async function createAdminClient() {
       },
     }
   )
-}
-
-// ── Guard: solo platform_admin ────────────────────────────────────────────────
-
-async function requireAdmin() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-
-  if (profile?.role !== 'platform_admin') redirect('/app/dashboard')
-  return { supabase, adminClient: await createAdminClient(), userId: user.id }
 }
 
 // ── Emails desde auth.users via service role ──────────────────────────────────
@@ -81,9 +76,7 @@ async function fetchEmailMap(): Promise<Record<string, string>> {
 // ── Listado de usuarios ───────────────────────────────────────────────────────
 
 export async function getProfiles(): Promise<UserProfile[]> {
-  await requireAdmin()
-
-  const supabase = await createClient()
+  const { supabase } = await requirePlatformAdmin()
   const { data: profiles, error } = await supabase
     .from('profiles')
     .select('*')
@@ -102,9 +95,7 @@ export async function getProfiles(): Promise<UserProfile[]> {
 // ── Detalle de usuario ────────────────────────────────────────────────────────
 
 export async function getProfileById(id: string): Promise<UserProfile | null> {
-  await requireAdmin()
-
-  const supabase = await createClient()
+  const { supabase } = await requirePlatformAdmin()
   const { data: profile, error } = await supabase
     .from('profiles')
     .select('*')
@@ -120,9 +111,7 @@ export async function getProfileById(id: string): Promise<UserProfile | null> {
 // ── Miembros de una organización ──────────────────────────────────────────────
 
 export async function getOrganizationMembers(orgId: string): Promise<OrgMember[]> {
-  await requireAdmin()
-
-  const supabase = await createClient()
+  const { supabase } = await requirePlatformAdmin()
   const { data, error } = await supabase
     .from('organization_members')
     .select('*')
@@ -153,9 +142,7 @@ export async function getOrganizationMembers(orgId: string): Promise<OrgMember[]
 // ── Organizaciones de un usuario ──────────────────────────────────────────────
 
 export async function getUserOrganizations(userId: string) {
-  await requireAdmin()
-
-  const supabase = await createClient()
+  const { supabase } = await requirePlatformAdmin()
   const { data, error } = await supabase
     .from('organization_members')
     .select(`
@@ -178,13 +165,11 @@ export async function addOrganizationMember(
   userId: string,
   role: OrgMemberRole
 ): Promise<void> {
-  const { userId: adminId } = await requireAdmin()
+  const { userId: adminId, supabase } = await requirePlatformAdmin()
 
   if (!['client_owner', 'client_member'].includes(role)) {
     throw new Error('Rol no válido. Debe ser client_owner o client_member.')
   }
-
-  const supabase = await createClient()
 
   // Verificar que el usuario existe
   const { data: profile } = await supabase
@@ -222,9 +207,7 @@ export async function addOrganizationMember(
 // ── Eliminar miembro ──────────────────────────────────────────────────────────
 
 export async function removeOrganizationMember(memberId: string): Promise<void> {
-  await requireAdmin()
-
-  const supabase = await createClient()
+  const { supabase } = await requirePlatformAdmin()
   const { error } = await supabase
     .from('organization_members')
     .delete()
@@ -239,13 +222,11 @@ export async function updateOrganizationMemberRole(
   memberId: string,
   newRole: OrgMemberRole
 ): Promise<void> {
-  await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
 
   if (!['client_owner', 'client_member'].includes(newRole)) {
     throw new Error('Rol no válido.')
   }
-
-  const supabase = await createClient()
   const { error } = await supabase
     .from('organization_members')
     .update({ role: newRole })

@@ -1,7 +1,7 @@
 'use server'
 
+import { requirePlatformAdmin } from '@/lib/auth/guards'
 import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -62,22 +62,11 @@ export interface Product {
   market?: Pick<Market, 'id' | 'name' | 'slug'> | null
 }
 
-// ── Guard ─────────────────────────────────────────────────────────────────────
-
-async function requireAdmin() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-  const { data: profile } = await supabase
-    .from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'platform_admin') redirect('/app/dashboard')
-  return supabase
-}
 
 // ── Strategic markets ───────────────────────────────────────────────────────
 
 export async function getStrategicMarkets(): Promise<StrategicMarket[]> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   const { data, error } = await supabase
     .from('strategic_markets')
     .select('*')
@@ -87,7 +76,7 @@ export async function getStrategicMarkets(): Promise<StrategicMarket[]> {
 }
 
 export async function getStrategicMarketById(id: string): Promise<StrategicMarket | null> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   const { data } = await supabase
     .from('strategic_markets').select('*').eq('id', id).single()
   return data as StrategicMarket | null
@@ -96,7 +85,7 @@ export async function getStrategicMarketById(id: string): Promise<StrategicMarke
 export async function createStrategicMarket(form: {
   name: string; slug: string; description?: string; icon?: string; sort_order?: number
 }): Promise<{ id: string }> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   const { data, error } = await supabase
     .from('strategic_markets')
     .insert({
@@ -114,7 +103,7 @@ export async function createStrategicMarket(form: {
 export async function updateStrategicMarket(id: string, form: {
   name: string; slug: string; description?: string; icon?: string; sort_order?: number; is_active?: boolean
 }): Promise<void> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   const { error } = await supabase
     .from('strategic_markets')
     .update({
@@ -131,7 +120,7 @@ export async function updateStrategicMarket(id: string, form: {
 }
 
 export async function toggleStrategicMarket(id: string, is_active: boolean): Promise<void> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   const { error } = await supabase
     .from('strategic_markets')
     .update({ is_active, updated_at: new Date().toISOString() })
@@ -142,7 +131,7 @@ export async function toggleStrategicMarket(id: string, is_active: boolean): Pro
 // ── Categories ────────────────────────────────────────────────────────────────
 
 export async function getCategories(): Promise<MarketCategory[]> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   const { data, error } = await supabase
     .from('market_categories')
     .select('*, strategic_market:strategic_markets(id, name, slug)')
@@ -152,7 +141,7 @@ export async function getCategories(): Promise<MarketCategory[]> {
 }
 
 export async function getCategoryById(id: string): Promise<MarketCategory | null> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   const { data } = await supabase
     .from('market_categories')
     .select('*, strategic_market:strategic_markets(id, name, slug)')
@@ -164,7 +153,7 @@ export async function createCategory(form: {
   name: string; slug: string; description?: string; icon?: string; sort_order?: number
   strategic_market_id?: string | null
 }): Promise<{ id: string }> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   const { data, error } = await supabase
     .from('market_categories')
     .insert({
@@ -184,7 +173,7 @@ export async function updateCategory(id: string, form: {
   name: string; slug: string; description?: string; icon?: string; sort_order?: number; is_active?: boolean
   strategic_market_id?: string | null
 }): Promise<void> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   const { error } = await supabase
     .from('market_categories')
     .update({
@@ -202,7 +191,7 @@ export async function updateCategory(id: string, form: {
 }
 
 export async function toggleCategory(id: string, is_active: boolean): Promise<void> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   const { error } = await supabase
     .from('market_categories')
     .update({ is_active, updated_at: new Date().toISOString() })
@@ -213,7 +202,7 @@ export async function toggleCategory(id: string, is_active: boolean): Promise<vo
 // ── Markets ───────────────────────────────────────────────────────────────────
 
 export async function getMarkets(): Promise<Market[]> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   const { data, error } = await supabase
     .from('markets')
     .select('*, category:market_categories(id, name, slug)')
@@ -223,7 +212,7 @@ export async function getMarkets(): Promise<Market[]> {
 }
 
 export async function getMarketById(id: string): Promise<Market | null> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   const { data } = await supabase
     .from('markets')
     .select('*, category:market_categories(id, name, slug)')
@@ -238,7 +227,7 @@ export interface MarketDetail extends Omit<Market, 'category'> {
 }
 
 export async function getMarketDetail(id: string): Promise<MarketDetail | null> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   const { data } = await supabase
     .from('markets')
     .select('*, category:market_categories(id, name, slug, strategic_market:strategic_markets(id, name, slug))')
@@ -249,7 +238,7 @@ export async function getMarketDetail(id: string): Promise<MarketDetail | null> 
 export async function createMarket(form: {
   category_id: string; name: string; slug: string; description?: string; country_scope?: string
 }): Promise<{ id: string }> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   const { data, error } = await supabase
     .from('markets')
     .insert({
@@ -267,7 +256,7 @@ export async function createMarket(form: {
 export async function updateMarket(id: string, form: {
   category_id: string; name: string; slug: string; description?: string; country_scope?: string; is_active?: boolean
 }): Promise<void> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   const { error } = await supabase
     .from('markets')
     .update({
@@ -284,7 +273,7 @@ export async function updateMarket(id: string, form: {
 }
 
 export async function toggleMarket(id: string, is_active: boolean): Promise<void> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   const { error } = await supabase
     .from('markets')
     .update({ is_active, updated_at: new Date().toISOString() })
@@ -295,7 +284,7 @@ export async function toggleMarket(id: string, is_active: boolean): Promise<void
 // ── Products ──────────────────────────────────────────────────────────────────
 
 export async function getProductsByMarket(market_id: string): Promise<Product[]> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   const { data, error } = await supabase
     .from('products')
     .select('*')
@@ -306,7 +295,7 @@ export async function getProductsByMarket(market_id: string): Promise<Product[]>
 }
 
 export async function getProductById(id: string): Promise<Product | null> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   const { data } = await supabase
     .from('products').select('*').eq('id', id).single()
   return data as Product | null
@@ -316,7 +305,7 @@ export async function createProduct(form: {
   market_id: string; name: string; slug: string; unit: string; description?: string
   lonja?: string; variedad?: string; calibre?: string; incoterm?: string; tipo?: string
 }): Promise<{ id: string }> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   const { data, error } = await supabase
     .from('products')
     .insert({
@@ -340,7 +329,7 @@ export async function updateProduct(id: string, form: {
   name: string; slug: string; unit: string; description?: string; is_active?: boolean
   lonja?: string; variedad?: string; calibre?: string; incoterm?: string; tipo?: string
 }): Promise<void> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   const { error } = await supabase
     .from('products')
     .update({
@@ -361,7 +350,7 @@ export async function updateProduct(id: string, form: {
 }
 
 export async function toggleProduct(id: string, is_active: boolean): Promise<void> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   const { error } = await supabase
     .from('products')
     .update({ is_active, updated_at: new Date().toISOString() })
@@ -394,7 +383,7 @@ export interface StrategicMarketDetail {
 }
 
 export async function getStrategicMarketDetail(id: string): Promise<StrategicMarketDetail | null> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
 
   const [smResult, catResult] = await Promise.all([
     supabase.from('strategic_markets').select('*').eq('id', id).single(),

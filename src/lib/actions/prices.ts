@@ -1,7 +1,7 @@
 'use server'
 
+import { requirePlatformAdmin } from '@/lib/auth/guards'
 import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -37,17 +37,6 @@ export interface PriceFormData {
   volume?: number | null
 }
 
-// ── Guard ─────────────────────────────────────────────────────────────────────
-
-async function requireAdmin() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-  const { data: profile } = await supabase
-    .from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'platform_admin') redirect('/app/dashboard')
-  return supabase
-}
 
 // ── Listar precios de un producto ─────────────────────────────────────────────
 
@@ -56,7 +45,7 @@ export async function getPricesByProduct(
   limit = 100,
   offset = 0,
 ): Promise<{ records: PriceRecord[]; total: number }> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
 
   const { data, error, count } = await supabase
     .from('product_price_records')
@@ -83,7 +72,7 @@ export async function getPricesByProduct(
 // ── Obtener un registro ───────────────────────────────────────────────────────
 
 export async function getPriceRecordById(id: string): Promise<PriceRecord | null> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   const { data } = await supabase
     .from('product_price_records').select('*').eq('id', id).single()
   if (!data) return null
@@ -103,7 +92,7 @@ export async function createPriceRecord(
   productId: string,
   form: PriceFormData,
 ): Promise<{ id: string }> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   const { data, error } = await supabase
     .from('product_price_records')
     .insert({
@@ -130,7 +119,7 @@ export async function updatePriceRecord(
   id: string,
   form: PriceFormData,
 ): Promise<void> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   const { error } = await supabase
     .from('product_price_records')
     .update({
@@ -153,7 +142,7 @@ export async function updatePriceRecord(
 // ── Eliminar ──────────────────────────────────────────────────────────────────
 
 export async function deletePriceRecord(id: string): Promise<void> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   const { error } = await supabase
     .from('product_price_records').delete().eq('id', id)
   if (error) throw new Error(error.message)
@@ -476,7 +465,7 @@ export async function createPriceManual(
   productId: string,
   form: ManualPriceFormData,
 ): Promise<{ id: string } | { error: string }> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
 
   if (!productId) return { error: 'Debes seleccionar una referencia / producto' }
   if (!form.recorded_at) return { error: 'La fecha es obligatoria' }

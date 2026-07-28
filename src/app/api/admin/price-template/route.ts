@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
-import { createClient } from '@/lib/supabase/server'
+import { authorizePlatformAdminApi } from '@/lib/auth/guards'
+import { authorizationApiMessage, authorizationHttpStatus } from '@/lib/auth/errors'
 
 const COLUMNS = [
   'market_slug',
@@ -103,14 +104,13 @@ const EXAMPLE_ROWS = [
 ]
 
 export async function GET(request: NextRequest) {
-  // Guard: solo admins
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  const { data: profile } = await supabase
-    .from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'platform_admin') {
-    return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 })
+  // Guard: solo admins. Un Route Handler responde JSON — nunca redirige.
+  const auth = await authorizePlatformAdminApi()
+  if (!auth.ok) {
+    return NextResponse.json(
+      { error: authorizationApiMessage(auth.error.code) },
+      { status: authorizationHttpStatus(auth.error.code) },
+    )
   }
 
   const format = request.nextUrl.searchParams.get('format') ?? 'csv'

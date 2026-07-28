@@ -1,7 +1,7 @@
 'use server'
 
+import { requirePlatformAdmin } from '@/lib/auth/guards'
 import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -63,21 +63,6 @@ function validateResponseData(data: RfqResponseFormData) {
   }
 }
 
-// ── Guard: solo platform_admin ────────────────────────────────────────────────
-
-async function requireAdmin(supabase: Awaited<ReturnType<typeof createClient>>) {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-
-  if (profile?.role !== 'platform_admin') throw new Error('No tienes permiso de administrador')
-  return user
-}
 
 // ── Admin: crear respuesta ────────────────────────────────────────────────────
 
@@ -87,8 +72,7 @@ export async function createRfqResponse(
 ): Promise<{ id: string }> {
   validateResponseData(formData)
 
-  const supabase = await createClient()
-  await requireAdmin(supabase)
+  const { supabase } = await requirePlatformAdmin('throw')
 
   const { data, error } = await supabase
     .from('rfq_responses')
@@ -121,8 +105,7 @@ export async function updateRfqResponse(
 ): Promise<void> {
   validateResponseData(formData)
 
-  const supabase = await createClient()
-  await requireAdmin(supabase)
+  const { supabase } = await requirePlatformAdmin('throw')
 
   const { error } = await supabase
     .from('rfq_responses')
@@ -152,8 +135,7 @@ export async function updateRfqResponseStatus(
 ): Promise<void> {
   if (!VALID_STATUSES.includes(status)) throw new Error('Estado no válido')
 
-  const supabase = await createClient()
-  await requireAdmin(supabase)
+  const { supabase } = await requirePlatformAdmin('throw')
 
   const { error } = await supabase
     .from('rfq_responses')

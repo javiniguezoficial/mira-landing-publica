@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { requirePlatformAdmin } from '@/lib/auth/guards'
 import { getActiveOrg } from '@/lib/queries/user-org'
 import { redirect } from 'next/navigation'
 
@@ -355,18 +356,7 @@ const VALID_ADMIN_STATUSES: RfqStatus[] = ['draft', 'open', 'closed', 'awarded',
 export async function adminUpdateRfqStatus(rfqId: string, status: RfqStatus): Promise<void> {
   if (!VALID_ADMIN_STATUSES.includes(status)) throw new Error('Estado no válido')
 
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-
-  // Guard: solo platform_admin
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-
-  if (profile?.role !== 'platform_admin') throw new Error('No tienes permiso de administrador')
+  const { supabase } = await requirePlatformAdmin('throw')
 
   const { error } = await supabase
     .from('rfqs')

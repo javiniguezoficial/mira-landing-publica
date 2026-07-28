@@ -1,6 +1,7 @@
-import { createClient } from '@/lib/supabase/server'
+import { loadAuthContext } from '@/lib/auth/context'
+import { resolveFallbackMembership } from '@/lib/auth/membership'
+import type { OrganizationRole } from '@/lib/identity'
 
-export type MemberRole = 'owner' | 'admin' | 'member' | 'client_owner' | 'client_member'
 export type SubscriptionStatus = 'trial' | 'active' | 'past_due' | 'cancelled' | 'expired'
 
 export interface ActiveOrg {
@@ -8,9 +9,14 @@ export interface ActiveOrg {
   name: string
   subscription_status: SubscriptionStatus
   plan: { id: string; name: string; slug: string } | null
-  userRole: MemberRole
+  /**
+   * Rol canónico ya normalizado ('owner' | 'admin' | 'member'), o null si el
+   * valor almacenado no se reconoce. Para mostrarlo por pantalla se usa
+   * `organizationRoleLabel()` de `@/lib/identity`.
+   */
+  userRole: OrganizationRole | null
   memberCount: number
-  // Future: pass all orgs here to build a selector
+  /** Todas las organizaciones del usuario, para el futuro selector. */
   allOrgIds: string[]
 }
 
@@ -18,42 +24,36 @@ export type UserOrgResult =
   | { status: 'no_org' }
   | { status: 'ok'; org: ActiveOrg }
 
+/**
+ * Organización con la que opera el usuario.
+ *
+ * Antes de 6B.1 esto era `memberships[0]`: con más de una pertenencia, la
+ * organización activa dependía del orden que devolviera Postgres, que no está
+ * garantizado. Ahora la elección es determinista (owner > admin > member, luego
+ * `joined_at`, luego `organization_id`).
+ *
+ * TEMPORAL: cuando el producto exponga multiempresa, esta función recibirá la
+ * organización elegida por el usuario en lugar de deducirla.
+ */
 export async function getActiveOrg(): Promise<UserOrgResult> {
-  const supabase = await createClient()
+  const { supabase, context } = await loadAuthContext()
+  if (!context) return { status: 'no_org' }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) return { status: 'no_org' }
-
-  // Get all memberships for this user
-  const { data: memberships, error: memberError } = await supabase
-    .from('organization_members')
-    .select('organization_id, role')
-    .eq('user_id', user.id)
-
-  if (memberError || !memberships || memberships.length === 0) {
-    return { status: 'no_org' }
-  }
-
-  // Use first org (future: let user pick via selector using allOrgIds)
-  const primary = memberships[0]
-  const allOrgIds = memberships.map((m) => m.organization_id)
+  const membership = resolveFallbackMembership(context.memberships)
+  if (!membership) return { status: 'no_org' }
 
   const { data: org, error: orgError } = await supabase
     .from('organizations')
     .select('id, name, subscription_status, plan:plans(id, name, slug)')
-    .eq('id', primary.organization_id)
+    .eq('id', membership.organizationId)
     .single()
 
   if (orgError || !org) return { status: 'no_org' }
 
-  // Count all members in this org
   const { count } = await supabase
     .from('organization_members')
     .select('*', { count: 'exact', head: true })
-    .eq('organization_id', primary.organization_id)
+    .eq('organization_id', membership.organizationId)
 
   return {
     status: 'ok',
@@ -62,9 +62,9 @@ export async function getActiveOrg(): Promise<UserOrgResult> {
       name: org.name,
       subscription_status: org.subscription_status as SubscriptionStatus,
       plan: Array.isArray(org.plan) ? (org.plan[0] ?? null) : (org.plan as ActiveOrg['plan']),
-      userRole: primary.role as MemberRole,
+      userRole: membership.orgRole,
       memberCount: count ?? 0,
-      allOrgIds,
+      allOrgIds: context.memberships.map((m) => m.organizationId),
     },
   }
 }

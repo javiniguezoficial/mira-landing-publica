@@ -1,7 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
+import { requirePlatformAdmin, requireSession, resolveMembership } from '@/lib/auth/guards'
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -20,33 +19,13 @@ export interface ActionResult {
   success?: string
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-async function requireAuth() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-  return { supabase, user }
-}
-
-async function requireAdmin() {
-  const { supabase, user } = await requireAuth()
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-  if (profile?.role !== 'platform_admin') redirect('/login')
-  return { supabase, user }
-}
-
 // ─── submitSupportTicket (cliente) ────────────────────────────────────────────
 
 export async function submitSupportTicket(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
-  const { supabase, user } = await requireAuth()
+  const { supabase, context, userId } = await requireSession()
 
   const subject  = (formData.get('subject')  as string)?.trim()
   const message  = (formData.get('message')  as string)?.trim()
@@ -62,20 +41,15 @@ export async function submitSupportTicket(
     return { error: 'Prioridad no válida.' }
   }
 
-  // organization_id calculado en servidor, nunca desde el formulario
-  const { data: membership } = await supabase
-    .from('organization_members')
-    .select('organization_id')
-    .eq('user_id', user.id)
-    .limit(1)
-    .maybeSingle()
-
-  const organization_id = membership?.organization_id ?? null
+  // organization_id calculado en servidor, nunca desde el formulario. Sale del
+  // contexto ya cargado por el guard — antes era una consulta aparte con
+  // `.limit(1)` sin ORDER BY, no determinista con varias pertenencias.
+  const organization_id = resolveMembership(context)?.organizationId ?? null
 
   const { error } = await supabase
     .from('support_tickets')
     .insert({
-      user_id: user.id,
+      user_id: userId,
       organization_id,
       subject,
       category,
@@ -95,7 +69,7 @@ export async function updateTicketStatus(
   ticketId: string,
   status: string
 ): Promise<ActionResult> {
-  const { supabase } = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin('redirect-login')
 
   if (!ALLOWED_STATUSES.includes(status as Status)) {
     return { error: 'Estado no válido.' }
@@ -116,7 +90,7 @@ export async function updateTicketResponse(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
-  const { supabase } = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin('redirect-login')
 
   const ticketId      = (formData.get('ticket_id')     as string)?.trim()
   const adminResponse = (formData.get('admin_response') as string)?.trim() || null

@@ -1,6 +1,5 @@
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
+import { requirePlatformAdmin } from '@/lib/auth/guards'
 import { getTickets } from '@/lib/queries/support'
 import { LifeBuoy, ChevronRight } from 'lucide-react'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
@@ -31,12 +30,8 @@ interface PageProps {
 }
 
 export default async function AdminSoportePage({ searchParams }: PageProps) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'platform_admin') redirect('/login')
+  // Página de administración: el guard redirige, nunca responde JSON.
+  await requirePlatformAdmin('redirect-login')
 
   const sp = await searchParams
   const filters = {

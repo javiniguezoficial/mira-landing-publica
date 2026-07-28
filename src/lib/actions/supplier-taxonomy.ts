@@ -1,7 +1,7 @@
 'use server'
 
+import { requirePlatformAdmin } from '@/lib/auth/guards'
 import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -77,17 +77,6 @@ export interface NodeFormData {
 export type TaxonomyActionResult = { id: string } | { error: string }
 export type TaxonomyVoidResult = { error: string } | void
 
-// ── Guard: solo platform_admin (mismo patrón que markets.ts/suppliers.ts) ────
-
-async function requireAdmin() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-  const { data: profile } = await supabase
-    .from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'platform_admin') redirect('/app/dashboard')
-  return supabase
-}
 
 // ── Slug (mismo patrón que generateSlug() en news.ts) ────────────────────────
 
@@ -143,7 +132,7 @@ function buildTaxonomyTree(
 }
 
 export async function getSupplierTaxonomyTree(): Promise<SupplierMarketNode[]> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
 
   const [marketsRes, categoriesRes, familiesRes, subfamiliesRes] = await Promise.all([
     supabase.from('supplier_markets').select('*').order('sort_order').order('name'),
@@ -163,7 +152,7 @@ export async function getSupplierTaxonomyTree(): Promise<SupplierMarketNode[]> {
 // Igual que getSupplierTaxonomyTree() pero solo con nodos activos — para
 // poblar los selects encadenados del formulario de crear/editar proveedor.
 export async function getActiveSupplierTaxonomyTree(): Promise<SupplierMarketNode[]> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   return fetchActiveTaxonomyTree(supabase)
 }
 
@@ -198,7 +187,7 @@ async function fetchActiveTaxonomyTree(
 // ── Mercado de proveedor ──────────────────────────────────────────────────────
 
 export async function createSupplierMarket(form: NodeFormData): Promise<TaxonomyActionResult> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   if (!form.name?.trim()) return { error: 'El nombre es obligatorio' }
 
   const slug = form.slug?.trim() ? slugify(form.slug) : slugify(form.name)
@@ -222,7 +211,7 @@ export async function createSupplierMarket(form: NodeFormData): Promise<Taxonomy
 }
 
 export async function updateSupplierMarket(id: string, form: NodeFormData): Promise<TaxonomyVoidResult> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   if (!form.name?.trim()) return { error: 'El nombre es obligatorio' }
 
   const slug = form.slug?.trim() ? slugify(form.slug) : slugify(form.name)
@@ -244,14 +233,14 @@ export async function updateSupplierMarket(id: string, form: NodeFormData): Prom
 }
 
 export async function toggleSupplierMarket(id: string, is_active: boolean): Promise<TaxonomyVoidResult> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   const { error } = await supabase.from('supplier_markets').update({ is_active }).eq('id', id)
   if (error) return { error: error.message }
   revalidateTaxonomy()
 }
 
 export async function deleteSupplierMarket(id: string): Promise<TaxonomyVoidResult> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
 
   const { count } = await supabase
     .from('supplier_categories')
@@ -270,7 +259,7 @@ export async function deleteSupplierMarket(id: string): Promise<TaxonomyVoidResu
 // ── Categoría de proveedor ────────────────────────────────────────────────────
 
 export async function createSupplierCategory(supplierMarketId: string, form: NodeFormData): Promise<TaxonomyActionResult> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   if (!form.name?.trim()) return { error: 'El nombre es obligatorio' }
 
   const slug = form.slug?.trim() ? slugify(form.slug) : slugify(form.name)
@@ -294,7 +283,7 @@ export async function createSupplierCategory(supplierMarketId: string, form: Nod
 }
 
 export async function updateSupplierCategory(id: string, form: NodeFormData): Promise<TaxonomyVoidResult> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   if (!form.name?.trim()) return { error: 'El nombre es obligatorio' }
 
   const slug = form.slug?.trim() ? slugify(form.slug) : slugify(form.name)
@@ -315,14 +304,14 @@ export async function updateSupplierCategory(id: string, form: NodeFormData): Pr
 }
 
 export async function toggleSupplierCategory(id: string, is_active: boolean): Promise<TaxonomyVoidResult> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   const { error } = await supabase.from('supplier_categories').update({ is_active }).eq('id', id)
   if (error) return { error: error.message }
   revalidateTaxonomy()
 }
 
 export async function deleteSupplierCategory(id: string): Promise<TaxonomyVoidResult> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
 
   const { count } = await supabase
     .from('supplier_families')
@@ -341,7 +330,7 @@ export async function deleteSupplierCategory(id: string): Promise<TaxonomyVoidRe
 // ── Familia de proveedor ──────────────────────────────────────────────────────
 
 export async function createSupplierFamily(supplierCategoryId: string, form: NodeFormData): Promise<TaxonomyActionResult> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   if (!form.name?.trim()) return { error: 'El nombre es obligatorio' }
 
   const slug = form.slug?.trim() ? slugify(form.slug) : slugify(form.name)
@@ -365,7 +354,7 @@ export async function createSupplierFamily(supplierCategoryId: string, form: Nod
 }
 
 export async function updateSupplierFamily(id: string, form: NodeFormData): Promise<TaxonomyVoidResult> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   if (!form.name?.trim()) return { error: 'El nombre es obligatorio' }
 
   const slug = form.slug?.trim() ? slugify(form.slug) : slugify(form.name)
@@ -386,14 +375,14 @@ export async function updateSupplierFamily(id: string, form: NodeFormData): Prom
 }
 
 export async function toggleSupplierFamily(id: string, is_active: boolean): Promise<TaxonomyVoidResult> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   const { error } = await supabase.from('supplier_families').update({ is_active }).eq('id', id)
   if (error) return { error: error.message }
   revalidateTaxonomy()
 }
 
 export async function deleteSupplierFamily(id: string): Promise<TaxonomyVoidResult> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
 
   const { count } = await supabase
     .from('supplier_subfamilies')
@@ -412,7 +401,7 @@ export async function deleteSupplierFamily(id: string): Promise<TaxonomyVoidResu
 // ── Subfamilia de proveedor ────────────────────────────────────────────────────
 
 export async function createSupplierSubfamily(supplierFamilyId: string, form: NodeFormData): Promise<TaxonomyActionResult> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   if (!form.name?.trim()) return { error: 'El nombre es obligatorio' }
 
   const slug = form.slug?.trim() ? slugify(form.slug) : slugify(form.name)
@@ -436,7 +425,7 @@ export async function createSupplierSubfamily(supplierFamilyId: string, form: No
 }
 
 export async function updateSupplierSubfamily(id: string, form: NodeFormData): Promise<TaxonomyVoidResult> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   if (!form.name?.trim()) return { error: 'El nombre es obligatorio' }
 
   const slug = form.slug?.trim() ? slugify(form.slug) : slugify(form.name)
@@ -457,14 +446,14 @@ export async function updateSupplierSubfamily(id: string, form: NodeFormData): P
 }
 
 export async function toggleSupplierSubfamily(id: string, is_active: boolean): Promise<TaxonomyVoidResult> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
   const { error } = await supabase.from('supplier_subfamilies').update({ is_active }).eq('id', id)
   if (error) return { error: error.message }
   revalidateTaxonomy()
 }
 
 export async function deleteSupplierSubfamily(id: string): Promise<TaxonomyVoidResult> {
-  const supabase = await requireAdmin()
+  const { supabase } = await requirePlatformAdmin()
 
   // La FK suppliers.supplier_subfamily_id es ON DELETE SET NULL (no rompería
   // datos), pero bloqueamos igualmente si hay proveedores clasificados aquí

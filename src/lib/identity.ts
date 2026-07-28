@@ -36,6 +36,42 @@ export type MembershipStatus = 'invited' | 'active' | 'suspended'
 // modelo: nunca existieron en base de datos (el CHECK los habría rechazado) y
 // eran restos de un diseño abandonado. Se tratan como desconocidos.
 
+// ── Normalizadores de estado ────────────────────────────────────────────────
+//
+// Los estados no tienen valores legacy: se introdujeron ya canónicos en 6A.
+// Aun así se normalizan igual que los roles, por la misma razón: un valor que
+// no reconocemos debe colapsar en null y NUNCA conceder nada. Quien consuma
+// estos valores debe tratar null como "estado desconocido → denegar".
+
+const PROFILE_STATUSES: ProfileStatus[] = ['pending', 'active', 'suspended', 'rejected']
+const ORGANIZATION_STATUSES: OrganizationStatus[] = ['pending', 'active', 'suspended', 'rejected']
+const MEMBERSHIP_STATUSES: MembershipStatus[] = ['invited', 'active', 'suspended']
+const COMMERCIAL_PROFILES: CommercialProfile[] = ['buyer', 'seller', 'buyer_seller']
+
+export function normalizeProfileStatus(
+  raw: string | null | undefined,
+): ProfileStatus | null {
+  return PROFILE_STATUSES.find((s) => s === raw) ?? null
+}
+
+export function normalizeOrganizationStatus(
+  raw: string | null | undefined,
+): OrganizationStatus | null {
+  return ORGANIZATION_STATUSES.find((s) => s === raw) ?? null
+}
+
+export function normalizeMembershipStatus(
+  raw: string | null | undefined,
+): MembershipStatus | null {
+  return MEMBERSHIP_STATUSES.find((s) => s === raw) ?? null
+}
+
+export function normalizeCommercialProfile(
+  raw: string | null | undefined,
+): CommercialProfile | null {
+  return COMMERCIAL_PROFILES.find((p) => p === raw) ?? null
+}
+
 // ── Adaptadores del modelo legacy ───────────────────────────────────────────
 
 /**
