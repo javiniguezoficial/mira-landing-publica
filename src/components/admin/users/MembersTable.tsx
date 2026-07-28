@@ -4,8 +4,8 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Trash2, ChevronDown } from 'lucide-react'
 import { removeOrganizationMember, updateOrganizationMemberRole } from '@/lib/actions/users'
-import { MiraStatusBadge } from '@/components/mira/MiraStatusBadge'
-import type { OrgMember, OrgMemberRole } from '@/lib/actions/users'
+import type { OrgMember } from '@/lib/actions/users'
+import { MANAGEABLE_ROLE_LABELS, type ManageableOrgRole } from '@/lib/auth/member-write'
 import { organizationRoleLabel } from '@/lib/identity'
 
 function fmt(dateStr: string) {
@@ -21,7 +21,9 @@ function MemberRow({ member, onMutate }: { member: OrgMember; onMutate: () => vo
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
 
-  function handleRoleChange(newRole: OrgMemberRole) {
+  const esPropietario = member.orgRole === 'owner'
+
+  function handleRoleChange(newRole: ManageableOrgRole) {
     setError(null)
     startTransition(async () => {
       try {
@@ -61,40 +63,55 @@ function MemberRow({ member, onMutate }: { member: OrgMember; onMutate: () => vo
           {member.user?.email || '—'}
         </td>
         <td className="whitespace-nowrap px-4 py-3">
-          <div className="relative inline-flex items-center gap-1">
-            <MiraStatusBadge status={member.role} kind="role" />
-            <div className="relative group">
-              <button
-                className="rounded p-0.5 text-slate-400 transition-colors hover:text-slate-600"
-                title="Cambiar rol"
-                disabled={isPending}
-              >
-                <ChevronDown size={12} />
-              </button>
-              <div className="absolute left-0 top-full z-10 mt-1 hidden min-w-[130px] rounded-lg border border-mira-line bg-white shadow-lg group-focus-within:block">
-                {(['client_owner', 'client_member'] as OrgMemberRole[]).map((r) => (
-                  <button
-                    key={r}
-                    onClick={() => handleRoleChange(r)}
-                    className={`w-full px-3 py-2 text-left text-xs transition-colors hover:bg-mira-canvas ${member.role === r ? 'font-bold text-mira-magenta' : 'text-slate-700'}`}
-                  >
-                    {organizationRoleLabel(r)}
-                  </button>
-                ))}
+          {esPropietario ? (
+            // El propietario se muestra, pero no se gestiona desde aquí: la
+            // transferencia de propiedad será una acción específica.
+            <span
+              className="inline-flex items-center rounded-lg bg-violet-100 px-2 py-1 text-xs font-bold text-violet-700"
+              title="La transferencia de propiedad se gestionará mediante una acción específica."
+            >
+              {organizationRoleLabel('owner')}
+            </span>
+          ) : (
+            <div className="relative inline-flex items-center gap-1">
+              <span className="inline-flex items-center rounded-lg bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">
+                {organizationRoleLabel(member.orgRole)}
+              </span>
+              <div className="relative group">
+                <button
+                  className="rounded p-0.5 text-slate-400 transition-colors hover:text-slate-600"
+                  title="Cambiar rol"
+                  disabled={isPending}
+                >
+                  <ChevronDown size={12} />
+                </button>
+                <div className="absolute left-0 top-full z-10 mt-1 hidden min-w-[150px] rounded-lg border border-mira-line bg-white shadow-lg group-focus-within:block">
+                  {(['admin', 'member'] as ManageableOrgRole[]).map((r) => (
+                    <button
+                      key={r}
+                      onClick={() => handleRoleChange(r)}
+                      className={`w-full px-3 py-2 text-left text-xs transition-colors hover:bg-mira-canvas ${member.orgRole === r ? 'font-bold text-mira-magenta' : 'text-slate-700'}`}
+                    >
+                      {MANAGEABLE_ROLE_LABELS[r]}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </td>
         <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-500">{fmt(member.joined_at)}</td>
         <td className="whitespace-nowrap px-4 py-3">
-          <button
-            onClick={handleRemove}
-            disabled={isPending}
-            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500 disabled:opacity-40"
-            title="Eliminar miembro"
-          >
-            <Trash2 size={14} />
-          </button>
+          {!esPropietario && (
+            <button
+              onClick={handleRemove}
+              disabled={isPending}
+              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500 disabled:opacity-40"
+              title="Eliminar miembro"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
         </td>
       </tr>
       {error && (

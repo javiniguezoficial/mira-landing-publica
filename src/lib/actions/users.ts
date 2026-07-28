@@ -2,12 +2,23 @@
 
 import { createServerClient } from '@supabase/ssr'
 import { requirePlatformAdmin } from '@/lib/auth/guards'
+import {
+  buildMembershipInsert,
+  buildMembershipRoleUpdate,
+  membershipErrorDetail,
+  normalizeManageableRole,
+  translateMembershipError,
+  type ManageableOrgRole,
+} from '@/lib/auth/member-write'
+import { normalizeOrganizationRole, type OrganizationRole } from '@/lib/identity'
 import { cookies } from 'next/headers'
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
 export type GlobalRole = 'platform_admin' | 'user' | 'client_owner' | 'client_member'
-export type OrgMemberRole = 'client_owner' | 'client_member'
+
+/** Rol asignable desde la administración. La propiedad no se gestiona aquí. */
+export type { ManageableOrgRole }
 
 export interface UserProfile {
   id: string
@@ -25,7 +36,13 @@ export interface OrgMember {
   id: string
   organization_id: string
   user_id: string
-  role: OrgMemberRole
+  /** Valor legacy almacenado. La interfaz debe usar `orgRole`. */
+  role: string
+  /** Rol canónico ya normalizado, resuelto desde `org_role` con caída al legacy. */
+  orgRole: OrganizationRole | null
+  status: string
+  can_buy: boolean
+  can_sell: boolean
   joined_at: string
   invited_by: string | null
   user?: UserProfile | null
@@ -135,6 +152,9 @@ export async function getOrganizationMembers(orgId: string): Promise<OrgMember[]
 
   return (data ?? []).map((m) => ({
     ...m,
+    // Rol canónico resuelto una sola vez: la interfaz no debe volver a
+    // interpretar valores legacy por su cuenta.
+    orgRole: normalizeOrganizationRole(m.org_role ?? m.role),
     user: profileMap[m.user_id] ?? null,
   })) as OrgMember[]
 }
@@ -163,15 +183,16 @@ export async function getUserOrganizations(userId: string) {
 export async function addOrganizationMember(
   orgId: string,
   userId: string,
-  role: OrgMemberRole
+  role: ManageableOrgRole
 ): Promise<void> {
   const { userId: adminId, supabase } = await requirePlatformAdmin()
 
-  if (!['client_owner', 'client_member'].includes(role)) {
-    throw new Error('Rol no válido. Debe ser client_owner o client_member.')
-  }
+  // Nunca se confía en el valor que llega del formulario: se normaliza en
+  // servidor y solo sobreviven 'admin' y 'member'. `owner` y los valores legacy
+  // quedan fuera — la propiedad no se crea desde esta acción.
+  const rolCanonico = normalizeManageableRole(role)
+  if (!rolCanonico) throw new Error('El rol seleccionado no es válido.')
 
-  // Verificar que el usuario existe
   const { data: profile } = await supabase
     .from('profiles')
     .select('id')
@@ -179,7 +200,6 @@ export async function addOrganizationMember(
     .single()
   if (!profile) throw new Error('Usuario no encontrado.')
 
-  // Verificar que la organización existe
   const { data: org } = await supabase
     .from('organizations')
     .select('id')
@@ -187,50 +207,94 @@ export async function addOrganizationMember(
     .single()
   if (!org) throw new Error('Organización no encontrada.')
 
+  // Escritura dual y explícita: ningún campo de autorización queda al azar de
+  // un default.
   const { error } = await supabase
     .from('organization_members')
-    .insert({
-      organization_id: orgId,
-      user_id: userId,
-      role,
-      invited_by: adminId,
-    })
+    .insert(
+      buildMembershipInsert({
+        organizationId: orgId,
+        userId,
+        role: rolCanonico,
+        invitedBy: adminId,
+      }),
+    )
 
   if (error) {
-    if (error.code === '23505') {
-      throw new Error('El usuario ya es miembro de esta organización.')
-    }
-    throw new Error(error.message)
+    console.error(membershipErrorDetail('alta de miembro', error))
+    throw new Error(translateMembershipError(error))
   }
 }
 
 // ── Eliminar miembro ──────────────────────────────────────────────────────────
 
 export async function removeOrganizationMember(memberId: string): Promise<void> {
-  const { supabase } = await requirePlatformAdmin()
+  const { supabase, userId: adminId } = await requirePlatformAdmin()
+
+  // La base de datos lo impide igualmente tras la migración 023; esta
+  // comprobación previa existe para dar un mensaje claro en lugar de un error
+  // de restricción.
+  const { data: miembro } = await supabase
+    .from('organization_members')
+    .select('id, user_id, org_role, role')
+    .eq('id', memberId)
+    .single()
+
+  if (!miembro) throw new Error('Miembro no encontrado.')
+
+  if (normalizeOrganizationRole(miembro.org_role ?? miembro.role) === 'owner') {
+    throw new Error('El propietario no puede modificarse desde esta acción.')
+  }
+  if (miembro.user_id === adminId) {
+    throw new Error('No puedes modificar tu propia pertenencia desde esta acción.')
+  }
+
   const { error } = await supabase
     .from('organization_members')
     .delete()
     .eq('id', memberId)
 
-  if (error) throw new Error(error.message)
+  if (error) {
+    console.error(membershipErrorDetail('baja de miembro', error))
+    throw new Error(translateMembershipError(error))
+  }
 }
 
 // ── Actualizar rol de miembro ─────────────────────────────────────────────────
 
 export async function updateOrganizationMemberRole(
   memberId: string,
-  newRole: OrgMemberRole
+  newRole: ManageableOrgRole
 ): Promise<void> {
-  const { supabase } = await requirePlatformAdmin()
+  const { supabase, userId: adminId } = await requirePlatformAdmin()
 
-  if (!['client_owner', 'client_member'].includes(newRole)) {
-    throw new Error('Rol no válido.')
+  const rolCanonico = normalizeManageableRole(newRole)
+  if (!rolCanonico) throw new Error('El rol seleccionado no es válido.')
+
+  const { data: miembro } = await supabase
+    .from('organization_members')
+    .select('id, user_id, org_role, role')
+    .eq('id', memberId)
+    .single()
+
+  if (!miembro) throw new Error('Miembro no encontrado.')
+
+  if (normalizeOrganizationRole(miembro.org_role ?? miembro.role) === 'owner') {
+    throw new Error('El propietario no puede modificarse desde esta acción.')
   }
+  if (miembro.user_id === adminId) {
+    throw new Error('No puedes modificar tu propia pertenencia desde esta acción.')
+  }
+
+  // `org_role` y `role` se actualizan SIEMPRE juntos: dejarlos desalineados
+  // produce una fila que el trigger de 023 rechaza.
   const { error } = await supabase
     .from('organization_members')
-    .update({ role: newRole })
+    .update(buildMembershipRoleUpdate(rolCanonico))
     .eq('id', memberId)
 
-  if (error) throw new Error(error.message)
+  if (error) {
+    console.error(membershipErrorDetail('cambio de rol', error))
+    throw new Error(translateMembershipError(error))
+  }
 }

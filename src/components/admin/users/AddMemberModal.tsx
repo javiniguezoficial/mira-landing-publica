@@ -4,7 +4,8 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { X, UserPlus } from 'lucide-react'
 import { addOrganizationMember } from '@/lib/actions/users'
-import type { UserProfile, OrgMemberRole } from '@/lib/actions/users'
+import type { UserProfile } from '@/lib/actions/users'
+import { MANAGEABLE_ROLE_LABELS, type ManageableOrgRole } from '@/lib/auth/member-write'
 import { miraBtn, miraField, miraLabel } from '@/lib/miraButtons'
 
 interface Props {
@@ -23,7 +24,7 @@ export function AddMemberModal({ orgId, existingMemberIds, allUsers }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [userId, setUserId] = useState('')
-  const [role, setRole] = useState<OrgMemberRole>('client_member')
+  const [role, setRole] = useState<ManageableOrgRole>('member')
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
@@ -32,7 +33,7 @@ export function AddMemberModal({ orgId, existingMemberIds, allUsers }: Props) {
   function handleClose() {
     setOpen(false)
     setUserId('')
-    setRole('client_member')
+    setRole('member')
     setError(null)
   }
 
@@ -109,12 +110,15 @@ export function AddMemberModal({ orgId, existingMemberIds, allUsers }: Props) {
                   </label>
                   <select
                     value={role}
-                    onChange={(e) => setRole(e.target.value as OrgMemberRole)}
+                    onChange={(e) => setRole(e.target.value as ManageableOrgRole)}
                     className={inputCls}
                   >
-                    <option value="client_member">Client Member</option>
-                    <option value="client_owner">Client Owner</option>
+                    <option value="member">{MANAGEABLE_ROLE_LABELS.member}</option>
+                    <option value="admin">{MANAGEABLE_ROLE_LABELS.admin}</option>
                   </select>
+                  <p className="mt-1.5 text-xs text-slate-400">
+                    La transferencia de propiedad se gestionará mediante una acción específica.
+                  </p>
                 </div>
 
                 <div className="flex justify-end gap-3 pt-2">
