@@ -11,6 +11,11 @@ export default async function EditarMiOrganizacionPage() {
 
   if (result.status === 'no_org') notFound()
 
+  // Sin acceso activo no hay formulario que rellenar: se devuelve a la página
+  // de la organización, que explica el estado concreto. Renderizar el
+  // formulario para que el envío falle después sería peor.
+  if (result.status === 'inactive') redirect('/app/mi-organizacion')
+
   // Solo el propietario puede acceder. isOwner() acepta el rol canónico
   // ('owner') y el legacy ('client_owner') durante la transición.
   if (!isOwner(result.userRole)) redirect('/app/mi-organizacion')

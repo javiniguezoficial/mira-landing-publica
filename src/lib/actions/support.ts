@@ -44,6 +44,23 @@ export async function submitSupportTicket(
   // organization_id calculado en servidor, nunca desde el formulario. Sale del
   // contexto ya cargado por el guard — antes era una consulta aparte con
   // `.limit(1)` sin ORDER BY, no determinista con varias pertenencias.
+  //
+  // ── EXCEPCIÓN DELIBERADA, NO TOCAR ───────────────────────────────────────
+  //
+  // Soporte usa `requireSession` + `resolveMembership`, y NUNCA
+  // `requireMembership` ni los guards de capacidad comercial. Es el único
+  // flujo que debe seguir abierto a una cuenta suspendida: es la vía por la
+  // que puede preguntar por qué lo está.
+  //
+  // Del mismo modo, la pertenencia se conserva aunque esté inactiva, para que
+  // el ticket llegue asociado a su organización. La policy
+  // `client_insert_own_ticket` lo permite explícitamente vía
+  // `belongs_to_org_any_status()`, cuyo comentario en base de datos dice: «Uso
+  // EXCLUSIVO del canal de soporte, para que un usuario suspendido pueda
+  // reclamar. No usar en ninguna otra policy.»
+  //
+  // Endurecer esto con un guard de estado activo sería una REGRESIÓN, no una
+  // corrección: dejaría a las personas suspendidas sin forma de reclamar.
   const organization_id = resolveMembership(context)?.organizationId ?? null
 
   const { error } = await supabase
@@ -58,7 +75,11 @@ export async function submitSupportTicket(
       status: 'open',
     })
 
-  if (error) return { error: error.message }
+  if (error) {
+    // Nunca se devuelve `error.message` de PostgreSQL a la interfaz.
+    console.error(`[soporte] error al crear ticket: ${error.code ?? 'sin código'} ${error.message}`)
+    return { error: 'No se ha podido enviar la solicitud. Vuelve a intentarlo en unos minutos.' }
+  }
 
   return { success: '¡Solicitud enviada! Nos pondremos en contacto contigo pronto.' }
 }

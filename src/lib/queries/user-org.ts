@@ -1,5 +1,9 @@
 import { loadAuthContext } from '@/lib/auth/context'
-import { resolveFallbackMembership } from '@/lib/auth/membership'
+import {
+  ORGANIZATION_ACCESS_MESSAGES,
+  resolveOrganizationAccessFromContext,
+  type OrganizationAccess,
+} from '@/lib/auth/access'
 import type { OrganizationRole } from '@/lib/identity'
 
 export type SubscriptionStatus = 'trial' | 'active' | 'past_due' | 'cancelled' | 'expired'
@@ -21,7 +25,10 @@ export interface ActiveOrg {
 }
 
 export type UserOrgResult =
+  /** No pertenece a ninguna organización. */
   | { status: 'no_org' }
+  /** Pertenece, pero su acceso no está activo. `access` explica por qué. */
+  | { status: 'inactive'; access: OrganizationAccess }
   | { status: 'ok'; org: ActiveOrg }
 
 /**
@@ -32,15 +39,25 @@ export type UserOrgResult =
  * garantizado. Ahora la elección es determinista (owner > admin > member, luego
  * `joined_at`, luego `organization_id`).
  *
+ * 6B.5.1: se distingue «no tienes organización» de «tu acceso no está activo».
+ * Antes ambos casos devolvían `no_org` y la pantalla afirmaba algo falso a
+ * quien sí pertenece a una empresa. El acceso se clasifica ANTES de consultar:
+ * con una pertenencia suspendida, `is_org_member()` deniega el SELECT y la
+ * consulta volvería vacía de todos modos.
+ *
  * TEMPORAL: cuando el producto exponga multiempresa, esta función recibirá la
  * organización elegida por el usuario en lugar de deducirla.
  */
 export async function getActiveOrg(): Promise<UserOrgResult> {
   const { supabase, context } = await loadAuthContext()
-  if (!context) return { status: 'no_org' }
 
-  const membership = resolveFallbackMembership(context.memberships)
-  if (!membership) return { status: 'no_org' }
+  const access = resolveOrganizationAccessFromContext(context)
+  if (access.state === 'no_membership') return { status: 'no_org' }
+  // `!context` ya produce `invalid_context`, que no opera; se comprueba aparte
+  // para que el compilador lo sepa y no haya que forzar el tipo más abajo.
+  if (!access.canOperate || !context) return { status: 'inactive', access }
+
+  const membership = access.membership!
 
   const { data: org, error: orgError } = await supabase
     .from('organizations')
@@ -48,7 +65,21 @@ export async function getActiveOrg(): Promise<UserOrgResult> {
     .eq('id', membership.organizationId)
     .single()
 
-  if (orgError || !org) return { status: 'no_org' }
+  // Con acceso activo la organización DEBE ser legible. Si no lo es, algo ha
+  // cambiado entre la carga del contexto y esta consulta: se deniega con un
+  // mensaje neutro en lugar de afirmar que no hay organización.
+  if (orgError || !org) {
+    return {
+      status: 'inactive',
+      access: {
+        ...access,
+        state: 'invalid_context',
+        canOperate: false,
+        message: ORGANIZATION_ACCESS_MESSAGES.invalid_context,
+        detail: 'organización no legible con acceso activo',
+      },
+    }
+  }
 
   const { count } = await supabase
     .from('organization_members')

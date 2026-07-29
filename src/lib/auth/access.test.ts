@@ -1,0 +1,345 @@
+// Estado de acceso organizativo — Bloque 6B.5.1.
+//
+// Módulo puro: fija QUÉ se le dice a cada persona y por qué. La seguridad ya la
+// imponen 6B.5 y las migraciones 022/025; aquí solo se comprueba que una
+// suspensión no se presente como una ausencia de organización.
+
+import { describe, expect, it } from 'vitest'
+import {
+  ORGANIZATION_ACCESS_MESSAGES,
+  ORGANIZATION_EDIT_MESSAGES,
+  accessAuthorizationCode,
+  evaluateOrganizationEdit,
+  resolveOrganizationAccess,
+  resolveOrganizationAccessFromContext,
+  type OrganizationAccessState,
+} from './access'
+import type { AuthContext, AuthMembership } from './types'
+
+const ORG = 'org-acme'
+const OTRA_ORG = 'org-externa'
+
+function contexto(overrides: Partial<AuthContext> = {}): AuthContext {
+  return {
+    user: { id: 'u-ana', email: 'ana@example.com' },
+    platformRole: 'user',
+    profileStatus: 'active',
+    memberships: [],
+    ...overrides,
+  }
+}
+
+function pertenencia(overrides: Partial<AuthMembership> = {}): AuthMembership {
+  return {
+    organizationId: ORG,
+    organizationName: 'Acme',
+    orgRole: 'owner',
+    membershipStatus: 'active',
+    canBuy: true,
+    canSell: false,
+    joinedAt: '2026-01-01T00:00:00Z',
+    organizationStatus: 'active',
+    commercialProfile: 'buyer',
+    ...overrides,
+  }
+}
+
+function estado(
+  ctx: AuthContext | null,
+  m: AuthMembership | null,
+): OrganizationAccessState {
+  return resolveOrganizationAccess(ctx, m).state
+}
+
+// ── Resolución de estado ────────────────────────────────────────────────────
+
+describe('resolveOrganizationAccess', () => {
+  it('1. sin membership → no_membership', () => {
+    expect(estado(contexto(), null)).toBe('no_membership')
+  })
+
+  it('2. perfil suspendido → profile_inactive', () => {
+    expect(estado(contexto({ profileStatus: 'suspended' }), pertenencia())).toBe('profile_inactive')
+  })
+
+  it.each(['pending', 'rejected'] as const)('3. perfil %s → profile_inactive', (s) => {
+    expect(estado(contexto({ profileStatus: s }), pertenencia())).toBe('profile_inactive')
+  })
+
+  it('4. membership invited → membership_invited', () => {
+    // El esquema NO tiene 'pending' en organization_members: la invitación sin
+    // aceptar se representa con 'invited'.
+    expect(estado(contexto(), pertenencia({ membershipStatus: 'invited' }))).toBe('membership_invited')
+  })
+
+  it('5. membership suspended → membership_suspended', () => {
+    expect(estado(contexto(), pertenencia({ membershipStatus: 'suspended' }))).toBe(
+      'membership_suspended',
+    )
+  })
+
+  it('6. estado de membership no reconocido → membership_inactive', () => {
+    expect(estado(contexto(), pertenencia({ membershipStatus: null }))).toBe('membership_inactive')
+  })
+
+  it('7. organización suspendida → organization_inactive', () => {
+    expect(estado(contexto(), pertenencia({ organizationStatus: 'suspended' }))).toBe(
+      'organization_inactive',
+    )
+  })
+
+  it.each(['pending', 'rejected'] as const)('8. organización %s → organization_inactive', (s) => {
+    expect(estado(contexto(), pertenencia({ organizationStatus: s }))).toBe('organization_inactive')
+  })
+
+  it('9. sin contexto → invalid_context', () => {
+    expect(estado(null, pertenencia())).toBe('invalid_context')
+    expect(estado(null, null)).toBe('invalid_context')
+  })
+
+  it('10. todo activo → active', () => {
+    const acceso = resolveOrganizationAccess(contexto(), pertenencia())
+    expect(acceso.state).toBe('active')
+    expect(acceso.canOperate).toBe(true)
+    expect(acceso.message).toBe('')
+  })
+
+  it('11. una membership inactiva NO desaparece del resultado', () => {
+    // Es el defecto que corrige el bloque: devolver null convertía una
+    // suspensión en «no tienes ninguna organización».
+    const m = pertenencia({ membershipStatus: 'suspended' })
+    const acceso = resolveOrganizationAccess(contexto(), m)
+    expect(acceso.membership).toBe(m)
+    expect(acceso.membership?.organizationId).toBe(ORG)
+    expect(acceso.state).not.toBe('no_membership')
+  })
+
+  it('12. con varias pertenencias se prefiere la activa', () => {
+    const activa = pertenencia({ organizationId: 'org-viva', orgRole: 'member' })
+    const suspendida = pertenencia({ organizationId: 'org-muerta', membershipStatus: 'suspended' })
+    const acceso = resolveOrganizationAccessFromContext(
+      contexto({ memberships: [suspendida, activa] }),
+    )
+    expect(acceso.state).toBe('active')
+    expect(acceso.membership?.organizationId).toBe('org-viva')
+  })
+
+  it('13. si ninguna es activa se conserva la más relevante, no null', () => {
+    const owner = pertenencia({ organizationId: 'org-a', orgRole: 'owner', membershipStatus: 'suspended' })
+    const member = pertenencia({ organizationId: 'org-b', orgRole: 'member', membershipStatus: 'suspended' })
+    const acceso = resolveOrganizationAccessFromContext(contexto({ memberships: [member, owner] }))
+    expect(acceso.state).toBe('membership_suspended')
+    expect(acceso.membership?.organizationId).toBe('org-a')
+  })
+
+  it('el orden es de fuera hacia dentro: perfil, luego organización, luego asiento', () => {
+    // Con todo suspendido a la vez, el motivo mostrado es el más amplio: es el
+    // que decide a qué puerta llamar.
+    const todo = resolveOrganizationAccess(
+      contexto({ profileStatus: 'suspended' }),
+      pertenencia({ organizationStatus: 'suspended', membershipStatus: 'suspended' }),
+    )
+    expect(todo.state).toBe('profile_inactive')
+
+    const orgYAsiento = resolveOrganizationAccess(
+      contexto(),
+      pertenencia({ organizationStatus: 'suspended', membershipStatus: 'suspended' }),
+    )
+    expect(orgYAsiento.state).toBe('organization_inactive')
+  })
+
+  it('ningún estado salvo active autoriza a operar', () => {
+    const casos: Array<[AuthContext | null, AuthMembership | null]> = [
+      [null, null],
+      [contexto(), null],
+      [contexto({ profileStatus: 'suspended' }), pertenencia()],
+      [contexto(), pertenencia({ organizationStatus: 'suspended' })],
+      [contexto(), pertenencia({ membershipStatus: 'invited' })],
+      [contexto(), pertenencia({ membershipStatus: 'suspended' })],
+      [contexto(), pertenencia({ membershipStatus: null })],
+    ]
+    for (const [c, m] of casos) {
+      expect(resolveOrganizationAccess(c, m).canOperate).toBe(false)
+    }
+  })
+})
+
+describe('accessAuthorizationCode', () => {
+  it('traduce cada estado a un código coherente', () => {
+    expect(accessAuthorizationCode(resolveOrganizationAccess(contexto(), pertenencia()))).toBeNull()
+    expect(accessAuthorizationCode(resolveOrganizationAccess(null, null))).toBe('UNAUTHENTICATED')
+    expect(accessAuthorizationCode(resolveOrganizationAccess(contexto(), null))).toBe('NO_ORGANIZATION')
+    expect(
+      accessAuthorizationCode(
+        resolveOrganizationAccess(contexto(), pertenencia({ membershipStatus: 'suspended' })),
+      ),
+    ).toBe('FORBIDDEN')
+  })
+})
+
+// ── Edición de Mi organización ──────────────────────────────────────────────
+
+describe('evaluateOrganizationEdit', () => {
+  const activo = () => resolveOrganizationAccess(contexto(), pertenencia())
+
+  it('14. owner activo puede editar', () => {
+    expect(evaluateOrganizationEdit(activo(), true)).toBeNull()
+  })
+
+  it('15. owner con perfil suspendido no edita', () => {
+    const a = resolveOrganizationAccess(contexto({ profileStatus: 'suspended' }), pertenencia())
+    expect(evaluateOrganizationEdit(a, true)).toBe(ORGANIZATION_ACCESS_MESSAGES.profile_inactive)
+  })
+
+  it('16. owner con membership suspendida no edita', () => {
+    const a = resolveOrganizationAccess(contexto(), pertenencia({ membershipStatus: 'suspended' }))
+    expect(evaluateOrganizationEdit(a, true)).toBe(ORGANIZATION_ACCESS_MESSAGES.membership_suspended)
+  })
+
+  it('17. owner con invitación pendiente no edita', () => {
+    const a = resolveOrganizationAccess(contexto(), pertenencia({ membershipStatus: 'invited' }))
+    expect(evaluateOrganizationEdit(a, true)).toBe(ORGANIZATION_ACCESS_MESSAGES.membership_invited)
+  })
+
+  it('18. owner con organización suspendida no edita', () => {
+    const a = resolveOrganizationAccess(contexto(), pertenencia({ organizationStatus: 'suspended' }))
+    expect(evaluateOrganizationEdit(a, true)).toBe(ORGANIZATION_ACCESS_MESSAGES.organization_inactive)
+  })
+
+  it('19. un member activo no edita como propietario', () => {
+    expect(evaluateOrganizationEdit(activo(), false)).toBe(ORGANIZATION_EDIT_MESSAGES.soloPropietario)
+  })
+
+  it('20. una organización objetivo distinta se deniega', () => {
+    expect(evaluateOrganizationEdit(activo(), true, OTRA_ORG)).toBe(
+      ORGANIZATION_EDIT_MESSAGES.organizacionDistinta,
+    )
+    expect(evaluateOrganizationEdit(activo(), true, ORG)).toBeNull()
+  })
+
+  it('21. una suspensión posterior a abrir la página bloquea la acción', () => {
+    // La página se pintó con acceso activo; el envío se evalúa contra un
+    // contexto recargado, que ya está suspendido.
+    const alPintar = activo()
+    expect(evaluateOrganizationEdit(alPintar, true)).toBeNull()
+
+    const alEnviar = resolveOrganizationAccess(
+      contexto(),
+      pertenencia({ membershipStatus: 'suspended' }),
+    )
+    expect(evaluateOrganizationEdit(alEnviar, true)).toBe(
+      ORGANIZATION_ACCESS_MESSAGES.membership_suspended,
+    )
+  })
+
+  it('22. los mensajes de escritura no filtran detalles internos', () => {
+    for (const mensaje of Object.values(ORGANIZATION_EDIT_MESSAGES)) {
+      for (const tecnico of ['SQLSTATE', 'policy', 'RLS', 'organizations', 'row-level', 'pg_']) {
+        expect(mensaje.toLowerCase()).not.toContain(tecnico.toLowerCase())
+      }
+    }
+  })
+
+  it('23. sin contexto tampoco se edita', () => {
+    const a = resolveOrganizationAccess(null, null)
+    expect(evaluateOrganizationEdit(a, true)).toBe(ORGANIZATION_ACCESS_MESSAGES.invalid_context)
+  })
+})
+
+// ── Mensajes ────────────────────────────────────────────────────────────────
+
+describe('mensajes de acceso', () => {
+  it('24. cada estado produce su mensaje', () => {
+    expect(resolveOrganizationAccess(contexto(), null).message).toBe(
+      ORGANIZATION_ACCESS_MESSAGES.no_membership,
+    )
+    expect(
+      resolveOrganizationAccess(contexto({ profileStatus: 'suspended' }), pertenencia()).message,
+    ).toBe(ORGANIZATION_ACCESS_MESSAGES.profile_inactive)
+    expect(
+      resolveOrganizationAccess(contexto(), pertenencia({ organizationStatus: 'suspended' })).message,
+    ).toBe(ORGANIZATION_ACCESS_MESSAGES.organization_inactive)
+    expect(
+      resolveOrganizationAccess(contexto(), pertenencia({ membershipStatus: 'invited' })).message,
+    ).toBe(ORGANIZATION_ACCESS_MESSAGES.membership_invited)
+    expect(resolveOrganizationAccess(null, null).message).toBe(
+      ORGANIZATION_ACCESS_MESSAGES.invalid_context,
+    )
+  })
+
+  it('25. ningún mensaje visible contiene nombres técnicos', () => {
+    for (const mensaje of Object.values(ORGANIZATION_ACCESS_MESSAGES)) {
+      for (const tecnico of [
+        'membership', 'profileStatus', 'organizationStatus', 'status', 'can_buy', 'can_sell',
+        'RLS', 'policy', 'trigger', 'SQLSTATE', 'supabase', 'postgres', 'org_role',
+        'organization_members', 'null', 'undefined',
+      ]) {
+        expect(mensaje.toLowerCase()).not.toContain(tecnico.toLowerCase())
+      }
+    }
+  })
+
+  it('26. un contexto desconocido falla de forma segura, no como ausencia', () => {
+    const a = resolveOrganizationAccess(contexto(), pertenencia({ membershipStatus: null }))
+    expect(a.canOperate).toBe(false)
+    expect(a.state).not.toBe('no_membership')
+    expect(a.state).not.toBe('active')
+  })
+
+  it('27. NUNCA se usa el mensaje de «sin organización» para una pertenencia inactiva', () => {
+    const inactivos = [
+      resolveOrganizationAccess(contexto(), pertenencia({ membershipStatus: 'suspended' })),
+      resolveOrganizationAccess(contexto(), pertenencia({ membershipStatus: 'invited' })),
+      resolveOrganizationAccess(contexto(), pertenencia({ membershipStatus: null })),
+      resolveOrganizationAccess(contexto(), pertenencia({ organizationStatus: 'suspended' })),
+      resolveOrganizationAccess(contexto({ profileStatus: 'suspended' }), pertenencia()),
+    ]
+    for (const a of inactivos) {
+      expect(a.message).not.toBe(ORGANIZATION_ACCESS_MESSAGES.no_membership)
+      expect(a.message.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('los detalles de registro no incluyen datos personales', () => {
+    const a = resolveOrganizationAccess(contexto(), pertenencia({ membershipStatus: 'suspended' }))
+    expect(a.detail).toBe('pertenencia=suspended')
+    expect(a.detail).not.toContain('ana@example.com')
+    expect(a.detail).not.toContain('u-ana')
+  })
+})
+
+// ── Soporte: excepción deliberada ───────────────────────────────────────────
+
+describe('soporte sigue disponible con estados inactivos', () => {
+  it('28. un perfil suspendido conserva una pertenencia utilizable para el ticket', () => {
+    // Soporte NO usa `canOperate`: usa la pertenencia resuelta, exista o no
+    // acceso activo. Por eso el modelo la conserva.
+    const a = resolveOrganizationAccessFromContext(
+      contexto({ profileStatus: 'suspended', memberships: [pertenencia()] }),
+    )
+    expect(a.canOperate).toBe(false)
+    expect(a.membership?.organizationId).toBe(ORG)
+  })
+
+  it('29. una membership suspendida conserva la asociación organizativa', () => {
+    const a = resolveOrganizationAccessFromContext(
+      contexto({ memberships: [pertenencia({ membershipStatus: 'suspended' })] }),
+    )
+    expect(a.membership?.organizationId).toBe(ORG)
+  })
+
+  it('30. sin membership el ticket puede ir sin organización', () => {
+    const a = resolveOrganizationAccessFromContext(contexto({ memberships: [] }))
+    expect(a.membership).toBeNull()
+    expect(a.state).toBe('no_membership')
+  })
+
+  it('31. el acceso activo y la asociación para soporte son decisiones distintas', () => {
+    const suspendida = resolveOrganizationAccessFromContext(
+      contexto({ memberships: [pertenencia({ membershipStatus: 'suspended' })] }),
+    )
+    // Una deniega operar; la otra sigue identificando la organización.
+    expect(suspendida.canOperate).toBe(false)
+    expect(suspendida.membership).not.toBeNull()
+  })
+})

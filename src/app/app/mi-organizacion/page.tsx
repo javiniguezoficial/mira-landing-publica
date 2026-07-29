@@ -1,4 +1,5 @@
 import { getMyOrganization } from '@/lib/queries/my-organization'
+import { ORGANIZATION_ACCESS_MESSAGES } from '@/lib/auth/access'
 import Link from 'next/link'
 import {
   Building2, Users, Pencil, Globe, Mail, Phone,
@@ -42,7 +43,21 @@ export default async function MiOrganizacionPage() {
       <div className="w-full space-y-6 p-4 md:p-6 xl:p-8">
         <MiraPageHeader icon={Building2} title="Mi organización" />
         <div className="mira-card rounded-2xl">
-          <EmptyState icon={Building2} title="No tienes una organización asignada" description="Contacta con tu administrador para que te añada a una organización." />
+          <EmptyState icon={Building2} title="No tienes una organización asignada" description={ORGANIZATION_ACCESS_MESSAGES.no_membership} />
+        </div>
+      </div>
+    )
+  }
+
+  // Pertenece, pero su acceso no está activo. No se intenta una vista de solo
+  // lectura: `is_org_member()` deniega el SELECT, así que no habría datos que
+  // mostrar. Lo útil aquí es decir por qué y hacia dónde ir.
+  if (result.status === 'inactive') {
+    return (
+      <div className="w-full space-y-6 p-4 md:p-6 xl:p-8">
+        <MiraPageHeader icon={Building2} title="Mi organización" />
+        <div className="mira-card rounded-2xl">
+          <EmptyState icon={Building2} title="Acceso no disponible" description={result.access.message} />
         </div>
       </div>
     )

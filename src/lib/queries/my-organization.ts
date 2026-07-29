@@ -1,5 +1,9 @@
 import { loadAuthContext } from '@/lib/auth/context'
-import { resolveFallbackMembership } from '@/lib/auth/membership'
+import {
+  ORGANIZATION_ACCESS_MESSAGES,
+  resolveOrganizationAccessFromContext,
+  type OrganizationAccess,
+} from '@/lib/auth/access'
 import { resolveMemberRoles, type OrganizationRole } from '@/lib/identity'
 
 export interface OrgMember {
@@ -38,20 +42,30 @@ export interface OrgDetail {
 }
 
 export type MyOrgResult =
+  /** No pertenece a ninguna organización. */
   | { status: 'no_org' }
+  /** Pertenece, pero su acceso no está activo. `access` explica por qué. */
+  | { status: 'inactive'; access: OrganizationAccess }
   | { status: 'ok'; org: OrgDetail; members: OrgMember[]; userRole: OrganizationRole | null }
 
+/**
+ * 6B.5.1: el acceso se clasifica ANTES de consultar.
+ *
+ * No se intenta una vista de solo lectura para los estados inactivos porque SQL
+ * no la permite: `org_members_select` usa `is_org_member(id)`, que exige
+ * pertenencia y organización activas. Comprobado en remoto — con la pertenencia
+ * suspendida, el SELECT de `organizations` devuelve 0 filas. Prometer aquí un
+ * modo lectura sería prometer una pantalla vacía.
+ */
 export async function getMyOrganization(): Promise<MyOrgResult> {
   const { supabase, context } = await loadAuthContext()
-  if (!context) return { status: 'no_org' }
 
-  // Elección determinista de la pertenencia. Antes era `.limit(1)` sin ORDER
-  // BY: con más de una pertenencia el resultado dependía del orden que
-  // devolviera Postgres. Ver `resolveFallbackMembership`.
-  const membership = resolveFallbackMembership(context.memberships)
-  if (!membership) return { status: 'no_org' }
+  const access = resolveOrganizationAccessFromContext(context)
+  if (access.state === 'no_membership') return { status: 'no_org' }
+  if (!access.canOperate) return { status: 'inactive', access }
 
-  const orgId = membership.organizationId
+  const orgId = access.membership!.organizationId
+  const membership = access.membership!
 
   // Cargar organización completa + plan
   const { data: org, error: orgErr } = await supabase
@@ -66,7 +80,20 @@ export async function getMyOrganization(): Promise<MyOrgResult> {
     .eq('id', orgId)
     .single()
 
-  if (orgErr || !org) return { status: 'no_org' }
+  // Con acceso activo la organización DEBE ser legible. Si no lo es, el estado
+  // ha cambiado entre la carga del contexto y esta consulta.
+  if (orgErr || !org) {
+    return {
+      status: 'inactive',
+      access: {
+        ...access,
+        state: 'invalid_context',
+        canOperate: false,
+        message: ORGANIZATION_ACCESS_MESSAGES.invalid_context,
+        detail: 'organización no legible con acceso activo',
+      },
+    }
+  }
 
   // Cargar miembros con sus perfiles (habilitado por la policy 008).
   //

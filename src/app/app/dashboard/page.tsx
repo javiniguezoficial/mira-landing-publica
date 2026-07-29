@@ -6,6 +6,7 @@ import { currencySymbol, unitLabel } from '@/lib/utils'
 import { redirect } from 'next/navigation'
 import { getActiveOrg } from '@/lib/queries/user-org'
 import { canCreateRfq } from '@/lib/queries/rfq-capability'
+import { ORGANIZATION_ACCESS_MESSAGES } from '@/lib/auth/access'
 import { organizationRoleLabel } from '@/lib/identity'
 import { getClientDashboardData } from '@/lib/queries/client-dashboard'
 import { getLatestPrices } from '@/lib/queries/admin-dashboard'
@@ -33,23 +34,45 @@ function timeAgo(iso: string) {
   return `${Math.floor(d / 86400)}d`
 }
 
-function NoOrgScreen() {
+/**
+ * Pantalla de acceso no disponible.
+ *
+ * Sirve para los dos casos, con textos distintos: no pertenecer a ninguna
+ * organización y pertenecer sin acceso activo. Antes solo existía el primero y
+ * se usaba también para el segundo, de modo que a alguien suspendido se le
+ * decía que no tiene empresa. Soporte sigue accesible desde el menú lateral en
+ * ambos casos: es la vía por la que puede reclamar.
+ */
+function SinAccesoScreen({ titulo, descripcion }: { titulo: string; descripcion: string }) {
   return (
     <div className="flex min-h-[60vh] flex-col items-center justify-center p-8 text-center">
       <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-mira-magenta-soft">
         <Building2 size={32} className="text-mira-magenta" />
       </div>
-      <h2 className="mb-2 text-xl font-black text-mira-ink">Sin organización asignada</h2>
-      <p className="max-w-sm text-sm text-slate-500">
-        Tu cuenta no está vinculada a ninguna organización. Contacta con tu administrador.
-      </p>
+      <h2 className="mb-2 text-xl font-black text-mira-ink">{titulo}</h2>
+      <p className="max-w-sm text-sm text-slate-500">{descripcion}</p>
+      <a href="/app/ayuda" className="mt-6 text-sm font-bold text-mira-magenta hover:underline">
+        Contactar con soporte
+      </a>
     </div>
   )
 }
 
 export default async function AppDashboard() {
   const result = await getActiveOrg()
-  if (result.status === 'no_org') return <NoOrgScreen />
+
+  if (result.status === 'no_org') {
+    return (
+      <SinAccesoScreen
+        titulo="Sin organización asignada"
+        descripcion={ORGANIZATION_ACCESS_MESSAGES.no_membership}
+      />
+    )
+  }
+
+  if (result.status === 'inactive') {
+    return <SinAccesoScreen titulo="Acceso no disponible" descripcion={result.access.message} />
+  }
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
