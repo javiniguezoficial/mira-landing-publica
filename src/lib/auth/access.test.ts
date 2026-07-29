@@ -343,3 +343,43 @@ describe('soporte sigue disponible con estados inactivos', () => {
     expect(suspendida.membership).not.toBeNull()
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 6C — organización recién registrada, todavía pendiente
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Un alta desde la landing nace `pending`. La organización NO es legible en ese
+// estado —`org_members_select` exige `is_org_member`—, así que el contexto
+// recibe la pertenencia con `organizationStatus` en null. Lo importante es que
+// eso se clasifique como «tu organización no está activa» y NUNCA como «no
+// tienes organización»: la persona acaba de dar de alta su empresa.
+
+describe('alta pendiente de revisión', () => {
+  it('una pertenencia visible con organización ilegible NO es ausencia de organización', () => {
+    const recienRegistrada = pertenencia({ organizationStatus: null, organizationName: '' })
+    const acceso = resolveOrganizationAccess(contexto(), recienRegistrada)
+
+    expect(acceso.state).toBe('organization_inactive')
+    expect(acceso.state).not.toBe('no_membership')
+    expect(acceso.message).not.toBe(ORGANIZATION_ACCESS_MESSAGES.no_membership)
+    expect(acceso.message).toBe(ORGANIZATION_ACCESS_MESSAGES.organization_inactive)
+  })
+
+  it('no concede ninguna operación comercial', () => {
+    const acceso = resolveOrganizationAccess(contexto(), pertenencia({ organizationStatus: null }))
+    expect(acceso.canOperate).toBe(false)
+  })
+
+  it('conserva la pertenencia, que es lo que soporte necesita para asociar el ticket', () => {
+    const m = pertenencia({ organizationStatus: null })
+    const acceso = resolveOrganizationAccess(contexto(), m)
+    expect(acceso.membership).toBe(m)
+    expect(acceso.membership?.organizationId).toBe(ORG)
+  })
+
+  it('una organización explícitamente pending se clasifica igual', () => {
+    expect(estado(contexto(), pertenencia({ organizationStatus: 'pending' }))).toBe(
+      'organization_inactive',
+    )
+  })
+})

@@ -7,17 +7,23 @@ import { MiraLogo } from './MiraLogo'
 import { Button } from './Button'
 import { DataAnchor } from './DataAnchor'
 import { createClient } from '@/lib/supabase/client'
+import { completeOrganizationSignup } from '@/lib/actions/onboarding'
 
-export const SignupPage = () => {
+export const SignupPage = ({ planSlug = 'starter' }: { planSlug?: string }) => {
   const router = useRouter()
   const [nombre, setNombre] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [empresa, setEmpresa] = useState('')
+  const [cifNif, setCifNif] = useState('')
+  const [telefono, setTelefono] = useState('')
+  const [pais, setPais] = useState('ES')
+  const [tipoComercial, setTipoComercial] = useState('buyer')
   const [terms, setTerms] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const [pendiente, setPendiente] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -31,6 +37,10 @@ export const SignupPage = () => {
       setError('La contraseña debe tener al menos 6 caracteres.')
       return
     }
+    if (!empresa.trim()) {
+      setError('El nombre de la empresa es obligatorio.')
+      return
+    }
 
     setLoading(true)
 
@@ -39,22 +49,57 @@ export const SignupPage = () => {
     const last_name = parts.slice(1).join(' ') || null
 
     const supabase = createClient()
-    const { error: signUpError } = await supabase.auth.signUp({
+    // Los datos de empresa viajan en la metadata para poder completar el alta
+    // también cuando Supabase exige confirmar el email antes de dar sesión. El
+    // servidor NO se fía de ninguno: valida el plan contra el catálogo activo y
+    // decide el estado por su cuenta.
+    const { data, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: { first_name, last_name, company: empresa || null },
+        data: {
+          first_name,
+          last_name,
+          company: empresa.trim(),
+          plan_slug: planSlug,
+          commercial_profile: tipoComercial,
+          cif_nif: cifNif.trim() || null,
+          country: pais.trim() || 'ES',
+          phone: telefono.trim() || null,
+        },
       },
+    })
+
+    if (signUpError) {
+      setLoading(false)
+      // Respuesta idéntica exista o no la cuenta: enumerar emails desde un
+      // formulario público es una fuga en sí misma.
+      setError('No hemos podido completar el registro. Revisa los datos o inicia sesión si ya tienes cuenta.')
+      return
+    }
+
+    // Con confirmación de email activada no hay sesión todavía: el alta de la
+    // empresa se completará al volver del enlace, en /auth/callback.
+    if (!data.session) {
+      setLoading(false)
+      setPendiente(true)
+      setSuccess(true)
+      return
+    }
+
+    const resultado = await completeOrganizationSignup({
+      companyName: empresa.trim(),
+      planSlug,
+      commercialProfile: tipoComercial,
+      cifNif: cifNif.trim() || null,
+      country: pais.trim() || 'ES',
+      phone: telefono.trim() || null,
     })
 
     setLoading(false)
 
-    if (signUpError) {
-      if (signUpError.message.includes('already registered')) {
-        setError('Este email ya tiene una cuenta. Prueba a iniciar sesión.')
-      } else {
-        setError(signUpError.message)
-      }
+    if (resultado.error) {
+      setError(resultado.error)
       return
     }
 
@@ -112,7 +157,11 @@ export const SignupPage = () => {
                   </svg>
                 </div>
                 <h3 className="text-lg font-heading font-bold text-slate-900 mb-2">¡Cuenta creada!</h3>
-                <p className="text-sm text-slate-500">Redirigiendo a tu panel…</p>
+                <p className="text-sm text-slate-500">
+                  {pendiente
+                    ? 'Te hemos enviado un correo para confirmar tu dirección. Al volver, terminaremos de preparar tu empresa.'
+                    : 'Tu empresa queda pendiente de revisión. Te avisaremos en cuanto esté activa.'}
+                </p>
               </motion.div>
             ) : (
             <form className="space-y-5" onSubmit={handleSubmit}>
@@ -157,16 +206,70 @@ export const SignupPage = () => {
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                  Empresa{' '}
-                  <span className="text-slate-400 font-normal normal-case">(opcional)</span>
+                  Empresa
                 </label>
                 <input
                   type="text"
                   placeholder="Nombre de tu empresa"
                   value={empresa}
                   onChange={e => setEmpresa(e.target.value)}
+                  required
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-mira-primary focus:ring-2 focus:ring-mira-primary/20 outline-none transition-all text-sm text-slate-900"
                 />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                    CIF / NIF
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="B12345678"
+                    value={cifNif}
+                    onChange={e => setCifNif(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-mira-primary focus:ring-2 focus:ring-mira-primary/20 outline-none transition-all text-sm text-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                    Teléfono
+                  </label>
+                  <input
+                    type="tel"
+                    placeholder="+34 600 000 000"
+                    value={telefono}
+                    onChange={e => setTelefono(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-mira-primary focus:ring-2 focus:ring-mira-primary/20 outline-none transition-all text-sm text-slate-900"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                    País
+                  </label>
+                  <input
+                    type="text"
+                    value={pais}
+                    onChange={e => setPais(e.target.value)}
+                    maxLength={2}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-mira-primary focus:ring-2 focus:ring-mira-primary/20 outline-none transition-all text-sm text-slate-900 uppercase"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                    Tu actividad
+                  </label>
+                  <select
+                    value={tipoComercial}
+                    onChange={e => setTipoComercial(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-mira-primary focus:ring-2 focus:ring-mira-primary/20 outline-none transition-all text-sm text-slate-900"
+                  >
+                    <option value="buyer">Compro</option>
+                    <option value="seller">Vendo</option>
+                    <option value="buyer_seller">Compro y vendo</option>
+                  </select>
+                </div>
               </div>
               <div className="flex items-start gap-3 pt-2">
                 <input

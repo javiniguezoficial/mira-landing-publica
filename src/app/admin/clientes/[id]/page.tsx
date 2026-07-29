@@ -1,8 +1,9 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ChevronLeft, Pencil, Building2, Mail, Phone, Globe, MapPin, Users } from 'lucide-react'
-import { getOrganizationById } from '@/lib/actions/organizations'
+import { getOrganizationById, getOrganizationOwner, getPlans } from '@/lib/actions/organizations'
 import { getOrganizationMembers, getProfiles } from '@/lib/actions/users'
+import { ClientLifecycleCard } from '@/components/admin/clients/ClientLifecycleCard'
 import { MiraStatusBadge } from '@/components/mira/MiraStatusBadge'
 import { MembersTable } from '@/components/admin/users/MembersTable'
 import { AddMemberModal } from '@/components/admin/users/AddMemberModal'
@@ -23,10 +24,12 @@ function DetailRow({ label, value }: { label: string; value?: string | null }) {
 
 export default async function ClienteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const [org, members, allUsers] = await Promise.all([
+  const [org, members, allUsers, owner, planes] = await Promise.all([
     getOrganizationById(id),
     getOrganizationMembers(id),
     getProfiles(),
+    getOrganizationOwner(id),
+    getPlans(),
   ])
   if (!org) notFound()
 
@@ -73,6 +76,17 @@ export default async function ClienteDetailPage({ params }: { params: Promise<{ 
       </div>
 
       <div className="space-y-6">
+        <ClientLifecycleCard
+          organizationId={org.id}
+          status={org.status}
+          planSlug={org.plan?.slug ?? null}
+          requestedPlanName={
+            (planes ?? []).find((p) => p.id === org.requested_plan_id)?.name ?? null
+          }
+          planes={(planes ?? []).map((p) => ({ slug: p.slug as string, name: p.name as string }))}
+          owner={owner ? { firstName: owner.firstName, lastName: owner.lastName, status: owner.status } : null}
+        />
+
         {/* Datos de empresa */}
         <section className="mira-card rounded-2xl p-5 sm:p-6">
           <h2 className="mb-5 text-xs font-bold uppercase tracking-wider text-slate-400">

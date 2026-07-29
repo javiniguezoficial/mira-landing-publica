@@ -1,6 +1,6 @@
 'use server'
 
-import { createServerClient } from '@supabase/ssr'
+import { createSupabaseAdminClient } from '@/lib/supabase/admin'
 import { requirePlatformAdmin } from '@/lib/auth/guards'
 import {
   buildMembershipInsert,
@@ -11,7 +11,6 @@ import {
   type ManageableOrgRole,
 } from '@/lib/auth/member-write'
 import { normalizeOrganizationRole, type OrganizationRole } from '@/lib/identity'
-import { cookies } from 'next/headers'
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -63,24 +62,11 @@ export interface OrgMember {
 // Su único uso sigue siendo leer los emails de `auth.users`, que no es
 // accesible desde el cliente normal.
 
-async function createAdminClient() {
-  const cookieStore = await cookies()
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      cookies: {
-        getAll: () => cookieStore.getAll(),
-        setAll: () => {},
-      },
-    }
-  )
-}
 
 // ── Emails desde auth.users via service role ──────────────────────────────────
 
 async function fetchEmailMap(): Promise<Record<string, string>> {
-  const admin = await createAdminClient()
+  const admin = await createSupabaseAdminClient()
   // listUsers pagina de 1000 en 1000; para esta fase asumimos < 1000 usuarios
   const { data } = await admin.auth.admin.listUsers({ perPage: 1000 })
   const map: Record<string, string> = {}

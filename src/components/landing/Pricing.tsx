@@ -59,7 +59,7 @@ export const Pricing = () => {
             <div className="mb-8">
               <span className="text-5xl font-display font-bold text-slate-900">0€</span>
             </div>
-            <Button href="/registro" variant="outline" className="w-full mb-10 border-slate-300">
+            <Button href="/registro?plan=starter" variant="outline" className="w-full mb-10 border-slate-300">
               Crear cuenta gratis
             </Button>
             <ul className="space-y-4 text-sm text-slate-600 font-body">
@@ -101,7 +101,7 @@ export const Pricing = () => {
               )}
             </p>
             <Button
-              href="/registro"
+              href="/registro?plan=business"
               variant="primary"
               size="lg"
               className="w-full mb-10 shadow-xl shadow-mira-primary/30"
