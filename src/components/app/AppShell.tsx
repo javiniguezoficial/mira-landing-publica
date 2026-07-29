@@ -15,6 +15,8 @@ const nav: NavItem[] = [
     href: '/app/rfqs', label: 'Cotizaciones', icon: FileText,
     children: [
       { href: '/app/rfqs',       label: 'Mis RFQs' },
+      // El enlace es visible para todo el equipo; la página comprueba la
+      // capacidad de compra en servidor y redirige a /app/rfqs si no la hay.
       { href: '/app/rfqs/nueva', label: 'Nueva RFQ' },
     ],
   },

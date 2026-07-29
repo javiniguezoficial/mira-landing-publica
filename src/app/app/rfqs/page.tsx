@@ -1,5 +1,7 @@
 import Link from 'next/link'
 import { listMyRfqs } from '@/lib/actions/rfqs'
+import { canCreateRfq } from '@/lib/queries/rfq-capability'
+import { RFQ_MESSAGES } from '@/lib/auth/rfq'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 import { MiraTable, MiraTr, MiraTd } from '@/components/mira/MiraTable'
 import { MiraStatusBadge } from '@/components/mira/MiraStatusBadge'
@@ -12,7 +14,7 @@ function formatDate(d: string) {
 }
 
 export default async function ClientRfqsPage() {
-  const rfqs = await listMyRfqs()
+  const [rfqs, puedeCrear] = await Promise.all([listMyRfqs(), canCreateRfq()])
 
   return (
     <div className="w-full space-y-6 p-4 md:p-6 xl:p-8">
@@ -20,8 +22,19 @@ export default async function ClientRfqsPage() {
         icon={FileText}
         title="Mis cotizaciones"
         subtitle="Solicitudes de cotización enviadas por tu organización"
-        actions={<Link href="/app/rfqs/nueva" className={miraBtn.primary}><Plus size={16} /> Nueva RFQ</Link>}
+        actions={
+          puedeCrear
+            ? <Link href="/app/rfqs/nueva" className={miraBtn.primary}><Plus size={16} /> Nueva RFQ</Link>
+            : null
+        }
       />
+
+      {/* El histórico sigue visible aunque no se puedan crear cotizaciones. */}
+      {!puedeCrear && (
+        <p className="rounded-xl border border-mira-line bg-mira-canvas px-4 py-3 text-sm text-slate-500">
+          {RFQ_MESSAGES.sinCapacidadEnOrganizacion}
+        </p>
+      )}
 
       {rfqs.length === 0 ? (
         <div className="mira-card rounded-2xl">
@@ -29,7 +42,7 @@ export default async function ClientRfqsPage() {
             icon={FileText}
             title="Aún no tienes cotizaciones"
             description="Crea tu primera solicitud de cotización para empezar."
-            action={{ label: 'Crear RFQ', href: '/app/rfqs/nueva' }}
+            action={puedeCrear ? { label: 'Crear RFQ', href: '/app/rfqs/nueva' } : undefined}
           />
         </div>
       ) : (

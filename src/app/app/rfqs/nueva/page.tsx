@@ -1,10 +1,15 @@
+import { redirect } from 'next/navigation'
 import { createDraftRfq } from '@/lib/actions/rfqs'
+import { canCreateRfq } from '@/lib/queries/rfq-capability'
 import { RfqForm } from '@/components/app/rfqs/RfqForm'
 import { MiraFormCard } from '@/components/mira/MiraFormCard'
 import { ArrowLeft, FileText } from 'lucide-react'
 import Link from 'next/link'
 
-export default function NewRfqPage() {
+export default async function NewRfqPage() {
+  // Ocultar el botón no basta: esta URL se puede escribir a mano.
+  if (!(await canCreateRfq())) redirect('/app/rfqs')
+
   return (
     <div className="w-full max-w-2xl space-y-6 p-4 md:p-6 xl:p-8">
       <div>

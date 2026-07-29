@@ -5,6 +5,7 @@ import {
 import { currencySymbol, unitLabel } from '@/lib/utils'
 import { redirect } from 'next/navigation'
 import { getActiveOrg } from '@/lib/queries/user-org'
+import { canCreateRfq } from '@/lib/queries/rfq-capability'
 import { organizationRoleLabel } from '@/lib/identity'
 import { getClientDashboardData } from '@/lib/queries/client-dashboard'
 import { getLatestPrices } from '@/lib/queries/admin-dashboard'
@@ -55,9 +56,10 @@ export default async function AppDashboard() {
   if (!user) redirect('/login')
 
   const { org } = result
-  const [data, latestPrices] = await Promise.all([
+  const [data, latestPrices, puedeCrearRfq] = await Promise.all([
     getClientDashboardData(org.id, user.id),
     getLatestPrices(5),
+    canCreateRfq(),
   ])
 
   const roleLabel = organizationRoleLabel(org.userRole)
@@ -80,9 +82,11 @@ export default async function AppDashboard() {
               {org.plan?.name ?? 'Sin plan'}
             </span>
             <MiraStatusBadge status={org.subscription_status} kind="sub" className="px-3 py-2 text-xs" />
-            <a href="/app/rfqs/nueva" className="inline-flex items-center gap-1.5 rounded-xl bg-mira-magenta px-4 py-2 text-sm font-bold text-white shadow-lg shadow-mira-magenta/25 transition-colors hover:bg-mira-magenta-deep">
-              <Plus size={14} /> Nueva RFQ
-            </a>
+            {puedeCrearRfq && (
+              <a href="/app/rfqs/nueva" className="inline-flex items-center gap-1.5 rounded-xl bg-mira-magenta px-4 py-2 text-sm font-bold text-white shadow-lg shadow-mira-magenta/25 transition-colors hover:bg-mira-magenta-deep">
+                <Plus size={14} /> Nueva RFQ
+              </a>
+            )}
           </>
         }
       />
@@ -132,7 +136,7 @@ export default async function AppDashboard() {
             ? <div className="flex flex-col items-center gap-3 px-5 py-10 text-center">
                 <FileText size={28} className="text-slate-300" />
                 <p className="text-sm text-slate-400">Sin RFQs todavía</p>
-                <a href="/app/rfqs/nueva" className="rounded-xl bg-mira-magenta px-4 py-2 text-xs font-bold text-white">Nueva RFQ</a>
+                {puedeCrearRfq && <a href="/app/rfqs/nueva" className="rounded-xl bg-mira-magenta px-4 py-2 text-xs font-bold text-white">Nueva RFQ</a>}
               </div>
             : <div className="divide-y divide-mira-line">
                 {data.recentRfqs.map(rfq => (
@@ -181,7 +185,7 @@ export default async function AppDashboard() {
           <a href="/app/ayuda" className="flex items-center gap-1 text-xs font-bold text-mira-magenta hover:underline">Ayuda <ArrowRight size={12} /></a>
         </div>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <MiraQuickAction href="/app/rfqs/nueva" label="Nueva RFQ" desc="Solicitar cotización" icon={Plus} gradient="from-mira-magenta to-purple-600" />
+          {puedeCrearRfq && <MiraQuickAction href="/app/rfqs/nueva" label="Nueva RFQ" desc="Solicitar cotización" icon={Plus} gradient="from-mira-magenta to-purple-600" />}
           <MiraQuickAction href="/app/market-intelligent" label="Market Intelligence" desc="Precios de mercado" icon={TrendingUp} gradient="from-fuchsia-500 to-pink-600" />
           <MiraQuickAction href="/app/proveedores" label="Proveedores" desc="Mapa y catálogo" icon={MapPin} gradient="from-cyan-500 to-blue-600" />
           <MiraQuickAction href="/app/ayuda" label="Ayuda" desc="FAQ y soporte" icon={HelpCircle} gradient="from-emerald-500 to-teal-600" />

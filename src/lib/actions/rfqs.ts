@@ -1,9 +1,20 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
-import { requirePlatformAdmin } from '@/lib/auth/guards'
-import { getActiveOrg } from '@/lib/queries/user-org'
-import { redirect } from 'next/navigation'
+import type { ServerSupabaseClient } from '@/lib/auth/context'
+import {
+  requireCommercialCapability,
+  requireMembership,
+  requirePlatformAdmin,
+  requireSession,
+} from '@/lib/auth/guards'
+import { isAuthorizationError } from '@/lib/auth/errors'
+import {
+  RFQ_MESSAGES,
+  evaluateRfqManagement,
+  isValidRfqTransition,
+  rfqErrorDetail,
+  translateRfqError,
+} from '@/lib/auth/rfq'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -231,13 +242,21 @@ function buildRfqContent(data: RfqFormData) {
 export type RfqActionResult = { id: string } | { error: string }
 
 export async function createDraftRfq(formData: RfqFormData): Promise<RfqActionResult> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')   // fuera del try: el redirect debe propagarse
+  // Una sola carga de sesión, pertenencia y capacidad. Crear exige `can_buy`
+  // vigente y que la organización tenga perfil comprador.
+  let autorizado
+  try {
+    autorizado = await requireCommercialCapability('buy')
+  } catch (e) {
+    if (isAuthorizationError(e)) {
+      return { error: e.code === 'NO_ORGANIZATION'
+        ? 'No tienes una organización activa.'
+        : RFQ_MESSAGES.sinCapacidadEnOrganizacion }
+    }
+    throw e
+  }
 
-  const orgResult = await getActiveOrg()
-  if (orgResult.status !== 'ok') return { error: 'No tienes una organización activa.' }
-  const orgId = orgResult.org.id
+  const { supabase, userId, membership } = autorizado
 
   try {
     validateFormData(formData)
@@ -248,105 +267,126 @@ export async function createDraftRfq(formData: RfqFormData): Promise<RfqActionRe
   const { data, error } = await supabase
     .from('rfqs')
     .insert({
-      organization_id: orgId,
-      created_by: user.id,
+      organization_id: membership.organizationId,
+      created_by: userId,
       status: 'draft',
       ...buildRfqContent(formData),
     })
     .select('id')
     .single()
 
-  if (error) return { error: error.message }
+  if (error) {
+    console.error(rfqErrorDetail('creación de borrador', error))
+    return { error: translateRfqError(error) }
+  }
   return { id: data.id }
 }
 
-// ── Cliente: actualizar borrador (solo campos de contenido) ──────────────────
+// ── Cliente: gestión de cotizaciones ─────────────────────────────────────────
+//
+// La cotización pertenece a la ORGANIZACIÓN: owner y admin gestionan cualquiera
+// de su empresa, un member solo las suyas. En todos los casos hace falta
+// capacidad de compra vigente. RLS y el trigger de la migración 024 imponen lo
+// mismo; estas comprobaciones existen para dar mensajes claros.
+
+interface RfqAutorizada {
+  supabase: ServerSupabaseClient
+  rfq: { id: string; organization_id: string; created_by: string; status: RfqStatus }
+}
+
+/** Carga la cotización y comprueba que el actor puede gestionarla. */
+async function autorizarGestion(rfqId: string): Promise<RfqAutorizada | { error: string }> {
+  let autorizado
+  try {
+    autorizado = await requireMembership()
+  } catch (e) {
+    if (isAuthorizationError(e)) return { error: 'No tienes una organización activa.' }
+    throw e
+  }
+
+  const { supabase, userId, context, membership } = autorizado
+
+  const { data: rfq, error } = await supabase
+    .from('rfqs')
+    .select('id, organization_id, created_by, status')
+    .eq('id', rfqId)
+    .maybeSingle()
+
+  if (error || !rfq) return { error: RFQ_MESSAGES.sinAcceso }
+
+  const fallo = evaluateRfqManagement(
+    { userId, orgRole: membership.orgRole, isPlatformAdmin: context.platformRole === 'platform_admin' },
+    { organizationId: rfq.organization_id, createdBy: rfq.created_by, status: rfq.status },
+    membership,
+  )
+
+  if (fallo) {
+    return { error: fallo === 'NO_ORGANIZATION' ? RFQ_MESSAGES.sinAcceso : RFQ_MESSAGES.sinCapacidad }
+  }
+
+  return { supabase, rfq: rfq as RfqAutorizada['rfq'] }
+}
 
 export async function updateDraftRfq(rfqId: string, formData: RfqFormData): Promise<{ error: string } | void> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')   // fuera del try: el redirect debe propagarse
-
   try {
     validateFormData(formData)
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'Datos de la RFQ no válidos.' }
   }
 
-  // Verificar que la RFQ pertenece al usuario y está en draft
-  const { data: existing, error: fetchErr } = await supabase
-    .from('rfqs')
-    .select('id, organization_id, created_by, status')
-    .eq('id', rfqId)
-    .single()
+  const autorizada = await autorizarGestion(rfqId)
+  if ('error' in autorizada) return autorizada
+  const { supabase, rfq } = autorizada
 
-  if (fetchErr || !existing) return { error: 'RFQ no encontrada.' }
-  if (existing.created_by !== user.id) return { error: 'No tienes permiso para editar esta RFQ.' }
-  if (existing.status !== 'draft') return { error: 'Solo se pueden editar RFQs en borrador.' }
+  // El contenido solo se edita mientras la cotización sigue siendo borrador.
+  if (rfq.status !== 'draft') return { error: RFQ_MESSAGES.finalizada }
 
-  // Actualizar solo campos de contenido — organization_id y created_by no se tocan
   const { error } = await supabase
     .from('rfqs')
     .update(buildRfqContent(formData))
     .eq('id', rfqId)
-    .eq('created_by', user.id)
     .eq('status', 'draft')
 
-  if (error) return { error: error.message }
+  if (error) {
+    console.error(rfqErrorDetail('edición de borrador', error))
+    return { error: translateRfqError(error) }
+  }
 }
 
-// ── Cliente: publicar (draft → open) ─────────────────────────────────────────
+/** Cambio de estado desde el área de cliente: publicar o cancelar. */
+async function cambiarEstadoCliente(rfqId: string, nuevoEstado: RfqStatus): Promise<void> {
+  const autorizada = await autorizarGestion(rfqId)
+  if ('error' in autorizada) throw new Error(autorizada.error)
+  const { supabase, rfq } = autorizada
 
+  if (!isValidRfqTransition(rfq.status, nuevoEstado, false)) {
+    throw new Error(
+      rfq.status === 'awarded' || rfq.status === 'cancelled'
+        ? RFQ_MESSAGES.finalizada
+        : RFQ_MESSAGES.transicionInvalida,
+    )
+  }
+
+  const { error } = await supabase
+    .from('rfqs')
+    .update({ status: nuevoEstado })
+    .eq('id', rfqId)
+    .eq('status', rfq.status)
+
+  if (error) {
+    console.error(rfqErrorDetail(`transición a ${nuevoEstado}`, error))
+    throw new Error(translateRfqError(error))
+  }
+}
+
+/** draft → open. */
 export async function publishRfq(rfqId: string): Promise<void> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-
-  const { data: existing, error: fetchErr } = await supabase
-    .from('rfqs')
-    .select('id, created_by, status')
-    .eq('id', rfqId)
-    .single()
-
-  if (fetchErr || !existing) throw new Error('RFQ no encontrada')
-  if (existing.created_by !== user.id) throw new Error('No tienes permiso sobre esta RFQ')
-  if (existing.status !== 'draft') throw new Error('Solo se pueden publicar RFQs en borrador')
-
-  const { error } = await supabase
-    .from('rfqs')
-    .update({ status: 'open' })
-    .eq('id', rfqId)
-    .eq('created_by', user.id)
-    .eq('status', 'draft')
-
-  if (error) throw new Error(error.message)
+  await cambiarEstadoCliente(rfqId, 'open')
 }
 
-// ── Cliente: cancelar (draft → cancelled) ────────────────────────────────────
-
+/** draft → cancelled y open → cancelled. */
 export async function cancelRfq(rfqId: string): Promise<void> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-
-  const { data: existing, error: fetchErr } = await supabase
-    .from('rfqs')
-    .select('id, created_by, status')
-    .eq('id', rfqId)
-    .single()
-
-  if (fetchErr || !existing) throw new Error('RFQ no encontrada')
-  if (existing.created_by !== user.id) throw new Error('No tienes permiso sobre esta RFQ')
-  if (existing.status !== 'draft') throw new Error('Solo se pueden cancelar RFQs en borrador')
-
-  const { error } = await supabase
-    .from('rfqs')
-    .update({ status: 'cancelled' })
-    .eq('id', rfqId)
-    .eq('created_by', user.id)
-    .eq('status', 'draft')
-
-  if (error) throw new Error(error.message)
+  await cambiarEstadoCliente(rfqId, 'cancelled')
 }
 
 // ── Admin: cambiar cualquier estado ──────────────────────────────────────────
@@ -358,20 +398,51 @@ export async function adminUpdateRfqStatus(rfqId: string, status: RfqStatus): Pr
 
   const { supabase } = await requirePlatformAdmin('throw')
 
+  // La plataforma dispone de más transiciones, no de menos reglas: `awarded` y
+  // `cancelled` siguen siendo finales. El trigger de 024 lo impone igualmente.
+  const { data: actual } = await supabase
+    .from('rfqs')
+    .select('status')
+    .eq('id', rfqId)
+    .maybeSingle()
+
+  if (!actual) throw new Error(RFQ_MESSAGES.sinAcceso)
+
+  if (!isValidRfqTransition(actual.status, status, true)) {
+    throw new Error(
+      actual.status === 'awarded' || actual.status === 'cancelled'
+        ? RFQ_MESSAGES.finalizada
+        : RFQ_MESSAGES.transicionInvalida,
+    )
+  }
+
   const { error } = await supabase
     .from('rfqs')
     .update({ status })
     .eq('id', rfqId)
+    .eq('status', actual.status)
 
-  if (error) throw new Error(error.message)
+  if (error) {
+    console.error(rfqErrorDetail('transición administrativa', error))
+    throw new Error(translateRfqError(error))
+  }
 }
 
 // ── Queries ───────────────────────────────────────────────────────────────────
 
+/**
+ * Histórico de la organización. Basta con ser miembro activo: retirar la
+ * capacidad de comprar no debe borrar lo que la empresa ya solicitó.
+ */
 export async function listMyRfqs(): Promise<Rfq[]> {
-  const supabase = await createClient()
-  const orgResult = await getActiveOrg()
-  if (orgResult.status !== 'ok') return []
+  let autorizado
+  try {
+    autorizado = await requireMembership()
+  } catch (e) {
+    if (isAuthorizationError(e)) return []
+    throw e
+  }
+  const { supabase, membership } = autorizado
 
   const { data, error } = await supabase
     .from('rfqs')
@@ -379,15 +450,16 @@ export async function listMyRfqs(): Promise<Rfq[]> {
       ${RFQ_COLUMNS},
       product:products(id, name, slug, unit, market:markets(id, name, slug))
     `)
-    .eq('organization_id', orgResult.org.id)
+    .eq('organization_id', membership.organizationId)
     .order('created_at', { ascending: false })
 
   if (error) return []
   return (data ?? []) as unknown as Rfq[]
 }
 
+/** Listado global de Administración. */
 export async function listAllRfqs(statusFilter?: RfqStatus): Promise<Rfq[]> {
-  const supabase = await createClient()
+  const { supabase } = await requirePlatformAdmin()
 
   let query = supabase
     .from('rfqs')
@@ -405,8 +477,19 @@ export async function listAllRfqs(statusFilter?: RfqStatus): Promise<Rfq[]> {
   return (data ?? []) as unknown as Rfq[]
 }
 
+/**
+ * Detalle de una cotización. RLS ya limita la visibilidad a la organización
+ * propietaria y a la plataforma; se apoya en ella en lugar de duplicar el
+ * filtro, pero exige sesión para no depender solo de la base de datos.
+ */
 export async function getRfq(rfqId: string): Promise<Rfq | null> {
-  const supabase = await createClient()
+  let supabase
+  try {
+    ({ supabase } = await requireSession())
+  } catch (e) {
+    if (isAuthorizationError(e)) return null
+    throw e
+  }
 
   const { data, error } = await supabase
     .from('rfqs')
@@ -416,7 +499,7 @@ export async function getRfq(rfqId: string): Promise<Rfq | null> {
       organization:organizations(id, name)
     `)
     .eq('id', rfqId)
-    .single()
+    .maybeSingle()
 
   if (error || !data) return null
   return data as unknown as Rfq

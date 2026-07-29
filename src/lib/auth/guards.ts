@@ -19,7 +19,14 @@
 import { redirect } from 'next/navigation'
 import { AuthorizationError, type AuthorizationCode } from './errors'
 import { getMembershipForOrganization, resolveFallbackMembership } from './membership'
-import { adminDenialTarget, evaluatePlatformAdmin, evaluateSession, type AdminDenial } from './policy'
+import {
+  adminDenialTarget,
+  evaluateCapability,
+  evaluatePlatformAdmin,
+  evaluateSession,
+  type AdminDenial,
+  type CommercialCapability,
+} from './policy'
 import { loadAuthContext, type ServerSupabaseClient } from './context'
 import type { AuthContext, AuthMembership } from './types'
 
@@ -136,4 +143,55 @@ export function resolveMembership(
   return organizationId
     ? getMembershipForOrganization(context.memberships, organizationId)
     : resolveFallbackMembership(context.memberships)
+}
+
+export interface AuthorizedMembership extends AuthorizedSession {
+  membership: AuthMembership
+}
+
+/**
+ * Exige sesión y una pertenencia utilizable, y devuelve todo junto: cliente de
+ * Supabase, contexto y pertenencia resuelta.
+ *
+ * Evita el patrón que se repetía en las acciones de cotizaciones —`getUser()`
+ * seguido de `getActiveOrg()`—, que cargaba la sesión dos veces.
+ *
+ * NO redirige: devuelve `null` en `membership` a través de una excepción tipada,
+ * para que cada superficie responda según su contrato.
+ */
+export async function requireMembership(
+  organizationId?: string | null,
+): Promise<AuthorizedMembership> {
+  const sesion = await requireSession()
+  const membership = resolveMembership(sesion.context, organizationId)
+
+  if (!membership) {
+    logDenial('pertenencia', 'NO_ORGANIZATION', sesion.userId)
+    throw new AuthorizationError('NO_ORGANIZATION')
+  }
+
+  return { ...sesion, membership }
+}
+
+/**
+ * Exige una capacidad comercial vigente sobre la organización.
+ *
+ * La capacidad del miembro está limitada por el perfil comercial de la
+ * organización: una empresa `seller` no compra aunque la fila del miembro tenga
+ * `can_buy = true`. Es el mismo criterio que aplican `can_buy_in_org()` y
+ * `can_sell_in_org()` en SQL.
+ */
+export async function requireCommercialCapability(
+  capability: CommercialCapability,
+  organizationId?: string | null,
+): Promise<AuthorizedMembership> {
+  const autorizado = await requireMembership(organizationId)
+
+  const fallo = evaluateCapability(autorizado.membership, capability)
+  if (fallo) {
+    logDenial(`capacidad ${capability}`, fallo, autorizado.userId)
+    throw new AuthorizationError(fallo)
+  }
+
+  return autorizado
 }
