@@ -6,10 +6,17 @@
 // sin red y sin Next, y las tres superficies (página, Server Action, Route
 // Handler) comparten exactamente la misma decisión.
 //
-// ALCANCE 6B.1: solo `requireSession` y `requirePlatformAdmin` están
-// conectados a rutas y acciones. Las evaluaciones de estado y de capacidad
-// comercial existen y están probadas, pero NINGÚN guard las invoca todavía:
-// se conectan en 6B.2 (estados), 6B.4 (capacidades) y 6B.5 (middleware).
+// ALCANCE 6B.5: las evaluaciones de estado y de capacidad comercial YA están
+// conectadas, a través de `evaluateOrganizationAccess` y
+// `evaluateCommercialAction`, que son las dos únicas entradas que deben usar
+// los guards. Hasta 6B.4 existían y estaban probadas, pero ningún guard las
+// invocaba: la interfaz ofrecía acciones que RLS después rechazaba.
+//
+// Correspondencia con SQL, que es la autoridad:
+//   evaluateOrganizationAccess → is_org_member(uuid)
+//   evaluateCapability         → can_buy_in_org(uuid) / can_sell_in_org(uuid)
+//   evaluateOrganizationRole   → is_org_owner(uuid) / is_org_admin(uuid)
+//   evaluatePlatformAdmin      → is_platform_admin()   (ver salvedad en 6B.5)
 
 import { isOrgAdmin, isOwner, type OrganizationRole, type PlatformRole } from '@/lib/identity'
 import type { AuthorizationCode } from './errors'
@@ -44,11 +51,27 @@ export function evaluatePlatformRole(
   return null
 }
 
-/** Administrador de plataforma, a partir del contexto completo. */
+/**
+ * Administrador de plataforma, a partir del contexto completo.
+ *
+ * Espejo exacto de `is_platform_admin()`, que desde 021 exige LAS DOS cosas:
+ * `p.role = 'platform_admin'` Y `p.status = 'active'`. Hasta 6B.5 este guard
+ * solo miraba el rol, así que un administrador suspendido veía el panel entero
+ * y cada consulta le fallaba por RLS. Suspender debe retirar permisos de
+ * verdad, no solo dejar de mostrarlos.
+ *
+ * El orden importa para los registros: primero se distingue «no eres
+ * administrador» (`FORBIDDEN` / `INVALID_ROLE`) y solo después se comprueba el
+ * estado, para que un rol corrupto no se confunda con una suspensión.
+ */
 export function evaluatePlatformAdmin(context: AuthContext | null): AuthorizationCode | null {
   const sinSesion = evaluateSession(context)
   if (sinSesion) return sinSesion
-  return evaluatePlatformRole(context!.platformRole)
+
+  const sinRol = evaluatePlatformRole(context!.platformRole)
+  if (sinRol) return sinRol
+
+  return evaluateActiveProfile(context)
 }
 
 /** Existe una pertenencia utilizable. */
@@ -122,19 +145,47 @@ export function evaluateActiveMembership(
   return membership!.membershipStatus === 'active' ? null : 'FORBIDDEN'
 }
 
+/**
+ * 6B.5. Espejo exacto de `is_org_member(uuid)`: pertenencia ACTIVA en una
+ * organización ACTIVA.
+ *
+ * Es la unidad mínima de acceso organizativo. Todo lo demás —roles, capacidades,
+ * lectura del histórico— se compone a partir de aquí, igual que las cinco
+ * funciones SQL se apoyan en el mismo `where`.
+ *
+ * `profiles.status` NO entra: `is_org_member()` tampoco lo mira. El estado del
+ * perfil se evalúa aparte, con `evaluateActiveProfile`.
+ */
+export function evaluateOrganizationAccess(
+  membership: AuthMembership | null,
+): AuthorizationCode | null {
+  const sinOrg = evaluateMembership(membership)
+  if (sinOrg) return sinOrg
+
+  return evaluateActiveMembership(membership) ?? evaluateActiveOrganization(membership)
+}
+
 export type CommercialCapability = 'buy' | 'sell'
 
 /**
- * 6B.4. Capacidad comercial del miembro, limitada por el perfil comercial de
- * la organización: una empresa `buyer` no puede habilitar la venta a nadie,
- * por mucho que la fila del miembro tenga `can_sell = true`.
+ * 6B.4/6B.5. Capacidad comercial del miembro. Espejo de `can_buy_in_org(uuid)`
+ * y `can_sell_in_org(uuid)`, que exigen las CUATRO condiciones a la vez:
+ *
+ *   om.status = 'active'  ·  o.status = 'active'
+ *   om.can_buy/can_sell   ·  o.commercial_profile admite la capacidad
+ *
+ * Hasta 6B.5 esta función solo comprobaba las dos últimas. Los estados activos
+ * se daban por supuestos, y la interfaz ofrecía acciones que RLS después
+ * rechazaba. El perfil comercial de la organización sigue siendo el techo: una
+ * empresa `buyer` no habilita la venta a nadie, por mucho que la fila del
+ * miembro tenga `can_sell = true`.
  */
 export function evaluateCapability(
   membership: AuthMembership | null,
   capability: CommercialCapability,
 ): AuthorizationCode | null {
-  const sinOrg = evaluateMembership(membership)
-  if (sinOrg) return sinOrg
+  const sinAcceso = evaluateOrganizationAccess(membership)
+  if (sinAcceso) return sinAcceso
 
   const m = membership!
   const techo =
@@ -144,4 +195,26 @@ export function evaluateCapability(
 
   const propia = capability === 'buy' ? m.canBuy : m.canSell
   return techo && propia ? null : 'FORBIDDEN'
+}
+
+/**
+ * 6B.5. Decisión COMPLETA para ejecutar una acción comercial: sesión, perfil
+ * activo y capacidad vigente sobre la organización.
+ *
+ * Es la única entrada que deben usar los guards. Añade sobre `evaluateCapability`
+ * la comprobación del estado del PERFIL, que ninguna función SQL hace hoy:
+ * `can_buy_in_org()` mira la pertenencia y la organización, no `profiles.status`.
+ * La aplicación es aquí deliberadamente MÁS estricta que la base de datos —
+ * suspender a una persona debe retirarle las acciones comerciales—, y ser más
+ * estricto que RLS nunca abre una puerta, solo cierra una que SQL dejaba pasar.
+ */
+export function evaluateCommercialAction(
+  context: AuthContext | null,
+  membership: AuthMembership | null,
+  capability: CommercialCapability,
+): AuthorizationCode | null {
+  const perfil = evaluateActiveProfile(context)
+  if (perfil) return perfil
+
+  return evaluateCapability(membership, capability)
 }

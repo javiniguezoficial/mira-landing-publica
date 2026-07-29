@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { listMyRfqs } from '@/lib/actions/rfqs'
-import { canCreateRfq } from '@/lib/queries/rfq-capability'
+import { getRfqAccess } from '@/lib/queries/rfq-capability'
 import { RFQ_MESSAGES } from '@/lib/auth/rfq'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 import { MiraTable, MiraTr, MiraTd } from '@/components/mira/MiraTable'
@@ -14,7 +14,28 @@ function formatDate(d: string) {
 }
 
 export default async function ClientRfqsPage() {
-  const [rfqs, puedeCrear] = await Promise.all([listMyRfqs(), canCreateRfq()])
+  const [rfqs, { canRead, canCreate }] = await Promise.all([listMyRfqs(), getRfqAccess()])
+
+  // Sin lectura no hay histórico que enseñar, y decir «aún no tienes
+  // cotizaciones» sería falso: las hay, pero esta persona no puede verlas.
+  if (!canRead) {
+    return (
+      <div className="w-full space-y-6 p-4 md:p-6 xl:p-8">
+        <MiraPageHeader
+          icon={FileText}
+          title="Mis cotizaciones"
+          subtitle="Solicitudes de cotización enviadas por tu organización"
+        />
+        <div className="mira-card rounded-2xl">
+          <EmptyState
+            icon={FileText}
+            title="No tienes acceso a estas cotizaciones"
+            description={RFQ_MESSAGES.sinAccesoOrganizacion}
+          />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="w-full space-y-6 p-4 md:p-6 xl:p-8">
@@ -23,14 +44,14 @@ export default async function ClientRfqsPage() {
         title="Mis cotizaciones"
         subtitle="Solicitudes de cotización enviadas por tu organización"
         actions={
-          puedeCrear
+          canCreate
             ? <Link href="/app/rfqs/nueva" className={miraBtn.primary}><Plus size={16} /> Nueva RFQ</Link>
             : null
         }
       />
 
       {/* El histórico sigue visible aunque no se puedan crear cotizaciones. */}
-      {!puedeCrear && (
+      {!canCreate && (
         <p className="rounded-xl border border-mira-line bg-mira-canvas px-4 py-3 text-sm text-slate-500">
           {RFQ_MESSAGES.sinCapacidadEnOrganizacion}
         </p>
@@ -42,7 +63,7 @@ export default async function ClientRfqsPage() {
             icon={FileText}
             title="Aún no tienes cotizaciones"
             description="Crea tu primera solicitud de cotización para empezar."
-            action={puedeCrear ? { label: 'Crear RFQ', href: '/app/rfqs/nueva' } : undefined}
+            action={canCreate ? { label: 'Crear RFQ', href: '/app/rfqs/nueva' } : undefined}
           />
         </div>
       ) : (

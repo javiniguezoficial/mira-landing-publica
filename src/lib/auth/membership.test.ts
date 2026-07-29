@@ -131,4 +131,44 @@ describe('resolveFallbackMembership', () => {
     ])
     expect(resultado).toBe(valida)
   })
+
+  // ── 6B.5: preferir una pertenencia utilizable ─────────────────────────────
+
+  it('prefiere una pertenencia activa aunque tenga menos rango que una suspendida', () => {
+    // Elegir la suspendida por ser owner dejaría a la persona sin acceso a una
+    // organización en la que sí puede operar.
+    const activa = membership({ organizationId: 'org-viva', orgRole: 'member' })
+    const suspendida = membership({
+      organizationId: 'org-muerta',
+      orgRole: 'owner',
+      membershipStatus: 'suspended',
+    })
+    expect(resolveFallbackMembership([suspendida, activa])).toBe(activa)
+    expect(resolveFallbackMembership([activa, suspendida])).toBe(activa)
+  })
+
+  it('una organización suspendida tampoco se prefiere', () => {
+    const activa = membership({ organizationId: 'org-viva', orgRole: 'member' })
+    const orgMuerta = membership({
+      organizationId: 'org-cerrada',
+      orgRole: 'owner',
+      organizationStatus: 'suspended',
+    })
+    expect(resolveFallbackMembership([orgMuerta, activa])).toBe(activa)
+  })
+
+  it('si NINGUNA es utilizable devuelve igualmente la mejor por rol', () => {
+    // Es una preferencia, no un filtro: devolver null convertiría una
+    // suspensión en «no tienes ninguna organización», que es otra cosa. El
+    // guard deniega después, con el motivo correcto.
+    const owner = membership({ organizationId: 'org-a', orgRole: 'owner', membershipStatus: 'suspended' })
+    const member = membership({ organizationId: 'org-b', orgRole: 'member', membershipStatus: 'suspended' })
+    expect(resolveFallbackMembership([member, owner])).toBe(owner)
+  })
+
+  it('entre varias utilizables sigue mandando el criterio de rol', () => {
+    const admin = membership({ organizationId: 'org-a', orgRole: 'admin' })
+    const owner = membership({ organizationId: 'org-b', orgRole: 'owner' })
+    expect(resolveFallbackMembership([admin, owner])).toBe(owner)
+  })
 })

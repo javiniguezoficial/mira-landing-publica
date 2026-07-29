@@ -5,7 +5,9 @@ import {
   evaluateActiveOrganization,
   evaluateActiveProfile,
   evaluateCapability,
+  evaluateCommercialAction,
   evaluateMembership,
+  evaluateOrganizationAccess,
   evaluateOrganizationRole,
   evaluatePlatformAdmin,
   evaluateSession,
@@ -64,11 +66,45 @@ describe('evaluatePlatformAdmin', () => {
     expect(evaluatePlatformAdmin(context({ platformRole: null }))).toBe('INVALID_ROLE')
   })
 
-  it('no depende del estado del perfil en 6B.1', () => {
-    // Los estados se aplican en 6B.5. Hasta entonces un perfil suspendido
-    // conserva exactamente el comportamiento anterior al refactor.
-    const suspendido = context({ platformRole: 'platform_admin', profileStatus: 'suspended' })
-    expect(evaluatePlatformAdmin(suspendido)).toBeNull()
+  // 6B.5 corrige el comportamiento que 6B.1 había fijado provisionalmente: el
+  // guard ignoraba el estado del perfil mientras `is_platform_admin()` lo
+  // exigía desde 021, así que un administrador suspendido veía el panel y cada
+  // consulta le fallaba por RLS.
+  it('exige perfil ACTIVO, igual que is_platform_admin()', () => {
+    expect(
+      evaluatePlatformAdmin(context({ platformRole: 'platform_admin', profileStatus: 'active' })),
+    ).toBeNull()
+  })
+
+  it.each(['suspended', 'pending', 'rejected'] as const)(
+    'un administrador con perfil %s queda denegado',
+    (estado) => {
+      expect(
+        evaluatePlatformAdmin(context({ platformRole: 'platform_admin', profileStatus: estado })),
+      ).toBe('FORBIDDEN')
+    },
+  )
+
+  it('un estado de perfil desconocido tampoco se asume activo', () => {
+    expect(
+      evaluatePlatformAdmin(context({ platformRole: 'platform_admin', profileStatus: null })),
+    ).toBe('FORBIDDEN')
+  })
+
+  it('el rol se evalúa antes que el estado: un rol corrupto no parece una suspensión', () => {
+    // Ambos deniegan, pero el motivo que llega al registro debe ser distinto.
+    expect(evaluatePlatformAdmin(context({ platformRole: null, profileStatus: 'suspended' }))).toBe(
+      'INVALID_ROLE',
+    )
+    expect(evaluatePlatformAdmin(context({ platformRole: 'user', profileStatus: 'suspended' }))).toBe(
+      'FORBIDDEN',
+    )
+  })
+
+  it('un usuario normal ACTIVO sigue sin ser administrador', () => {
+    expect(evaluatePlatformAdmin(context({ platformRole: 'user', profileStatus: 'active' }))).toBe(
+      'FORBIDDEN',
+    )
   })
 })
 
@@ -219,5 +255,123 @@ describe('adminDenialTarget — reparto por superficie', () => {
       adminDenialTarget,
     )
     expect(destinosDeNavegacion.every((d) => typeof d === 'string' && d.startsWith('/'))).toBe(true)
+  })
+})
+
+// ── 6B.5. Acceso organizativo: espejo de is_org_member() ────────────────────
+
+describe('evaluateOrganizationAccess', () => {
+  it('pertenencia activa en organización activa: permite', () => {
+    expect(evaluateOrganizationAccess(membership())).toBeNull()
+  })
+
+  it('sin pertenencia: NO_ORGANIZATION', () => {
+    expect(evaluateOrganizationAccess(null)).toBe('NO_ORGANIZATION')
+  })
+
+  it.each(['invited', 'suspended'] as const)('pertenencia %s: deniega', (estado) => {
+    expect(evaluateOrganizationAccess(membership({ membershipStatus: estado }))).toBe('FORBIDDEN')
+  })
+
+  it.each(['pending', 'suspended', 'rejected'] as const)(
+    'organización %s: deniega aunque el miembro esté activo',
+    (estado) => {
+      expect(evaluateOrganizationAccess(membership({ organizationStatus: estado }))).toBe('FORBIDDEN')
+    },
+  )
+
+  it('un estado desconocido no se interpreta como activo', () => {
+    expect(evaluateOrganizationAccess(membership({ membershipStatus: null }))).toBe('FORBIDDEN')
+    expect(evaluateOrganizationAccess(membership({ organizationStatus: null }))).toBe('FORBIDDEN')
+  })
+})
+
+// ── 6B.5. La capacidad ya exige los estados activos ─────────────────────────
+
+describe('evaluateCapability con estados (6B.5)', () => {
+  const compradora = { canBuy: true, commercialProfile: 'buyer' } as const
+
+  it('todo activo con can_buy: permite', () => {
+    expect(evaluateCapability(membership(compradora), 'buy')).toBeNull()
+  })
+
+  it('la pertenencia suspendida anula la capacidad', () => {
+    expect(
+      evaluateCapability(membership({ ...compradora, membershipStatus: 'suspended' }), 'buy'),
+    ).toBe('FORBIDDEN')
+  })
+
+  it('la organización suspendida anula la capacidad', () => {
+    expect(
+      evaluateCapability(membership({ ...compradora, organizationStatus: 'suspended' }), 'buy'),
+    ).toBe('FORBIDDEN')
+  })
+
+  it('una invitación pendiente todavía no compra', () => {
+    expect(
+      evaluateCapability(membership({ ...compradora, membershipStatus: 'invited' }), 'buy'),
+    ).toBe('FORBIDDEN')
+  })
+
+  it('la venta queda evaluada igual, sin abrir ninguna funcionalidad', () => {
+    const vendedora = { canSell: true, commercialProfile: 'seller' } as const
+    expect(evaluateCapability(membership(vendedora), 'sell')).toBeNull()
+    expect(
+      evaluateCapability(membership({ ...vendedora, membershipStatus: 'suspended' }), 'sell'),
+    ).toBe('FORBIDDEN')
+    expect(
+      evaluateCapability(membership({ ...vendedora, organizationStatus: 'suspended' }), 'sell'),
+    ).toBe('FORBIDDEN')
+  })
+})
+
+// ── 6B.5. Decisión completa de una acción comercial ─────────────────────────
+
+describe('evaluateCommercialAction', () => {
+  const compradora = membership({ canBuy: true, commercialProfile: 'buyer' })
+
+  it('perfil activo + capacidad vigente: permite', () => {
+    expect(evaluateCommercialAction(context(), compradora, 'buy')).toBeNull()
+  })
+
+  it('sin sesión: UNAUTHENTICATED', () => {
+    expect(evaluateCommercialAction(null, compradora, 'buy')).toBe('UNAUTHENTICATED')
+  })
+
+  it.each(['suspended', 'pending', 'rejected'] as const)(
+    'perfil %s: deniega aunque la capacidad esté vigente',
+    (estado) => {
+      expect(evaluateCommercialAction(context({ profileStatus: estado }), compradora, 'buy')).toBe(
+        'FORBIDDEN',
+      )
+    },
+  )
+
+  it('un estado de perfil desconocido tampoco se asume activo', () => {
+    expect(evaluateCommercialAction(context({ profileStatus: null }), compradora, 'buy')).toBe(
+      'FORBIDDEN',
+    )
+  })
+
+  it('perfil activo pero sin pertenencia: NO_ORGANIZATION', () => {
+    expect(evaluateCommercialAction(context(), null, 'buy')).toBe('NO_ORGANIZATION')
+  })
+
+  it('perfil activo pero pertenencia suspendida: deniega', () => {
+    expect(
+      evaluateCommercialAction(
+        context(),
+        membership({ canBuy: true, commercialProfile: 'buyer', membershipStatus: 'suspended' }),
+        'buy',
+      ),
+    ).toBe('FORBIDDEN')
+  })
+
+  it('el orden de comprobación no filtra nada: el perfil se mira primero', () => {
+    // Perfil suspendido y además sin pertenencia: el motivo devuelto es el del
+    // perfil, y en ambos casos deniega.
+    expect(evaluateCommercialAction(context({ profileStatus: 'suspended' }), null, 'buy')).toBe(
+      'FORBIDDEN',
+    )
   })
 })

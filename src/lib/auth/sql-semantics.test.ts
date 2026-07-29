@@ -11,8 +11,11 @@
 //   supabase/checks/6B2_structural_check.sql     (estructura y grants)
 //   supabase/checks/6B2_rls_behaviour_check.sql  (comportamiento, con ROLLBACK)
 //
-// Nada de esto está conectado todavía a middleware ni a guards de navegación:
-// los estados se aplican en 6B.5 y las capacidades en 6B.4.
+// Desde 6B.5 estas composiciones YA no viven solo aquí: `policy.ts` expone
+// `evaluateOrganizationAccess` (is_org_member) y `evaluateCommercialAction`, y
+// son las que usan los guards. Este fichero las conserva escritas a mano a
+// propósito: si alguien relajara la implementación, la comparación seguiría
+// fallando aquí en lugar de pasar por construcción.
 
 import { describe, expect, it } from 'vitest'
 import {
@@ -73,9 +76,21 @@ function isOrgAdmin(m: AuthMembership | null): boolean {
   return isOrgMember(m) && evaluateOrganizationRole(m, 'admin') === null
 }
 
-/** can_buy_in_org / can_sell_in_org — estados activos Y capacidad Y techo. */
-function hasCapability(m: AuthMembership | null, cap: CommercialCapability): boolean {
-  return isOrgMember(m) && evaluateCapability(m, cap) === null
+/**
+ * can_buy_in_org / can_sell_in_org — tal y como quedan tras la migración 025:
+ * PERFIL activo Y pertenencia activa Y organización activa Y capacidad Y techo.
+ *
+ * El perfil se añade en 025. Antes, una cuenta suspendida conservaba sus
+ * capacidades comerciales por acceso directo a PostgREST.
+ */
+function hasCapability(
+  context: AuthContext | null,
+  m: AuthMembership | null,
+  cap: CommercialCapability,
+): boolean {
+  return (
+    evaluateActiveProfile(context) === null && isOrgMember(m) && evaluateCapability(m, cap) === null
+  )
 }
 
 // ── is_platform_admin() ─────────────────────────────────────────────────────
@@ -188,53 +203,53 @@ describe('is_org_owner() e is_org_admin()', () => {
 
 describe('can_buy_in_org()', () => {
   it('buyer con can_buy=true: sí — es la configuración real de hoy', () => {
-    expect(hasCapability(pertenencia({ canBuy: true, commercialProfile: 'buyer' }), 'buy')).toBe(true)
+    expect(hasCapability(contexto(), pertenencia({ canBuy: true, commercialProfile: 'buyer' }), 'buy')).toBe(true)
   })
 
   it('buyer_seller con can_buy=true: sí', () => {
-    expect(hasCapability(pertenencia({ canBuy: true, commercialProfile: 'buyer_seller' }), 'buy')).toBe(true)
+    expect(hasCapability(contexto(), pertenencia({ canBuy: true, commercialProfile: 'buyer_seller' }), 'buy')).toBe(true)
   })
 
   it('seller con can_buy=true: NO — el perfil comercial es el techo', () => {
-    expect(hasCapability(pertenencia({ canBuy: true, commercialProfile: 'seller' }), 'buy')).toBe(false)
+    expect(hasCapability(contexto(), pertenencia({ canBuy: true, commercialProfile: 'seller' }), 'buy')).toBe(false)
   })
 
   it('can_buy=false: no', () => {
-    expect(hasCapability(pertenencia({ canBuy: false, commercialProfile: 'buyer' }), 'buy')).toBe(false)
+    expect(hasCapability(contexto(), pertenencia({ canBuy: false, commercialProfile: 'buyer' }), 'buy')).toBe(false)
   })
 
   it('la pertenencia suspendida anula la capacidad', () => {
     const m = pertenencia({ canBuy: true, commercialProfile: 'buyer', membershipStatus: 'suspended' })
-    expect(hasCapability(m, 'buy')).toBe(false)
+    expect(hasCapability(contexto(), m, 'buy')).toBe(false)
   })
 
   it('la organización suspendida anula la capacidad', () => {
     const m = pertenencia({ canBuy: true, commercialProfile: 'buyer', organizationStatus: 'suspended' })
-    expect(hasCapability(m, 'buy')).toBe(false)
+    expect(hasCapability(contexto(), m, 'buy')).toBe(false)
   })
 })
 
 describe('can_sell_in_org()', () => {
   it('seller con can_sell=true: sí', () => {
-    expect(hasCapability(pertenencia({ canSell: true, commercialProfile: 'seller' }), 'sell')).toBe(true)
+    expect(hasCapability(contexto(), pertenencia({ canSell: true, commercialProfile: 'seller' }), 'sell')).toBe(true)
   })
 
   it('buyer_seller con can_sell=true: sí', () => {
-    expect(hasCapability(pertenencia({ canSell: true, commercialProfile: 'buyer_seller' }), 'sell')).toBe(true)
+    expect(hasCapability(contexto(), pertenencia({ canSell: true, commercialProfile: 'buyer_seller' }), 'sell')).toBe(true)
   })
 
   it('buyer con can_sell=true: NO — el perfil comercial es el techo', () => {
-    expect(hasCapability(pertenencia({ canSell: true, commercialProfile: 'buyer' }), 'sell')).toBe(false)
+    expect(hasCapability(contexto(), pertenencia({ canSell: true, commercialProfile: 'buyer' }), 'sell')).toBe(false)
   })
 
   it('can_sell=false: no', () => {
-    expect(hasCapability(pertenencia({ canSell: false, commercialProfile: 'seller' }), 'sell')).toBe(false)
+    expect(hasCapability(contexto(), pertenencia({ canSell: false, commercialProfile: 'seller' }), 'sell')).toBe(false)
   })
 
   it('un perfil comercial desconocido no concede ninguna capacidad', () => {
     const m = pertenencia({ canBuy: true, canSell: true, commercialProfile: null })
-    expect(hasCapability(m, 'buy')).toBe(false)
-    expect(hasCapability(m, 'sell')).toBe(false)
+    expect(hasCapability(contexto(), m, 'buy')).toBe(false)
+    expect(hasCapability(contexto(), m, 'sell')).toBe(false)
   })
 })
 
@@ -253,7 +268,59 @@ describe('platform_admin sin pertenencia', () => {
     expect(isOrgMember(null)).toBe(false)
     expect(isOrgOwner(null)).toBe(false)
     expect(isOrgAdmin(null)).toBe(false)
-    expect(hasCapability(null, 'buy')).toBe(false)
-    expect(hasCapability(null, 'sell')).toBe(false)
+    expect(hasCapability(contexto(), null, 'buy')).toBe(false)
+    expect(hasCapability(contexto(), null, 'sell')).toBe(false)
+  })
+})
+
+// ── 025: el perfil suspendido pierde las capacidades comerciales ────────────
+//
+// Antes de 025, `can_buy_in_org()` no consultaba `profiles` en absoluto. Una
+// cuenta suspendida con pertenencia y organización activas conservaba `can_buy`
+// y podía crear cotizaciones —y cancelar las publicadas— por PostgREST directo.
+// Verificado en remoto con ROLLBACK antes y después del cuerpo propuesto.
+
+describe('025 · profiles.status en las capacidades comerciales', () => {
+  const compradora = pertenencia({ canBuy: true, commercialProfile: 'buyer' })
+  const vendedora = pertenencia({ canSell: true, commercialProfile: 'seller' })
+
+  it('perfil activo: la capacidad se conserva — Ana no se ve afectada', () => {
+    expect(hasCapability(contexto(), compradora, 'buy')).toBe(true)
+    expect(hasCapability(contexto(), vendedora, 'sell')).toBe(true)
+  })
+
+  it.each(['suspended', 'pending', 'rejected'] as const)(
+    'perfil %s: pierde compra y venta',
+    (estado) => {
+      expect(hasCapability(contexto({ profileStatus: estado }), compradora, 'buy')).toBe(false)
+      expect(hasCapability(contexto({ profileStatus: estado }), vendedora, 'sell')).toBe(false)
+    },
+  )
+
+  it('un estado de perfil desconocido no se asume activo', () => {
+    expect(hasCapability(contexto({ profileStatus: null }), compradora, 'buy')).toBe(false)
+  })
+
+  it('sin sesión no hay capacidad', () => {
+    expect(hasCapability(null, compradora, 'buy')).toBe(false)
+  })
+
+  it('las tres suspensiones son independientes: cualquiera basta para denegar', () => {
+    expect(hasCapability(contexto({ profileStatus: 'suspended' }), compradora, 'buy')).toBe(false)
+    expect(
+      hasCapability(contexto(), pertenencia({ canBuy: true, commercialProfile: 'buyer', membershipStatus: 'suspended' }), 'buy'),
+    ).toBe(false)
+    expect(
+      hasCapability(contexto(), pertenencia({ canBuy: true, commercialProfile: 'buyer', organizationStatus: 'suspended' }), 'buy'),
+    ).toBe(false)
+  })
+
+  it('la LECTURA no cambia: is_org_member sigue sin mirar el perfil', () => {
+    // Decisión explícita de 6B.5, documentada en la cabecera de 025: suspender
+    // una cuenta le retira las acciones comerciales, no el histórico de su
+    // organización. Cambiar eso afectaría a rfqs, respuestas, perfiles y
+    // organizaciones, y merece su propio bloque.
+    expect(isOrgMember(pertenencia())).toBe(true)
+    expect(hasCapability(contexto({ profileStatus: 'suspended' }), compradora, 'buy')).toBe(false)
   })
 })

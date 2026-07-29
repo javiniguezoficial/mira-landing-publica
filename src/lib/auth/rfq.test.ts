@@ -21,7 +21,8 @@ import {
   type RfqRef,
   type RfqStatus,
 } from './rfq'
-import type { AuthMembership } from './types'
+import { evaluateCommercialAction } from './policy'
+import type { AuthContext, AuthMembership } from './types'
 
 const ORG = 'org-acme'
 const OTRA_ORG = 'org-externa'
@@ -406,5 +407,223 @@ describe('translateRfqError', () => {
 describe('rfqErrorDetail (registro de servidor)', () => {
   it('conserva el código para diagnosticar', () => {
     expect(rfqErrorDetail('publicación', { code: '23514', message: 'x' })).toContain('23514')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 6B.5 — Estados activos: la interfaz decide igual que can_buy_in_org()
+// ═══════════════════════════════════════════════════════════════════════════
+
+const CONTEXTO_ACTIVO: AuthContext = {
+  user: { id: 'u-creador', email: 'ana@example.com' },
+  platformRole: 'user',
+  profileStatus: 'active',
+  memberships: [],
+}
+
+function contexto(overrides: Partial<AuthContext> = {}): AuthContext {
+  return { ...CONTEXTO_ACTIVO, ...overrides }
+}
+
+const COMPRADORA = { canBuy: true, commercialProfile: 'buyer' } as const
+
+// ── Creación ────────────────────────────────────────────────────────────────
+
+describe('6B.5 · crear cotizaciones con estados', () => {
+  it('1. todo activo + buyer + can_buy: permitido', () => {
+    expect(evaluateCommercialAction(contexto(), pertenencia(COMPRADORA), 'buy')).toBeNull()
+  })
+
+  it('2. perfil suspendido: denegado aunque la capacidad esté vigente', () => {
+    expect(
+      evaluateCommercialAction(contexto({ profileStatus: 'suspended' }), pertenencia(COMPRADORA), 'buy'),
+    ).toBe('FORBIDDEN')
+  })
+
+  it('3. pertenencia suspendida: denegado', () => {
+    const m = pertenencia({ ...COMPRADORA, membershipStatus: 'suspended' })
+    expect(evaluateRfqCreation(m)).toBe('FORBIDDEN')
+    expect(evaluateCommercialAction(contexto(), m, 'buy')).toBe('FORBIDDEN')
+  })
+
+  it('4. organización suspendida: denegado', () => {
+    const m = pertenencia({ ...COMPRADORA, organizationStatus: 'suspended' })
+    expect(evaluateRfqCreation(m)).toBe('FORBIDDEN')
+    expect(evaluateCommercialAction(contexto(), m, 'buy')).toBe('FORBIDDEN')
+  })
+
+  it('5. can_buy=false: denegado', () => {
+    expect(evaluateRfqCreation(pertenencia({ canBuy: false }))).toBe('FORBIDDEN')
+  })
+
+  it('6. seller con can_buy=true: denegado — el perfil comercial es el techo', () => {
+    expect(evaluateRfqCreation(pertenencia({ canBuy: true, commercialProfile: 'seller' }))).toBe(
+      'FORBIDDEN',
+    )
+  })
+
+  it('7. buyer_seller con can_buy=true: permitido', () => {
+    expect(
+      evaluateRfqCreation(pertenencia({ canBuy: true, commercialProfile: 'buyer_seller' })),
+    ).toBeNull()
+  })
+
+  it('8. contexto incompleto: denegado, nunca se asume activo', () => {
+    expect(evaluateRfqCreation(pertenencia({ ...COMPRADORA, membershipStatus: null }))).toBe('FORBIDDEN')
+    expect(evaluateRfqCreation(pertenencia({ ...COMPRADORA, organizationStatus: null }))).toBe('FORBIDDEN')
+    expect(evaluateRfqCreation(pertenencia({ ...COMPRADORA, commercialProfile: null }))).toBe('FORBIDDEN')
+    expect(evaluateCommercialAction(contexto({ profileStatus: null }), pertenencia(COMPRADORA), 'buy')).toBe(
+      'FORBIDDEN',
+    )
+  })
+
+  it('9. una pertenencia invited todavía no crea', () => {
+    expect(evaluateRfqCreation(pertenencia({ ...COMPRADORA, membershipStatus: 'invited' }))).toBe(
+      'FORBIDDEN',
+    )
+  })
+
+  it('10. sin organización: denegado', () => {
+    expect(evaluateRfqCreation(null)).toBe('NO_ORGANIZATION')
+    expect(evaluateCommercialAction(contexto(), null, 'buy')).toBe('NO_ORGANIZATION')
+  })
+
+  it('11. sin sesión: denegado', () => {
+    expect(evaluateCommercialAction(null, pertenencia(COMPRADORA), 'buy')).toBe('UNAUTHENTICATED')
+  })
+})
+
+// ── Gestión ─────────────────────────────────────────────────────────────────
+
+describe('6B.5 · gestionar cotizaciones con estados', () => {
+  it('12. owner activo gestiona una cotización de su organización', () => {
+    expect(
+      evaluateRfqManagement(OWNER, cotizacion(), pertenencia({ ...COMPRADORA, orgRole: 'owner' })),
+    ).toBeNull()
+  })
+
+  it('13. admin activo también', () => {
+    expect(
+      evaluateRfqManagement(ADMIN, cotizacion(), pertenencia({ ...COMPRADORA, orgRole: 'admin' })),
+    ).toBeNull()
+  })
+
+  it('14. member activo gestiona la propia', () => {
+    expect(evaluateRfqManagement(MEMBER, cotizacion(), pertenencia(COMPRADORA))).toBeNull()
+  })
+
+  it('15. member no gestiona una ajena', () => {
+    expect(evaluateRfqManagement(OTRO_MEMBER, cotizacion(), pertenencia(COMPRADORA))).toBe('FORBIDDEN')
+  })
+
+  it('16. pertenencia suspendida no gestiona, ni siendo owner', () => {
+    const m = pertenencia({ ...COMPRADORA, orgRole: 'owner', membershipStatus: 'suspended' })
+    expect(evaluateRfqManagement(OWNER, cotizacion(), m)).toBe('FORBIDDEN')
+  })
+
+  it('17. organización suspendida no gestiona, ni siendo owner', () => {
+    const m = pertenencia({ ...COMPRADORA, orgRole: 'owner', organizationStatus: 'suspended' })
+    expect(evaluateRfqManagement(OWNER, cotizacion(), m)).toBe('FORBIDDEN')
+  })
+
+  it('18. sin can_buy no gestiona', () => {
+    expect(evaluateRfqManagement(MEMBER, cotizacion(), pertenencia({ canBuy: false }))).toBe('FORBIDDEN')
+  })
+
+  it('19. una suspensión nunca devuelve NO_ORGANIZATION: la pertenencia existe', () => {
+    // El motivo importa: la Server Action traduce NO_ORGANIZATION y FORBIDDEN a
+    // mensajes distintos, y decir «no tienes organización» a alguien suspendido
+    // sería falso.
+    const m = pertenencia({ ...COMPRADORA, membershipStatus: 'suspended' })
+    expect(evaluateRfqManagement(MEMBER, cotizacion(), m)).toBe('FORBIDDEN')
+  })
+
+  it('20. el contenido publicado sigue congelado con estados activos', () => {
+    // 6B.5 no toca la matriz aprobada en 6B.4.
+    expect(
+      evaluateRfqContentEdit(OWNER, cotizacion({ status: 'open' }), pertenencia({ ...COMPRADORA, orgRole: 'owner' })),
+    ).toBe('FORBIDDEN')
+    expect(evaluateRfqContentEdit(PLATAFORMA, cotizacion({ status: 'open' }), null)).toBe('FORBIDDEN')
+  })
+
+  it('21. platform_admin conserva su rama explícita, sin pertenencia', () => {
+    expect(evaluateRfqManagement(PLATAFORMA, cotizacion({ organizationId: OTRA_ORG }), null)).toBeNull()
+    expect(isValidRfqTransition('open', 'closed', true)).toBe(true)
+    expect(isValidRfqTransition('closed', 'open', true)).toBe(true)
+  })
+})
+
+// ── Lectura del histórico ───────────────────────────────────────────────────
+
+describe('6B.5 · ver el histórico reproduce is_org_member()', () => {
+  it('22. miembro activo SIN can_buy conserva la lectura', () => {
+    expect(evaluateRfqVisibility(pertenencia({ canBuy: false }), cotizacion())).toBeNull()
+  })
+
+  it.each(['invited', 'suspended'] as const)(
+    '23. pertenencia %s: sin lectura, igual que SQL',
+    (estado) => {
+      expect(evaluateRfqVisibility(pertenencia({ membershipStatus: estado }), cotizacion())).toBe(
+        'FORBIDDEN',
+      )
+    },
+  )
+
+  it.each(['pending', 'suspended', 'rejected'] as const)(
+    '24. organización %s: sin lectura, igual que SQL',
+    (estado) => {
+      expect(evaluateRfqVisibility(pertenencia({ organizationStatus: estado }), cotizacion())).toBe(
+        'FORBIDDEN',
+      )
+    },
+  )
+
+  it('25. usuario de otra organización no lee', () => {
+    expect(evaluateRfqVisibility(pertenencia({ organizationId: OTRA_ORG }), cotizacion())).toBe(
+      'FORBIDDEN',
+    )
+  })
+
+  it('26. sin contexto no lee', () => {
+    expect(evaluateRfqVisibility(null, cotizacion())).toBe('NO_ORGANIZATION')
+  })
+
+  it('27. la lectura NO depende de la capacidad de compra', () => {
+    // Si dependiera, retirar can_buy borraría el histórico de la vista.
+    const sinCapacidad = pertenencia({ canBuy: false })
+    expect(evaluateRfqVisibility(sinCapacidad, cotizacion())).toBeNull()
+    expect(evaluateRfqCreation(sinCapacidad)).toBe('FORBIDDEN')
+  })
+})
+
+// ── Coherencia entre lectura y capacidad ────────────────────────────────────
+
+describe('6B.5 · coherencia de la interfaz', () => {
+  it('28. quien puede crear siempre puede leer', () => {
+    // La ruta /app/rfqs/nueva redirige a /app/rfqs, que debe tener contenido.
+    const m = pertenencia(COMPRADORA)
+    expect(evaluateRfqCreation(m)).toBeNull()
+    expect(evaluateRfqVisibility(m, cotizacion())).toBeNull()
+  })
+
+  it('29. una suspensión retira lectura Y capacidad a la vez', () => {
+    for (const m of [
+      pertenencia({ ...COMPRADORA, membershipStatus: 'suspended' }),
+      pertenencia({ ...COMPRADORA, organizationStatus: 'suspended' }),
+    ]) {
+      expect(evaluateRfqVisibility(m, cotizacion())).toBe('FORBIDDEN')
+      expect(evaluateRfqCreation(m)).toBe('FORBIDDEN')
+    }
+  })
+
+  it('30. ningún mensaje visible menciona estados internos ni jerga técnica', () => {
+    for (const mensaje of Object.values(RFQ_MESSAGES)) {
+      for (const tecnico of [
+        'can_buy', 'can_sell', 'membership', 'RLS', 'policy', 'suspended', 'active',
+        'organization_members', 'status', 'trigger',
+      ]) {
+        expect(mensaje.toLowerCase()).not.toContain(tecnico.toLowerCase())
+      }
+    }
   })
 })

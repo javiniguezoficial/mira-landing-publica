@@ -79,6 +79,14 @@ export async function updateSession(request: NextRequest) {
   // La comprobación es fail-closed en toda la cadena: sin perfil, con error de
   // consulta o con un rol que no se reconoce, `evaluatePlatformRole` devuelve
   // un código de denegación y el usuario sale de /admin.
+  //
+  // 6B.5: aquí se comprueba el ROL, no el estado del perfil. El middleware corre
+  // en el Edge Runtime y no puede construir un `AuthContext` completo. La puerta
+  // que sí exige `profileStatus = 'active'` —y que coincide con
+  // `is_platform_admin()`— es `requirePlatformAdmin`, en el layout de /admin y
+  // en cada Server Action administrativa. Un administrador suspendido puede
+  // cruzar este filtro y es el layout quien lo devuelve al área de cliente:
+  // defensa en profundidad, no un hueco.
   if (isAdminRoute && user) {
     const platformRole = await resolvePlatformRole(supabase, user.id)
 

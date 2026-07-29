@@ -1,14 +1,21 @@
 import { redirect } from 'next/navigation'
 import { createDraftRfq } from '@/lib/actions/rfqs'
-import { canCreateRfq } from '@/lib/queries/rfq-capability'
+import { getRfqAccess } from '@/lib/queries/rfq-capability'
 import { RfqForm } from '@/components/app/rfqs/RfqForm'
 import { MiraFormCard } from '@/components/mira/MiraFormCard'
 import { ArrowLeft, FileText } from 'lucide-react'
 import Link from 'next/link'
 
 export default async function NewRfqPage() {
-  // Ocultar el botón no basta: esta URL se puede escribir a mano.
-  if (!(await canCreateRfq())) redirect('/app/rfqs')
+  // Ocultar el botón no basta: esta URL se puede escribir a mano. La comprobación
+  // ocurre ANTES de devolver nada, así que el formulario no llega a renderizarse
+  // ni parcialmente.
+  const { canRead, canCreate } = await getRfqAccess()
+
+  // Sin capacidad pero con lectura, el destino natural es el histórico. Sin
+  // acceso siquiera a la organización —pertenencia u organización suspendida—,
+  // `/app/rfqs` sería otra pantalla vacía: se sale al panel.
+  if (!canCreate) redirect(canRead ? '/app/rfqs' : '/app/dashboard')
 
   return (
     <div className="w-full max-w-2xl space-y-6 p-4 md:p-6 xl:p-8">

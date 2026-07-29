@@ -12,16 +12,19 @@
 //                     no hay permiso, o devuelve el error como valor
 //   Route Handler   → JSON 401/403 (nunca redirige)
 //
-// 6B.1 NO aplica estados de perfil/organización/pertenencia ni capacidades
-// comerciales. Esas evaluaciones existen en `policy.ts` pero ningún guard las
-// invoca: se conectan en 6B.2, 6B.4 y 6B.5.
+// 6B.5 conecta los estados. `requireMembership` exige pertenencia y
+// organización ACTIVAS —el mismo criterio que `is_org_member(uuid)`— y
+// `requireCommercialCapability` añade el perfil activo y la capacidad vigente.
+// Ningún guard reconstruye esas combinaciones a mano: la decisión vive entera
+// en `policy.ts` para que interfaz, acciones y SQL no puedan divergir.
 
 import { redirect } from 'next/navigation'
 import { AuthorizationError, type AuthorizationCode } from './errors'
 import { getMembershipForOrganization, resolveFallbackMembership } from './membership'
 import {
   adminDenialTarget,
-  evaluateCapability,
+  evaluateCommercialAction,
+  evaluateOrganizationAccess,
   evaluatePlatformAdmin,
   evaluateSession,
   type AdminDenial,
@@ -150,14 +153,19 @@ export interface AuthorizedMembership extends AuthorizedSession {
 }
 
 /**
- * Exige sesión y una pertenencia utilizable, y devuelve todo junto: cliente de
+ * Exige sesión y una pertenencia UTILIZABLE, y devuelve todo junto: cliente de
  * Supabase, contexto y pertenencia resuelta.
  *
  * Evita el patrón que se repetía en las acciones de cotizaciones —`getUser()`
  * seguido de `getActiveOrg()`—, que cargaba la sesión dos veces.
  *
- * NO redirige: devuelve `null` en `membership` a través de una excepción tipada,
- * para que cada superficie responda según su contrato.
+ * «Utilizable» es exactamente lo que entiende `is_org_member(uuid)`: pertenencia
+ * activa en organización activa. Hasta 6B.5 bastaba con que la fila existiera,
+ * así que una suspensión llegaba hasta la consulta y RLS la devolvía vacía; la
+ * pantalla mostraba «aún no tienes cotizaciones» en lugar de decir la verdad.
+ *
+ * NO redirige: lanza `AuthorizationError` para que cada superficie responda
+ * según su contrato.
  */
 export async function requireMembership(
   organizationId?: string | null,
@@ -165,9 +173,10 @@ export async function requireMembership(
   const sesion = await requireSession()
   const membership = resolveMembership(sesion.context, organizationId)
 
-  if (!membership) {
-    logDenial('pertenencia', 'NO_ORGANIZATION', sesion.userId)
-    throw new AuthorizationError('NO_ORGANIZATION')
+  const fallo = evaluateOrganizationAccess(membership)
+  if (fallo || !membership) {
+    logDenial('pertenencia', fallo ?? 'NO_ORGANIZATION', sesion.userId)
+    throw new AuthorizationError(fallo ?? 'NO_ORGANIZATION')
   }
 
   return { ...sesion, membership }
@@ -176,22 +185,26 @@ export async function requireMembership(
 /**
  * Exige una capacidad comercial vigente sobre la organización.
  *
- * La capacidad del miembro está limitada por el perfil comercial de la
- * organización: una empresa `seller` no compra aunque la fila del miembro tenga
- * `can_buy = true`. Es el mismo criterio que aplican `can_buy_in_org()` y
- * `can_sell_in_org()` en SQL.
+ * Decisión única y completa (ver `evaluateCommercialAction`): perfil activo,
+ * pertenencia activa, organización activa, techo comercial y flag del miembro.
+ * Es el mismo criterio que aplican `can_buy_in_org()` y `can_sell_in_org()`,
+ * más el estado del perfil, que SQL no comprueba y el producto sí exige.
+ *
+ * Se evalúa en CADA acción, no al pintar la página: una suspensión que ocurra
+ * mientras el formulario está abierto bloquea igualmente el envío.
  */
 export async function requireCommercialCapability(
   capability: CommercialCapability,
   organizationId?: string | null,
 ): Promise<AuthorizedMembership> {
-  const autorizado = await requireMembership(organizationId)
+  const sesion = await requireSession()
+  const membership = resolveMembership(sesion.context, organizationId)
 
-  const fallo = evaluateCapability(autorizado.membership, capability)
-  if (fallo) {
-    logDenial(`capacidad ${capability}`, fallo, autorizado.userId)
-    throw new AuthorizationError(fallo)
+  const fallo = evaluateCommercialAction(sesion.context, membership, capability)
+  if (fallo || !membership) {
+    logDenial(`capacidad ${capability}`, fallo ?? 'NO_ORGANIZATION', sesion.userId)
+    throw new AuthorizationError(fallo ?? 'NO_ORGANIZATION')
   }
 
-  return autorizado
+  return { ...sesion, membership }
 }

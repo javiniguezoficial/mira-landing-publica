@@ -38,16 +38,26 @@ function rankOf(role: OrganizationRole | null): number {
  * la base de datos.
  *
  * Criterio, en orden:
- *   1. rol organizativo: owner > admin > member > desconocido;
- *   2. `joined_at` más antiguo;
- *   3. `organization_id` ascendente, como desempate estable final.
+ *   1. utilizable: pertenencia y organización activas (6B.5);
+ *   2. rol organizativo: owner > admin > member > desconocido;
+ *   3. `joined_at` más antiguo;
+ *   4. `organization_id` ascendente, como desempate estable final.
  *
- * NO filtra por estado de pertenencia ni de organización: 6B.1 debe conservar
- * exactamente el comportamiento observable actual. Ese filtrado llega en 6B.5.
+ * El primer criterio se añade en 6B.5: con varias pertenencias, elegir una
+ * suspendida teniendo otra activa dejaba a la persona sin acceso a una
+ * organización a la que sí pertenece. Es una PREFERENCIA, no un filtro: si
+ * ninguna es utilizable se devuelve igualmente la mejor por rol, y son los
+ * guards quienes deniegan con el motivo exacto. Filtrarla aquí convertiría una
+ * suspensión en un «no tienes ninguna organización», que es un mensaje distinto
+ * y peor.
  *
  * TEMPORAL: sustituir por selección explícita de organización cuando el
  * producto soporte multiempresa de forma visible.
  */
+function esUtilizable(m: AuthMembership): boolean {
+  return m.membershipStatus === 'active' && m.organizationStatus === 'active'
+}
+
 export function resolveFallbackMembership(
   memberships: AuthMembership[] | null | undefined,
 ): AuthMembership | null {
@@ -59,6 +69,9 @@ export function resolveFallbackMembership(
   if (validas.length === 0) return null
 
   return [...validas].sort((a, b) => {
+    const porUtilidad = Number(esUtilizable(b)) - Number(esUtilizable(a))
+    if (porUtilidad !== 0) return porUtilidad
+
     const porRol = rankOf(a.orgRole) - rankOf(b.orgRole)
     if (porRol !== 0) return porRol
 

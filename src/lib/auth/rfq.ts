@@ -10,6 +10,7 @@
 
 import type { OrganizationRole } from '@/lib/identity'
 import type { AuthorizationCode } from './errors'
+import { evaluateCapability, evaluateOrganizationAccess } from './policy'
 import type { AuthMembership } from './types'
 
 /** Estados reales de `rfqs.status`, tomados del CHECK vigente. */
@@ -80,11 +81,11 @@ export function evaluateRfqManagement(
     return 'FORBIDDEN'
   }
 
-  // Capacidad de compra, limitada por el perfil comercial de la organización.
-  const perfil = membership.commercialProfile
-  const puedeComprar =
-    membership.canBuy && (perfil === 'buyer' || perfil === 'buyer_seller')
-  if (!puedeComprar) return 'FORBIDDEN'
+  // Estados activos + capacidad de compra + techo comercial, en una sola
+  // decisión compartida con `can_buy_in_org()`. No se reescribe aquí: duplicar
+  // la regla fue justamente lo que dejó a la interfaz fuera de sincronía.
+  const sinCapacidad = evaluateCapability(membership, 'buy')
+  if (sinCapacidad) return sinCapacidad === 'NO_ORGANIZATION' ? 'FORBIDDEN' : sinCapacidad
 
   const esResponsable =
     rfq.createdBy === actor.userId ||
@@ -130,23 +131,27 @@ export function evaluateRfqContentEdit(
 export function evaluateRfqCreation(
   membership: AuthMembership | null,
 ): AuthorizationCode | null {
-  if (!membership) return 'NO_ORGANIZATION'
-  const perfil = membership.commercialProfile
-  const puedeComprar =
-    membership.canBuy && (perfil === 'buyer' || perfil === 'buyer_seller')
-  return puedeComprar ? null : 'FORBIDDEN'
+  return evaluateCapability(membership, 'buy')
 }
 
 /**
- * ¿Puede VER el histórico? Basta con ser miembro activo de la organización.
- * Retirar la capacidad de comprar no borra lo que la empresa ya solicitó.
+ * ¿Puede VER el histórico?
+ *
+ * Espejo de `org_member_select_rfqs`, cuyo `USING` es `is_org_member(...)`:
+ * pertenencia ACTIVA en organización ACTIVA y misma organización que la
+ * cotización. `can_buy` NO interviene — retirar la capacidad de comprar no
+ * borra lo que la empresa ya solicitó—, pero una suspensión sí retira la
+ * lectura, porque así lo hace SQL. La interfaz no debe prometer un histórico
+ * que la base de datos va a devolver vacío.
  */
 export function evaluateRfqVisibility(
   membership: AuthMembership | null,
   rfq: Pick<RfqRef, 'organizationId'>,
 ): AuthorizationCode | null {
-  if (!membership) return 'NO_ORGANIZATION'
-  return membership.organizationId === rfq.organizationId ? null : 'FORBIDDEN'
+  const sinAcceso = evaluateOrganizationAccess(membership)
+  if (sinAcceso) return sinAcceso
+
+  return membership!.organizationId === rfq.organizationId ? null : 'FORBIDDEN'
 }
 
 // ── Mensajes ────────────────────────────────────────────────────────────────
@@ -156,6 +161,8 @@ export const RFQ_MESSAGES = {
   sinCapacidadEnOrganizacion:
     'No tienes permisos para crear o gestionar cotizaciones en esta organización.',
   sinAcceso: 'No tienes acceso a esta cotización.',
+  sinAccesoOrganizacion:
+    'Tu acceso a esta organización no está activo. Contacta con la persona responsable de tu empresa.',
   transicionInvalida: 'No se puede realizar ese cambio de estado.',
   finalizada: 'Esta cotización ya no se puede modificar.',
   datosInternos: 'No se pueden modificar los datos internos de la cotización.',

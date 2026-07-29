@@ -88,3 +88,49 @@ describe('evaluatePlatformRole — criterio compartido con el middleware', () =>
     }
   })
 })
+
+// ── 6B.5: la suspensión también cierra /admin ───────────────────────────────
+//
+// El P0 de julio fue un rol que no debía entrar. Este es el caso simétrico: un
+// rol que SÍ es administrador pero cuya cuenta está suspendida. `is_platform_admin()`
+// lo deniega desde 021; el guard TypeScript no lo miraba, así que el panel se
+// pintaba entero y cada consulta fallaba después por RLS.
+
+function contextSuspendido(estado: 'suspended' | 'pending' | 'rejected' | null): AuthContext {
+  return {
+    user: { id: 'user-admin', email: 'admin@example.com' },
+    platformRole: 'platform_admin',
+    profileStatus: estado,
+    memberships: [],
+  }
+}
+
+describe('6B.5: un administrador suspendido no entra en /admin', () => {
+  it('platform_admin ACTIVO sigue entrando — Javier y Demo Demo no se ven afectados', () => {
+    expect(evaluatePlatformAdmin(contextConRol('platform_admin'))).toBeNull()
+  })
+
+  it.each(['suspended', 'pending', 'rejected'] as const)('platform_admin %s queda fuera', (estado) => {
+    expect(evaluatePlatformAdmin(contextSuspendido(estado))).toBe('FORBIDDEN')
+  })
+
+  it('un estado de perfil desconocido no se asume activo', () => {
+    expect(evaluatePlatformAdmin(contextSuspendido(null))).toBe('FORBIDDEN')
+  })
+
+  it('la decisión es ÚNICA: layout, Server Actions y Route Handlers la comparten', () => {
+    // `requirePlatformAdmin` y `authorizePlatformAdminApi` llaman ambos a
+    // `evaluatePlatformAdmin`. Ninguna superficie reimplementa el criterio, así
+    // que corregirlo aquí lo corrige en las tres a la vez.
+    const suspendido = contextSuspendido('suspended')
+    expect(evaluatePlatformAdmin(suspendido)).toBe('FORBIDDEN')
+    expect(evaluatePlatformAdmin(suspendido)).toBe(evaluatePlatformAdmin(suspendido))
+  })
+
+  it('el middleware sigue decidiendo solo por rol: es una barrera menos estricta, no un hueco', () => {
+    // El Edge Runtime no puede construir un AuthContext completo. Un
+    // administrador suspendido cruza el middleware y lo detiene el layout.
+    expect(evaluatePlatformRole('platform_admin')).toBeNull()
+    expect(evaluatePlatformAdmin(contextSuspendido('suspended'))).toBe('FORBIDDEN')
+  })
+})

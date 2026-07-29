@@ -14,9 +14,15 @@ const nav: NavItem[] = [
   {
     href: '/app/rfqs', label: 'Cotizaciones', icon: FileText,
     children: [
+      // El histórico NO se oculta por falta de capacidad de compra: quien puede
+      // leerlo debe seguir llegando a él desde el menú.
       { href: '/app/rfqs',       label: 'Mis RFQs' },
-      // El enlace es visible para todo el equipo; la página comprueba la
-      // capacidad de compra en servidor y redirige a /app/rfqs si no la hay.
+      // «Nueva RFQ» sí es una acción. El enlace se mantiene visible para todo el
+      // equipo y la protección vive en servidor: la página evalúa la capacidad
+      // completa y redirige a /app/rfqs, o a /app/dashboard si tampoco hay
+      // lectura. Condicionarlo aquí exigiría cargar el contexto de autorización
+      // en el layout de /app, es decir en CADA página privada —incluidas Market
+      // Intelligence y Proveedores—, y ese coste no compensa hoy.
       { href: '/app/rfqs/nueva', label: 'Nueva RFQ' },
     ],
   },
