@@ -59,16 +59,29 @@ export async function getActiveOrg(): Promise<UserOrgResult> {
 
   const membership = access.membership!
 
+  // El embed DEBE desambiguarse con el nombre de la clave ajena: desde la
+  // migración 026, `organizations` tiene DOS FK hacia `plans` —`plan_id` y
+  // `requested_plan_id`—, así que un `plan:plans(...)` genérico hace que
+  // PostgREST responda PGRST201 ("Could not embed because more than one
+  // relationship was found") en lugar de datos. Es el mismo motivo por el que
+  // el embed de `profiles` ya se desambiguaba en `my-organization.ts`.
   const { data: org, error: orgError } = await supabase
     .from('organizations')
-    .select('id, name, subscription_status, plan:plans(id, name, slug)')
+    .select('id, name, subscription_status, plan:plans!organizations_plan_id_fkey(id, name, slug)')
     .eq('id', membership.organizationId)
     .single()
 
   // Con acceso activo la organización DEBE ser legible. Si no lo es, algo ha
   // cambiado entre la carga del contexto y esta consulta: se deniega con un
   // mensaje neutro en lugar de afirmar que no hay organización.
+  //
+  // El error se REGISTRA siempre: convertirlo en `invalid_context` sin dejar
+  // rastro fue lo que hizo que una consulta rota pareciera un problema de
+  // permisos durante el incidente de 026.
   if (orgError || !org) {
+    console.error(
+      `[getActiveOrg] organización no legible con acceso activo: ${orgError?.code ?? 'sin código'} ${orgError?.message ?? 'sin fila'}`,
+    )
     return {
       status: 'inactive',
       access: {

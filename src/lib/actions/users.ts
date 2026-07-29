@@ -155,7 +155,7 @@ export async function getUserOrganizations(userId: string) {
       id,
       role,
       joined_at,
-      organization:organizations(id, name, subscription_status, plan:plans(name))
+      organization:organizations(id, name, subscription_status, plan:plans!organizations_plan_id_fkey(name))
     `)
     .eq('user_id', userId)
     .order('joined_at', { ascending: true })

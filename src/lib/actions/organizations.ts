@@ -75,7 +75,7 @@ export async function getOrganizations(): Promise<Organization[]> {
     .from('organizations')
     .select(`
       *,
-      plan:plans(id, name, slug)
+      plan:plans!organizations_plan_id_fkey(id, name, slug)
     `)
     .order('created_at', { ascending: false })
 
@@ -92,7 +92,7 @@ export async function getOrganizationById(id: string): Promise<Organization | nu
     .from('organizations')
     .select(`
       *,
-      plan:plans(id, name, slug)
+      plan:plans!organizations_plan_id_fkey(id, name, slug)
     `)
     .eq('id', id)
     .single()

@@ -383,3 +383,80 @@ describe('alta pendiente de revisión', () => {
     )
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+// REGRESIÓN — incidente tras desplegar 6C (026)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Ana, propietaria ACTIVA de Acme, veía «No hemos podido comprobar tu acceso a
+// la organización», es decir `invalid_context`.
+//
+// La causa NO estaba aquí: la resolución de acceso era correcta. 026 añadió
+// `organizations.requested_plan_id`, con lo que `organizations` pasó a tener
+// DOS claves ajenas hacia `plans`; el embed `plan:plans(...)` de `getActiveOrg`
+// y `getMyOrganization` se volvió ambiguo y PostgREST devolvía PGRST201. Esas
+// dos funciones traducen «organización no legible con acceso activo» a
+// `invalid_context`, y ahí es donde se veía el síntoma.
+//
+// Estos tests fijan que, con los datos reales de Ana, la resolución dé `active`.
+
+describe('regresión 026: Ana propietaria activa de Acme', () => {
+  // Copia literal de la fila real, comprobada en Supabase:
+  //   profiles:            status=active, role=user
+  //   organization_members: status=active, org_role=owner, role=client_owner,
+  //                         can_buy=true, can_sell=false
+  //   organizations:        status=active, commercial_profile=buyer,
+  //                         signup_source=admin, plan_id=Starter,
+  //                         requested_plan_id=null, plan_approved_by=null
+  const ANA: AuthContext = {
+    user: { id: 'ef9f8075-f79f-4cde-8d4c-5e48df0b88e6', email: 'ana@acme.example' },
+    platformRole: 'user',
+    profileStatus: 'active',
+    memberships: [
+      {
+        organizationId: '35fe4e45-f546-415e-b2e1-01017c200f7f',
+        organizationName: 'Acme Distribución S.L.',
+        orgRole: 'owner',
+        membershipStatus: 'active',
+        canBuy: true,
+        canSell: false,
+        joinedAt: '2026-06-04T12:26:05.000Z',
+        organizationStatus: 'active',
+        commercialProfile: 'buyer',
+      },
+    ],
+  }
+
+  it('1-8. la estructura real de Ana resuelve ACTIVE', () => {
+    const acceso = resolveOrganizationAccessFromContext(ANA)
+    expect(acceso.state).toBe('active')
+    expect(acceso.canOperate).toBe(true)
+    expect(acceso.message).toBe('')
+  })
+
+  it('9-10. dashboard y Mi organización NO reciben invalid_context', () => {
+    const acceso = resolveOrganizationAccessFromContext(ANA)
+    expect(acceso.state).not.toBe('invalid_context')
+    expect(acceso.message).not.toBe(ORGANIZATION_ACCESS_MESSAGES.invalid_context)
+    expect(acceso.state).not.toBe('no_membership')
+  })
+
+  it('los campos nuevos de 026 son opcionales: no intervienen en la resolución', () => {
+    // `signup_source`, `requested_plan_id` y `plan_approved_by` no forman parte
+    // de `AuthMembership` y no deben influir. Acme los tiene a null salvo
+    // signup_source='admin', y sigue resolviendo active.
+    expect(resolveOrganizationAccessFromContext(ANA).state).toBe('active')
+  })
+
+  it('sigue distinguiendo el resto de estados', () => {
+    const conMembership = (over: Partial<AuthMembership>) =>
+      resolveOrganizationAccessFromContext({ ...ANA, memberships: [{ ...ANA.memberships[0], ...over }] }).state
+
+    expect(conMembership({ organizationStatus: 'pending' })).toBe('organization_inactive')
+    expect(conMembership({ membershipStatus: 'suspended' })).toBe('membership_suspended')
+    expect(conMembership({ membershipStatus: 'invited' })).toBe('membership_invited')
+    expect(resolveOrganizationAccessFromContext({ ...ANA, memberships: [] }).state).toBe('no_membership')
+    expect(resolveOrganizationAccessFromContext({ ...ANA, profileStatus: 'suspended' }).state).toBe('profile_inactive')
+    expect(resolveOrganizationAccessFromContext(null).state).toBe('invalid_context')
+  })
+})

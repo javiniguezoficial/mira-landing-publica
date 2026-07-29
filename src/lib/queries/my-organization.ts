@@ -67,7 +67,11 @@ export async function getMyOrganization(): Promise<MyOrgResult> {
   const orgId = access.membership!.organizationId
   const membership = access.membership!
 
-  // Cargar organización completa + plan
+  // Cargar organización completa + plan.
+  //
+  // El embed de `plans` DEBE desambiguarse: desde 026, `organizations` tiene DOS
+  // FK hacia `plans` —`plan_id` y `requested_plan_id`—, y un `plan:plans(...)`
+  // genérico devuelve PGRST201 en lugar de datos.
   const { data: org, error: orgErr } = await supabase
     .from('organizations')
     .select(`
@@ -75,14 +79,19 @@ export async function getMyOrganization(): Promise<MyOrgResult> {
       annual_revenue_range, employee_count_range,
       address, city, country, phone, email, website,
       subscription_status, subscription_start, created_at,
-      plan:plans(name, slug)
+      plan:plans!organizations_plan_id_fkey(name, slug)
     `)
     .eq('id', orgId)
     .single()
 
   // Con acceso activo la organización DEBE ser legible. Si no lo es, el estado
-  // ha cambiado entre la carga del contexto y esta consulta.
+  // ha cambiado entre la carga del contexto y esta consulta. El error se
+  // registra siempre: sin rastro, una consulta rota parece un problema de
+  // permisos.
   if (orgErr || !org) {
+    console.error(
+      `[getMyOrganization] organización no legible con acceso activo: ${orgErr?.code ?? 'sin código'} ${orgErr?.message ?? 'sin fila'}`,
+    )
     return {
       status: 'inactive',
       access: {
