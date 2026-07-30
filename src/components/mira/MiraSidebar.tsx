@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
-import { type LucideIcon, ChevronDown, LogOut, X } from 'lucide-react'
+import { type LucideIcon, ChevronDown, Lock, LogOut, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { MiraBrand } from './MiraBrand'
 
@@ -15,6 +15,14 @@ export interface NavItem {
   number?: string
   /** sub-items reales que se despliegan cuando el item está activo */
   children?: { href: string; label: string }[]
+  /**
+   * 1.4 — el módulo está apagado para la organización.
+   *
+   * NO oculta el enlace ni lo desactiva: sigue navegando, porque el destino es
+   * justamente la pantalla que explica por qué no está disponible. Solo cambia
+   * el aspecto (atenuado + candado) para que se vea antes de pulsar.
+   */
+  moduleDisabled?: boolean
 }
 
 export interface MiraUser {
@@ -102,11 +110,20 @@ export function MiraSidebar({ nav, user, badge, onClose }: Props) {
                   aria-current={isActive ? 'page' : undefined}
                   className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-3 py-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                 >
-                  <Icon size={17} className="shrink-0" />
-                  <span className="min-w-0 flex-1 truncate">
+                  <Icon size={17} className={cn('shrink-0', item.moduleDisabled && 'opacity-50')} />
+                  <span
+                    className={cn('min-w-0 flex-1 truncate', item.moduleDisabled && 'opacity-60')}
+                  >
                     {item.number && <span className="mr-1 opacity-80">{item.number}.</span>}
                     {item.label}
                   </span>
+                  {item.moduleDisabled && (
+                    <Lock
+                      size={12}
+                      className="shrink-0 opacity-70"
+                      aria-label="Módulo no disponible para tu organización"
+                    />
+                  )}
                 </Link>
 
                 {hasChildren && (

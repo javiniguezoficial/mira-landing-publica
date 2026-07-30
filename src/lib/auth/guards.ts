@@ -25,11 +25,13 @@ import {
   adminDenialTarget,
   evaluateCommercialAction,
   evaluateOrganizationAccess,
+  evaluateOrganizationModule,
   evaluatePlatformAdmin,
   evaluateSession,
   type AdminDenial,
   type CommercialCapability,
 } from './policy'
+import type { OrganizationModuleName } from './modules'
 import { loadAuthContext, type ServerSupabaseClient } from './context'
 import type { AuthContext, AuthMembership } from './types'
 
@@ -153,6 +155,23 @@ export interface AuthorizedMembership extends AuthorizedSession {
 }
 
 /**
+ * Opciones comunes de los guards de organización.
+ *
+ * `module` (1.4) exige además que la organización tenga contratado ese módulo.
+ * El orden de evaluación es siempre el mismo y NO es arbitrario:
+ *
+ *   1. acceso a la organización — de una empresa a la que no perteneces no se
+ *      informa de su configuración;
+ *   2. módulo — es un hecho de la EMPRESA y domina sobre el permiso personal:
+ *      a quien tiene `can_buy` en una organización sin el módulo hay que
+ *      decirle que su empresa no lo tiene, no que le faltan permisos;
+ *   3. capacidad personal.
+ */
+export interface OrganizationGuardOptions {
+  module?: OrganizationModuleName
+}
+
+/**
  * Exige sesión y una pertenencia UTILIZABLE, y devuelve todo junto: cliente de
  * Supabase, contexto y pertenencia resuelta.
  *
@@ -169,11 +188,15 @@ export interface AuthorizedMembership extends AuthorizedSession {
  */
 export async function requireMembership(
   organizationId?: string | null,
+  options?: OrganizationGuardOptions,
 ): Promise<AuthorizedMembership> {
   const sesion = await requireSession()
   const membership = resolveMembership(sesion.context, organizationId)
 
-  const fallo = evaluateOrganizationAccess(membership)
+  const fallo =
+    evaluateOrganizationAccess(membership) ??
+    (options?.module ? evaluateOrganizationModule(membership, options.module) : null)
+
   if (fallo || !membership) {
     logDenial('pertenencia', fallo ?? 'NO_ORGANIZATION', sesion.userId)
     throw new AuthorizationError(fallo ?? 'NO_ORGANIZATION')
@@ -196,11 +219,17 @@ export async function requireMembership(
 export async function requireCommercialCapability(
   capability: CommercialCapability,
   organizationId?: string | null,
+  options?: OrganizationGuardOptions,
 ): Promise<AuthorizedMembership> {
   const sesion = await requireSession()
   const membership = resolveMembership(sesion.context, organizationId)
 
-  const fallo = evaluateCommercialAction(sesion.context, membership, capability)
+  // El módulo se evalúa ANTES que la capacidad: ver `OrganizationGuardOptions`.
+  const fallo =
+    (options?.module
+      ? evaluateOrganizationAccess(membership) ??
+        evaluateOrganizationModule(membership, options.module)
+      : null) ?? evaluateCommercialAction(sesion.context, membership, capability)
   if (fallo || !membership) {
     logDenial(`capacidad ${capability}`, fallo ?? 'NO_ORGANIZATION', sesion.userId)
     throw new AuthorizationError(fallo ?? 'NO_ORGANIZATION')

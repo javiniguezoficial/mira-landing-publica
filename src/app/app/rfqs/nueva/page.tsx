@@ -3,6 +3,8 @@ import { createDraftRfq } from '@/lib/actions/rfqs'
 import { getRfqAccess } from '@/lib/queries/rfq-capability'
 import { RfqForm } from '@/components/app/rfqs/RfqForm'
 import { MiraFormCard } from '@/components/mira/MiraFormCard'
+import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
+import { ModuleDisabledNotice } from '@/components/shared/ModuleDisabledNotice'
 import { ArrowLeft, FileText } from 'lucide-react'
 import Link from 'next/link'
 
@@ -10,7 +12,23 @@ export default async function NewRfqPage() {
   // Ocultar el botón no basta: esta URL se puede escribir a mano. La comprobación
   // ocurre ANTES de devolver nada, así que el formulario no llega a renderizarse
   // ni parcialmente.
-  const { canRead, canCreate } = await getRfqAccess()
+  const { canRead, canCreate, moduleEnabled } = await getRfqAccess()
+
+  // 1.4 — con el módulo apagado NO se redirige: se explica. Mandar al Dashboard
+  // a quien escribe esta URL es exactamente la redirección confusa que hay que
+  // evitar; la persona se quedaría sin saber qué ha pasado ni a quién preguntar.
+  if (!moduleEnabled) {
+    return (
+      <div className="w-full max-w-2xl space-y-6 p-4 md:p-6 xl:p-8">
+        <MiraPageHeader
+          icon={FileText}
+          title="Nueva cotización"
+          subtitle="Módulo no disponible para tu organización"
+        />
+        <ModuleDisabledNotice module="quotes" />
+      </div>
+    )
+  }
 
   // Sin capacidad pero con lectura, el destino natural es el histórico. Sin
   // acceso siquiera a la organización —pertenencia u organización suspendida—,

@@ -12,6 +12,7 @@ import type {
   PlatformRole,
   ProfileStatus,
 } from '@/lib/identity'
+import type { OrganizationModules } from './modules'
 
 export interface AuthUser {
   id: string
@@ -35,6 +36,12 @@ export interface AuthMembership {
   organizationStatus: OrganizationStatus | null
   /** Techo comercial de la organización sobre las capacidades del miembro. */
   commercialProfile: CommercialProfile | null
+  /**
+   * Módulos contratados por la organización (1.4). Viaja EN el contexto, junto
+   * al resto de la pertenencia, para que ninguna superficie tenga que volver a
+   * consultar `organizations` solo para saber si puede pintar una pantalla.
+   */
+  modules: OrganizationModules
 }
 
 /**

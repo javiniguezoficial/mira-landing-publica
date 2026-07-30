@@ -6,6 +6,9 @@ import { PriceChart } from '@/components/app/PriceChart'
 import { MiraKpiCard } from '@/components/mira/MiraKpiCard'
 import { MiraChartCard } from '@/components/mira/MiraChartCard'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { ModuleDisabledNotice } from '@/components/shared/ModuleDisabledNotice'
+import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
+import { isModuleEnabled } from '@/lib/queries/organization-modules'
 import { formatNumber, currencySymbol, unitLabel } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
@@ -15,6 +18,21 @@ export default async function ProductDetailPage({
 }: {
   params: Promise<{ marketSlug: string; productSlug: string }>
 }) {
+  // Detalle de producto: es la superficie que enseña los precios de una
+  // referencia concreta, así que se comprueba antes de resolver nada.
+  if (!(await isModuleEnabled('markets'))) {
+    return (
+      <div className="w-full space-y-6 p-4 md:p-6 xl:p-8">
+        <MiraPageHeader
+          icon={Package}
+          title="Market Intelligence"
+          subtitle="Módulo no disponible para tu organización"
+        />
+        <ModuleDisabledNotice module="markets" />
+      </div>
+    )
+  }
+
   const { marketSlug, productSlug } = await params
   const product = await getProductDetail(marketSlug, productSlug)
   if (!product) notFound()

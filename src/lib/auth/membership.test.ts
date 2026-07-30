@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { getMembershipForOrganization, resolveFallbackMembership } from './membership'
 import type { AuthMembership } from './types'
+import { DEFAULT_ORGANIZATION_MODULES } from './modules'
 
 function membership(overrides: Partial<AuthMembership> & { organizationId: string }): AuthMembership {
   return {
@@ -13,6 +14,9 @@ function membership(overrides: Partial<AuthMembership> & { organizationId: strin
     organizationStatus: 'active',
     commercialProfile: 'buyer',
     ...overrides,
+    // 1.4 — los módulos son obligatorios en AuthMembership. Por defecto ambos
+    // activos, igual que el DEFAULT de la columna en la migración 027.
+    modules: overrides.modules ?? { ...DEFAULT_ORGANIZATION_MODULES },
   }
 }
 

@@ -4,6 +4,8 @@ import { ChevronLeft, Pencil, Building2, Mail, Phone, Globe, MapPin, Users } fro
 import { getOrganizationById, getOrganizationOwner, getPlans } from '@/lib/actions/organizations'
 import { getOrganizationMembers, getProfiles } from '@/lib/actions/users'
 import { ClientLifecycleCard } from '@/components/admin/clients/ClientLifecycleCard'
+import { OrganizationModulesCard } from '@/components/admin/clients/OrganizationModulesCard'
+import { parseOrganizationModules } from '@/lib/auth/modules'
 import { MiraStatusBadge } from '@/components/mira/MiraStatusBadge'
 import { MembersTable } from '@/components/admin/users/MembersTable'
 import { AddMemberModal } from '@/components/admin/users/AddMemberModal'
@@ -85,6 +87,13 @@ export default async function ClienteDetailPage({ params }: { params: Promise<{ 
           }
           planes={(planes ?? []).map((p) => ({ slug: p.slug as string, name: p.name as string }))}
           owner={owner ? { firstName: owner.firstName, lastName: owner.lastName, status: owner.status } : null}
+        />
+
+        {/* Módulos contratados (1.4). El jsonb llega crudo de PostgREST y se
+            normaliza aquí; la tarjeta solo trabaja con el tipo ya validado. */}
+        <OrganizationModulesCard
+          organizationId={org.id}
+          modules={parseOrganizationModules(org.modules)}
         />
 
         {/* Datos de empresa */}

@@ -1,6 +1,12 @@
 'use server'
 
+import { revalidatePath } from 'next/cache'
 import { requirePlatformAdmin } from '@/lib/auth/guards'
+import {
+  buildOrganizationModules,
+  parseOrganizationModules,
+  type OrganizationModules,
+} from '@/lib/auth/modules'
 import { createSupabaseAdminClient } from '@/lib/supabase/admin'
 import {
   SIGNUP_MESSAGES,
@@ -46,6 +52,12 @@ export interface Organization {
   requested_plan_id: string | null
   plan_approved_by: string | null
   plan_approved_at: string | null
+  /**
+   * Módulos contratados (1.4). Llega como el jsonb crudo de PostgREST: se
+   * normaliza con `parseOrganizationModules` antes de usarlo, nunca se lee
+   * indexando a mano.
+   */
+  modules?: unknown
   plan?: { id: string; name: string; slug: string } | null
 }
 
@@ -317,6 +329,78 @@ export async function setOrganizationPlan(
   if (!data || data.length === 0) return { error: SIGNUP_MESSAGES.generico }
 
   return {}
+}
+
+/**
+ * Activa o desactiva los módulos contratados por un cliente (1.4).
+ *
+ * ── Las cuatro capas que protegen esto ──────────────────────────────────────
+ *
+ *   1. `requirePlatformAdmin('throw')` — exige sesión, rol `platform_admin` y
+ *      perfil ACTIVO. Un administrador suspendido no pasa de aquí.
+ *   2. La organización se comprueba de verdad: el UPDATE devuelve las filas
+ *      afectadas y cero filas se trata como error, así que un identificador
+ *      inexistente no se salda con un «guardado» silencioso.
+ *   3. RLS — el UPDATE viaja por el cliente NORMAL, sujeto a
+ *      `org_admin_all`/`org_owner_update`. No se usa la service role.
+ *   4. El trigger `protect_organization_columns` (027) incluye ahora `modules`
+ *      entre las columnas privilegiadas. Esta es la que cierra el vector real:
+ *      la persona propietaria de una organización SÍ tiene UPDATE sobre su
+ *      propia fila vía `org_owner_update`, así que sin el trigger podría
+ *      reactivarse los módulos con un PATCH directo a PostgREST, sin pasar por
+ *      esta acción ni por la interfaz.
+ *
+ * El valor se normaliza con `buildOrganizationModules`: solo `true` estricto
+ * activa, y solo se escriben las dos claves conocidas. El CHECK
+ * `organizations_modules_valid` vuelve a exigir esa forma en SQL.
+ */
+export async function setOrganizationModules(
+  orgId: string,
+  modules: { markets: boolean; quotes: boolean },
+): Promise<{ error?: string }> {
+  const { supabase } = await requirePlatformAdmin('throw')
+
+  if (!orgId?.trim()) return { error: 'No se ha indicado la organización.' }
+
+  const { data, error } = await supabase
+    .from('organizations')
+    .update({ modules: buildOrganizationModules(modules) })
+    .eq('id', orgId)
+    .select('id, modules')
+
+  if (error) {
+    console.error(signupErrorDetail('cambio de módulos', error))
+    return { error: MODULES_MESSAGES.generico }
+  }
+  if (!data || data.length === 0) return { error: MODULES_MESSAGES.noEncontrada }
+
+  // El estado de los módulos cambia lo que ve el cliente en su propio panel,
+  // no solo esta ficha: se revalidan ambas superficies.
+  revalidatePath(`/admin/clientes/${orgId}`)
+  revalidatePath('/admin/clientes')
+  revalidatePath('/app', 'layout')
+
+  return {}
+}
+
+const MODULES_MESSAGES = {
+  generico: 'No se han podido guardar los módulos. Inténtalo de nuevo.',
+  noEncontrada: 'No se ha encontrado la organización indicada.',
+} as const
+
+/** Lectura normalizada de los módulos de un cliente, para la ficha de administración. */
+export async function getOrganizationModulesById(
+  orgId: string,
+): Promise<OrganizationModules> {
+  const { supabase } = await requirePlatformAdmin()
+
+  const { data } = await supabase
+    .from('organizations')
+    .select('modules')
+    .eq('id', orgId)
+    .maybeSingle()
+
+  return parseOrganizationModules(data?.modules)
 }
 
 /**

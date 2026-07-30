@@ -20,6 +20,7 @@
 
 import { isOrgAdmin, isOwner, type OrganizationRole, type PlatformRole } from '@/lib/identity'
 import type { AuthorizationCode } from './errors'
+import { isOrganizationModuleEnabled, type OrganizationModuleName } from './modules'
 import type { AuthContext, AuthMembership } from './types'
 
 /** Hay sesión utilizable. */
@@ -163,6 +164,31 @@ export function evaluateOrganizationAccess(
   if (sinOrg) return sinOrg
 
   return evaluateActiveMembership(membership) ?? evaluateActiveOrganization(membership)
+}
+
+/**
+ * 1.4. ¿Tiene la organización de esta pertenencia el módulo contratado?
+ *
+ * Espejo de `org_module_enabled(uuid, text)`. Es un EJE INDEPENDIENTE: no mira
+ * roles, ni `can_buy`, ni el estado del perfil. Solo responde a «esta empresa
+ * tiene este módulo».
+ *
+ * Se mantiene aparte de `evaluateCapability` deliberadamente. Componer los dos
+ * en una sola función haría imposible distinguir después, en la interfaz, entre
+ * «no tienes permiso para comprar» y «tu empresa no tiene el módulo», que son
+ * mensajes distintos y llevan a acciones distintas.
+ *
+ * Sin pertenencia devuelve `NO_ORGANIZATION`, no `MODULE_DISABLED`: de una
+ * organización a la que no perteneces no se informa de su configuración.
+ */
+export function evaluateOrganizationModule(
+  membership: AuthMembership | null,
+  module: OrganizationModuleName,
+): AuthorizationCode | null {
+  const sinOrg = evaluateMembership(membership)
+  if (sinOrg) return sinOrg
+
+  return isOrganizationModuleEnabled(membership!.modules, module) ? null : 'MODULE_DISABLED'
 }
 
 export type CommercialCapability = 'buy' | 'sell'

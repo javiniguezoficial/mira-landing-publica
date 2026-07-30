@@ -25,12 +25,21 @@ export type AuthorizationCode =
   | 'NO_ORGANIZATION'
   /** El rol almacenado no se reconoce. Fail-closed: se deniega. */
   | 'INVALID_ROLE'
+  /**
+   * 1.4. La organización NO tiene contratado el módulo.
+   *
+   * Es un código propio y no un `FORBIDDEN` a propósito: no habla de la
+   * persona sino de la empresa, y por tanto ni el owner ni un admin de la
+   * organización pueden resolverlo. Solo la plataforma.
+   */
+  | 'MODULE_DISABLED'
 
 const DEFAULT_MESSAGES: Record<AuthorizationCode, string> = {
   UNAUTHENTICATED: 'Debes iniciar sesión.',
   FORBIDDEN: 'No tienes permiso de administrador',
   NO_ORGANIZATION: 'No tienes una organización asignada.',
   INVALID_ROLE: 'Tu rol no permite realizar esta acción.',
+  MODULE_DISABLED: 'Este módulo no está disponible para tu organización.',
 }
 
 export class AuthorizationError extends Error {

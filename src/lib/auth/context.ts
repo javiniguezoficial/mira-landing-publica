@@ -32,6 +32,7 @@ import {
   normalizeProfileStatus,
 } from '@/lib/identity'
 import { createClient } from '@/lib/supabase/server'
+import { parseOrganizationModules } from './modules'
 import type { AuthContext, AuthMembership } from './types'
 
 export type ServerSupabaseClient = Awaited<ReturnType<typeof createClient>>
@@ -45,10 +46,20 @@ interface RawMembership {
   can_sell: boolean | null
   status: string | null
   joined_at: string | null
-  organization:
-    | { id: string; name: string | null; status: string | null; commercial_profile: string | null }
-    | { id: string; name: string | null; status: string | null; commercial_profile: string | null }[]
-    | null
+  organization: RawOrganization | RawOrganization[] | null
+}
+
+/**
+ * Forma cruda de la organización embebida. `modules` llega como el jsonb tal
+ * cual lo devuelve PostgREST, así que se normaliza antes de entrar al contexto
+ * (ver `parseOrganizationModules`).
+ */
+interface RawOrganization {
+  id: string
+  name: string | null
+  status: string | null
+  commercial_profile: string | null
+  modules?: unknown
 }
 
 function toMembership(raw: RawMembership): AuthMembership | null {
@@ -68,6 +79,7 @@ function toMembership(raw: RawMembership): AuthMembership | null {
     joinedAt: raw.joined_at ?? '',
     organizationStatus: normalizeOrganizationStatus(org?.status),
     commercialProfile: normalizeCommercialProfile(org?.commercial_profile),
+    modules: parseOrganizationModules(org?.modules),
   }
 }
 
@@ -96,7 +108,7 @@ export async function getAuthContext(
       .from('organization_members')
       .select(
         `organization_id, role, org_role, can_buy, can_sell, status, joined_at,
-         organization:organizations(id, name, status, commercial_profile)`,
+         organization:organizations(id, name, status, commercial_profile, modules)`,
       )
       .eq('user_id', user.id),
   ])

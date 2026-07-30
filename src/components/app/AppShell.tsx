@@ -7,6 +7,10 @@ import {
 import { createClient } from '@/lib/supabase/client'
 import { MiraPageShell } from '@/components/mira/MiraPageShell'
 import type { NavItem, MiraUser } from '@/components/mira/MiraSidebar'
+import {
+  DEFAULT_ORGANIZATION_MODULES,
+  type OrganizationModules,
+} from '@/lib/auth/modules'
 
 const nav: NavItem[] = [
   { href: '/app/dashboard',          label: 'Dashboard',           icon: LayoutDashboard },
@@ -35,7 +39,39 @@ const nav: NavItem[] = [
 
 const ROLE_LABELS: Record<string, string> = { user: 'Usuario', client_owner: 'Propietario', client_member: 'Miembro' }
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+/**
+ * Marca en la navegación los módulos apagados (1.4).
+ *
+ * Los enlaces NO se eliminan ni se reordenan: el menú es el mismo para todo el
+ * mundo, y quien tiene un módulo apagado ve el candado y, al pulsar, la
+ * explicación. Ocultarlo en silencio dejaría a la persona sin saber que el
+ * módulo existe ni a quién pedirlo.
+ *
+ * Los hijos de Cotizaciones se conservan por la misma razón: cada uno lleva a
+ * una pantalla que sabe explicarse.
+ */
+function navConModulos(modules: OrganizationModules): NavItem[] {
+  const apagado: Record<string, boolean> = {
+    '/app/market-intelligent': !modules.markets,
+    '/app/rfqs': !modules.quotes,
+  }
+
+  return nav.map((item) =>
+    apagado[item.href] ? { ...item, moduleDisabled: true } : item,
+  )
+}
+
+interface AppShellProps {
+  children: React.ReactNode
+  /**
+   * Módulos de la organización, resueltos en el layout (servidor) y pasados
+   * como prop. Así la barra lateral no abre su propia consulta y el estado es
+   * el mismo que aplican los guards de cada página.
+   */
+  modules?: OrganizationModules
+}
+
+export function AppShell({ children, modules = DEFAULT_ORGANIZATION_MODULES }: AppShellProps) {
   const [user, setUser] = useState<MiraUser>({ name: 'Usuario', meta: '', initial: 'U' })
 
   useEffect(() => {
@@ -52,5 +88,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     })
   }, [])
 
-  return <MiraPageShell nav={nav} user={user}>{children}</MiraPageShell>
+  return (
+    <MiraPageShell nav={navConModulos(modules)} user={user}>
+      {children}
+    </MiraPageShell>
+  )
 }

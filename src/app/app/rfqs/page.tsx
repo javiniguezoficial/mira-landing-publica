@@ -6,6 +6,7 @@ import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 import { MiraTable, MiraTr, MiraTd } from '@/components/mira/MiraTable'
 import { MiraStatusBadge } from '@/components/mira/MiraStatusBadge'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { ModuleDisabledNotice } from '@/components/shared/ModuleDisabledNotice'
 import { miraBtn } from '@/lib/miraButtons'
 import { Plus, FileText, ArrowRight } from 'lucide-react'
 
@@ -14,7 +15,27 @@ function formatDate(d: string) {
 }
 
 export default async function ClientRfqsPage() {
-  const [rfqs, { canRead, canCreate }] = await Promise.all([listMyRfqs(), getRfqAccess()])
+  const [rfqs, { canRead, canCreate, moduleEnabled }] = await Promise.all([
+    listMyRfqs(),
+    getRfqAccess(),
+  ])
+
+  // 1.4 — el módulo se comprueba PRIMERO y con su propio mensaje. Si esto
+  // cayera en la rama de «sin acceso», una persona con permisos plenos leería
+  // que su acceso no está activo, que es falso y la mandaría a pedirle a su
+  // owner algo que su owner no puede darle.
+  if (!moduleEnabled) {
+    return (
+      <div className="w-full space-y-6 p-4 md:p-6 xl:p-8">
+        <MiraPageHeader
+          icon={FileText}
+          title="Mis cotizaciones"
+          subtitle="Módulo no disponible para tu organización"
+        />
+        <ModuleDisabledNotice module="quotes" />
+      </div>
+    )
+  }
 
   // Sin lectura no hay histórico que enseñar, y decir «aún no tienes
   // cotizaciones» sería falso: las hay, pero esta persona no puede verlas.

@@ -4,11 +4,30 @@ import { getStrategicMarketGroups } from '@/lib/queries/markets'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 import { MiraCategoryCard } from '@/components/mira/MiraCategoryCard'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { ModuleDisabledNotice } from '@/components/shared/ModuleDisabledNotice'
+import { isModuleEnabled } from '@/lib/queries/organization-modules'
 import { miraBtn } from '@/lib/miraButtons'
 
 export const dynamic = 'force-dynamic'
 
 export default async function MarketIntelligentPage() {
+  // El módulo se comprueba ANTES de consultar nada: con Market Intelligence
+  // apagado no se carga ni se filtra contenido operativo, solo se explica.
+  // Se llega aquí tanto desde el menú como escribiendo la URL, y en los dos
+  // casos la respuesta es la misma pantalla — no una redirección al Dashboard.
+  if (!(await isModuleEnabled('markets'))) {
+    return (
+      <div className="w-full space-y-6 p-4 md:p-6 xl:p-8">
+        <MiraPageHeader
+          icon={TrendingUp}
+          title="Market Intelligence"
+          subtitle="Módulo no disponible para tu organización"
+        />
+        <ModuleDisabledNotice module="markets" />
+      </div>
+    )
+  }
+
   const groups = await getStrategicMarketGroups()
   const hasCategories = groups.some(g => g.categories.length > 0)
   const showStrategicHeaders = groups.some(g => g.id !== null)

@@ -10,6 +10,8 @@ import { ORGANIZATION_ACCESS_MESSAGES } from '@/lib/auth/access'
 import { organizationRoleLabel } from '@/lib/identity'
 import { getClientDashboardData } from '@/lib/queries/client-dashboard'
 import { getLatestPrices } from '@/lib/queries/admin-dashboard'
+import { getOrganizationModules } from '@/lib/queries/organization-modules'
+import { ModuleDisabledInline } from '@/components/shared/ModuleDisabledNotice'
 import { createClient } from '@/lib/supabase/server'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 import { MiraKpiCard } from '@/components/mira/MiraKpiCard'
@@ -79,9 +81,16 @@ export default async function AppDashboard() {
   if (!user) redirect('/login')
 
   const { org } = result
+  const modules = await getOrganizationModules()
+
+  // 1.4 — el Dashboard reúne superficie de los dos módulos, así que se resuelven
+  // antes de consultar. Con un módulo apagado NO se pide su contenido: los
+  // precios ni se cargan, y las cotizaciones RLS las devolvería vacías de todos
+  // modos. Enseñar los ceros sería peor que no enseñar nada — parecería que la
+  // empresa nunca ha pedido una cotización.
   const [data, latestPrices, puedeCrearRfq] = await Promise.all([
     getClientDashboardData(org.id, user.id),
-    getLatestPrices(5),
+    modules.markets ? getLatestPrices(5) : Promise.resolve([]),
     canCreateRfq(),
   ])
 
@@ -117,8 +126,21 @@ export default async function AppDashboard() {
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <MiraKpiCard label="Miembros" value={org.memberCount} sublabel="en tu organización" icon={Users} tint="violet" href="/app/mi-organizacion" />
-        <MiraKpiCard label="RFQs activas" value={data.rfqsActive} sublabel={`de ${data.rfqsTotal} total`} icon={FileText} tint="magenta" href="/app/rfqs" />
-        <MiraKpiCard label="Respuestas" value={data.responsesReceived} sublabel="de proveedores" icon={TrendingUp} tint="emerald" href="/app/rfqs" />
+        {/* Con el módulo apagado el contador sería 0 por RLS, y un 0 aquí se
+            lee como «no habéis pedido nada», que es falso. Se muestra un guion
+            y el motivo real. */}
+        <MiraKpiCard
+          label="RFQs activas"
+          value={modules.quotes ? data.rfqsActive : '—'}
+          sublabel={modules.quotes ? `de ${data.rfqsTotal} total` : 'módulo no disponible'}
+          icon={FileText} tint="magenta" href="/app/rfqs"
+        />
+        <MiraKpiCard
+          label="Respuestas"
+          value={modules.quotes ? data.responsesReceived : '—'}
+          sublabel={modules.quotes ? 'de proveedores' : 'módulo no disponible'}
+          icon={TrendingUp} tint="emerald" href="/app/rfqs"
+        />
         <MiraKpiCard label="Proveedores" value={data.suppliersAvailable} sublabel="disponibles" icon={Truck} tint="cyan" href="/app/proveedores" />
       </div>
 
@@ -128,34 +150,63 @@ export default async function AppDashboard() {
           className="xl:col-span-2"
           icon={Zap}
           title="Market Intelligence"
-          subtitle="Precios de referencia más recientes (€)"
-          action={{ label: 'Explorar mercados', href: '/app/market-intelligent' }}
+          subtitle={
+            modules.markets
+              ? 'Precios de referencia más recientes (€)'
+              : 'Módulo no disponible para tu organización'
+          }
+          action={
+            modules.markets
+              ? { label: 'Explorar mercados', href: '/app/market-intelligent' }
+              : undefined
+          }
         >
-          {priceBars.length === 0 ? (
-            <p className="py-10 text-center text-sm text-slate-400">Sin datos de precios disponibles</p>
+          {!modules.markets ? (
+            <ModuleDisabledInline module="markets" />
           ) : (
-            <MiraRankBars data={priceBars} decimals={2} />
+            <>
+              {priceBars.length === 0 ? (
+                <p className="py-10 text-center text-sm text-slate-400">Sin datos de precios disponibles</p>
+              ) : (
+                <MiraRankBars data={priceBars} decimals={2} />
+              )}
+              <a href="/app/market-intelligent" className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-mira-magenta to-mira-magenta-deep py-2.5 text-sm font-bold text-white shadow-md shadow-mira-magenta/25 transition-opacity hover:opacity-90">
+                <TrendingUp size={15} /> Ver evolución de precios
+              </a>
+            </>
           )}
-          <a href="/app/market-intelligent" className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-mira-magenta to-mira-magenta-deep py-2.5 text-sm font-bold text-white shadow-md shadow-mira-magenta/25 transition-opacity hover:opacity-90">
-            <TrendingUp size={15} /> Ver evolución de precios
-          </a>
         </MiraChartCard>
 
         <MiraChartCard
           icon={FileText}
           iconTint="bg-purple-100 text-purple-600"
           title="Mis cotizaciones"
-          subtitle={`${data.rfqsTotal} RFQs en total`}
-          action={{ label: 'Ver', href: '/app/rfqs' }}
+          subtitle={
+            modules.quotes
+              ? `${data.rfqsTotal} RFQs en total`
+              : 'Módulo no disponible para tu organización'
+          }
+          action={modules.quotes ? { label: 'Ver', href: '/app/rfqs' } : undefined}
         >
-          <MiraDonut data={rfqDonut} unit="RFQs" height={220} />
+          {modules.quotes ? (
+            <MiraDonut data={rfqDonut} unit="RFQs" height={220} />
+          ) : (
+            <ModuleDisabledInline module="quotes" />
+          )}
         </MiraChartCard>
       </div>
 
       {/* Mis RFQs + noticias */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:gap-6">
-        <MiraSectionCard title="Mis últimas RFQs" icon={FileText} iconTint="bg-purple-100 text-purple-600" action={{ label: 'Ver todas', href: '/app/rfqs' }}>
-          {data.recentRfqs.length === 0
+        <MiraSectionCard
+          title="Mis últimas RFQs"
+          icon={FileText}
+          iconTint="bg-purple-100 text-purple-600"
+          action={modules.quotes ? { label: 'Ver todas', href: '/app/rfqs' } : undefined}
+        >
+          {!modules.quotes
+            ? <ModuleDisabledInline module="quotes" />
+            : data.recentRfqs.length === 0
             ? <div className="flex flex-col items-center gap-3 px-5 py-10 text-center">
                 <FileText size={28} className="text-slate-300" />
                 <p className="text-sm text-slate-400">Sin RFQs todavía</p>

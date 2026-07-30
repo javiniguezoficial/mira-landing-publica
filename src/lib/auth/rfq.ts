@@ -10,7 +10,12 @@
 
 import type { OrganizationRole } from '@/lib/identity'
 import type { AuthorizationCode } from './errors'
-import { evaluateCapability, evaluateOrganizationAccess } from './policy'
+import { MODULE_DISABLED_COPY } from './modules'
+import {
+  evaluateCapability,
+  evaluateOrganizationAccess,
+  evaluateOrganizationModule,
+} from './policy'
 import type { AuthMembership } from './types'
 
 /** Estados reales de `rfqs.status`, tomados del CHECK vigente. */
@@ -75,11 +80,19 @@ export function evaluateRfqManagement(
   rfq: RfqRef,
   membership: AuthMembership | null,
 ): AuthorizationCode | null {
+  // Bypass administrativo INTENCIONAL, espejo de `admin_update_rfqs`: la
+  // plataforma conserva el acceso aunque el cliente tenga el módulo apagado,
+  // porque es quien lo apaga y quien da soporte. Ver la migración 027.
   if (actor.isPlatformAdmin) return null
 
   if (!membership || membership.organizationId !== rfq.organizationId) {
     return 'FORBIDDEN'
   }
+
+  // 1.4 — el módulo de la ORGANIZACIÓN se comprueba antes que la capacidad
+  // personal: es el hecho dominante y el que explica de verdad la denegación.
+  const sinModulo = evaluateOrganizationModule(membership, 'quotes')
+  if (sinModulo) return sinModulo
 
   // Estados activos + capacidad de compra + techo comercial, en una sola
   // decisión compartida con `can_buy_in_org()`. No se reescribe aquí: duplicar
@@ -131,7 +144,7 @@ export function evaluateRfqContentEdit(
 export function evaluateRfqCreation(
   membership: AuthMembership | null,
 ): AuthorizationCode | null {
-  return evaluateCapability(membership, 'buy')
+  return evaluateOrganizationModule(membership, 'quotes') ?? evaluateCapability(membership, 'buy')
 }
 
 /**
@@ -143,6 +156,10 @@ export function evaluateRfqCreation(
  * borra lo que la empresa ya solicitó—, pero una suspensión sí retira la
  * lectura, porque así lo hace SQL. La interfaz no debe prometer un histórico
  * que la base de datos va a devolver vacío.
+ *
+ * Desde 1.4 esa misma policy exige además `org_module_enabled(org, 'quotes')`.
+ * Con el módulo apagado la lectura desaparece para toda la organización, no
+ * solo para quien no puede comprar.
  */
 export function evaluateRfqVisibility(
   membership: AuthMembership | null,
@@ -150,6 +167,9 @@ export function evaluateRfqVisibility(
 ): AuthorizationCode | null {
   const sinAcceso = evaluateOrganizationAccess(membership)
   if (sinAcceso) return sinAcceso
+
+  const sinModulo = evaluateOrganizationModule(membership, 'quotes')
+  if (sinModulo) return sinModulo
 
   return membership!.organizationId === rfq.organizationId ? null : 'FORBIDDEN'
 }
@@ -167,7 +187,26 @@ export const RFQ_MESSAGES = {
   finalizada: 'Esta cotización ya no se puede modificar.',
   datosInternos: 'No se pueden modificar los datos internos de la cotización.',
   generico: 'No se ha podido completar la operación.',
+  /**
+   * 1.4. El módulo está apagado para toda la organización. Se distingue de
+   * `sinCapacidad*` a propósito: aquí no hay nada que el owner pueda conceder.
+   */
+  moduloDeshabilitado: MODULE_DISABLED_COPY.quotes.description,
+  sinOrganizacion: 'No tienes una organización activa.',
 } as const
+
+/**
+ * Traduce el motivo de una denegación al mensaje que se le enseña a la persona.
+ *
+ * Existe para que las Server Actions no colapsen los tres ejes —pertenencia,
+ * módulo y capacidad— en un único texto ambiguo. Cada motivo lleva a una acción
+ * distinta: hablar con su empresa, esperar a la plataforma, o nada.
+ */
+export function mensajeDenegacionRfq(code: AuthorizationCode): string {
+  if (code === 'MODULE_DISABLED') return RFQ_MESSAGES.moduloDeshabilitado
+  if (code === 'NO_ORGANIZATION') return RFQ_MESSAGES.sinOrganizacion
+  return RFQ_MESSAGES.sinCapacidadEnOrganizacion
+}
 
 export interface DatabaseErrorLike {
   code?: string | null

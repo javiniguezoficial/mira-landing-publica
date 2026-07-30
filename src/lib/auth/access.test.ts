@@ -15,6 +15,7 @@ import {
   type OrganizationAccessState,
 } from './access'
 import type { AuthContext, AuthMembership } from './types'
+import { DEFAULT_ORGANIZATION_MODULES } from './modules'
 
 const ORG = 'org-acme'
 const OTRA_ORG = 'org-externa'
@@ -41,6 +42,9 @@ function pertenencia(overrides: Partial<AuthMembership> = {}): AuthMembership {
     organizationStatus: 'active',
     commercialProfile: 'buyer',
     ...overrides,
+    // 1.4 — los módulos son obligatorios en AuthMembership. Por defecto ambos
+    // activos, igual que el DEFAULT de la columna en la migración 027.
+    modules: overrides.modules ?? { ...DEFAULT_ORGANIZATION_MODULES },
   }
 }
 
@@ -407,7 +411,8 @@ describe('regresión 026: Ana propietaria activa de Acme', () => {
   //                         can_buy=true, can_sell=false
   //   organizations:        status=active, commercial_profile=buyer,
   //                         signup_source=admin, plan_id=Starter,
-  //                         requested_plan_id=null, plan_approved_by=null
+  //                         requested_plan_id=null, plan_approved_by=null,
+  //                         modules={"markets": true, "quotes": true}  (1.4)
   const ANA: AuthContext = {
     user: { id: 'ef9f8075-f79f-4cde-8d4c-5e48df0b88e6', email: 'ana@acme.example' },
     platformRole: 'user',
@@ -423,6 +428,7 @@ describe('regresión 026: Ana propietaria activa de Acme', () => {
         joinedAt: '2026-06-04T12:26:05.000Z',
         organizationStatus: 'active',
         commercialProfile: 'buyer',
+        modules: { ...DEFAULT_ORGANIZATION_MODULES },
       },
     ],
   }

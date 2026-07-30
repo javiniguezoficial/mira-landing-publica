@@ -23,6 +23,7 @@ import {
 } from './rfq'
 import { evaluateCommercialAction } from './policy'
 import type { AuthContext, AuthMembership } from './types'
+import { DEFAULT_ORGANIZATION_MODULES } from './modules'
 
 const ORG = 'org-acme'
 const OTRA_ORG = 'org-externa'
@@ -39,6 +40,9 @@ function pertenencia(overrides: Partial<AuthMembership> = {}): AuthMembership {
     organizationStatus: 'active',
     commercialProfile: 'buyer',
     ...overrides,
+    // 1.4 — los módulos son obligatorios en AuthMembership. Por defecto ambos
+    // activos, igual que el DEFAULT de la columna en la migración 027.
+    modules: overrides.modules ?? { ...DEFAULT_ORGANIZATION_MODULES },
   }
 }
 

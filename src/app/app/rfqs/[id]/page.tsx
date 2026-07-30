@@ -1,10 +1,13 @@
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
-import { ArrowLeft, ExternalLink } from 'lucide-react'
+import { ArrowLeft, ExternalLink, FileText } from 'lucide-react'
 import { getRfq, publishRfq, cancelRfq, updateDraftRfq, type Rfq } from '@/lib/actions/rfqs'
+import { getRfqAccess } from '@/lib/queries/rfq-capability'
 import { MiraStatusBadge } from '@/components/mira/MiraStatusBadge'
 import { MiraFormCard } from '@/components/mira/MiraFormCard'
+import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
+import { ModuleDisabledNotice } from '@/components/shared/ModuleDisabledNotice'
 import { RfqForm } from '@/components/app/rfqs/RfqForm'
 import { RfqResponsesClient } from '@/components/app/rfqs/RfqResponsesClient'
 import { miraBtn } from '@/lib/miraButtons'
@@ -28,6 +31,25 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 
 export default async function ClientRfqDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+
+  // 1.4 — con el módulo apagado, `org_member_select_rfqs` ya devolvería null y
+  // esto acabaría en un 404. Un «no existe» sería engañoso: la cotización
+  // existe, es de su empresa, y lo que falta es el módulo. Se comprueba antes
+  // para poder decirlo.
+  const { moduleEnabled } = await getRfqAccess()
+  if (!moduleEnabled) {
+    return (
+      <div className="mx-auto w-full max-w-3xl space-y-6 p-4 md:p-6 xl:p-8">
+        <MiraPageHeader
+          icon={FileText}
+          title="Cotización"
+          subtitle="Módulo no disponible para tu organización"
+        />
+        <ModuleDisabledNotice module="quotes" />
+      </div>
+    )
+  }
+
   const rfq = await getRfq(id)
   if (!rfq) notFound()
 

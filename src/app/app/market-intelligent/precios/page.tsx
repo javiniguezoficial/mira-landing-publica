@@ -9,6 +9,8 @@ import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 import { MiraChartCard } from '@/components/mira/MiraChartCard'
 import { MiraTable, MiraTr, MiraTd } from '@/components/mira/MiraTable'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { ModuleDisabledNotice } from '@/components/shared/ModuleDisabledNotice'
+import { isModuleEnabled } from '@/lib/queries/organization-modules'
 import { miraBtn, miraField, miraLabel } from '@/lib/miraButtons'
 import { formatNumber, formatPrice, unitLabel } from '@/lib/utils'
 
@@ -50,6 +52,21 @@ function buildUrl(base: string, params: Record<string, string | number | undefin
 }
 
 export default async function ClientPreciosPage({ searchParams }: { searchParams: Promise<SP> }) {
+  // Subruta de Market Intelligence: se protege igual que la portada, porque es
+  // una URL directa perfectamente escribible y es la que expone los precios.
+  if (!(await isModuleEnabled('markets'))) {
+    return (
+      <div className="w-full space-y-6 p-4 md:p-6 xl:p-8">
+        <MiraPageHeader
+          icon={DollarSign}
+          title="Market Intelligence"
+          subtitle="Módulo no disponible para tu organización"
+        />
+        <ModuleDisabledNotice module="markets" />
+      </div>
+    )
+  }
+
   const sp = await searchParams
   const page = Math.max(1, parseInt(sp.page ?? '1') || 1)
 

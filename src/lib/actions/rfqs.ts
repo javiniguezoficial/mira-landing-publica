@@ -12,6 +12,7 @@ import {
   RFQ_MESSAGES,
   evaluateRfqManagement,
   isValidRfqTransition,
+  mensajeDenegacionRfq,
   rfqErrorDetail,
   translateRfqError,
 } from '@/lib/auth/rfq'
@@ -242,16 +243,16 @@ function buildRfqContent(data: RfqFormData) {
 export type RfqActionResult = { id: string } | { error: string }
 
 export async function createDraftRfq(formData: RfqFormData): Promise<RfqActionResult> {
-  // Una sola carga de sesión, pertenencia y capacidad. Crear exige `can_buy`
-  // vigente y que la organización tenga perfil comprador.
+  // Una sola carga de sesión, pertenencia, módulo y capacidad. Crear exige el
+  // módulo `quotes` contratado, `can_buy` vigente y perfil comprador en la
+  // organización. `org_member_insert_rfqs` impone lo mismo en SQL, así que una
+  // llamada directa a esta Server Action o a PostgREST se rechaza igual.
   let autorizado
   try {
-    autorizado = await requireCommercialCapability('buy')
+    autorizado = await requireCommercialCapability('buy', null, { module: 'quotes' })
   } catch (e) {
     if (isAuthorizationError(e)) {
-      return { error: e.code === 'NO_ORGANIZATION'
-        ? 'No tienes una organización activa.'
-        : RFQ_MESSAGES.sinCapacidadEnOrganizacion }
+      return { error: mensajeDenegacionRfq(e.code) }
     }
     throw e
   }
@@ -298,9 +299,11 @@ interface RfqAutorizada {
 async function autorizarGestion(rfqId: string): Promise<RfqAutorizada | { error: string }> {
   let autorizado
   try {
-    autorizado = await requireMembership()
+    // El módulo se exige aquí, antes de leer nada: editar, publicar y cancelar
+    // pasan todas por este punto. `org_member_update_rfqs` lo repite en SQL.
+    autorizado = await requireMembership(null, { module: 'quotes' })
   } catch (e) {
-    if (isAuthorizationError(e)) return { error: 'No tienes una organización activa.' }
+    if (isAuthorizationError(e)) return { error: mensajeDenegacionRfq(e.code) }
     throw e
   }
 
@@ -437,7 +440,9 @@ export async function adminUpdateRfqStatus(rfqId: string, status: RfqStatus): Pr
 export async function listMyRfqs(): Promise<Rfq[]> {
   let autorizado
   try {
-    autorizado = await requireMembership()
+    // Con el módulo apagado no hay histórico que devolver: `org_member_select_rfqs`
+    // devolvería cero filas de todas formas, y así se evita la consulta.
+    autorizado = await requireMembership(null, { module: 'quotes' })
   } catch (e) {
     if (isAuthorizationError(e)) return []
     throw e
