@@ -1,0 +1,145 @@
+-- 029 — `anon` deja de poder ejecutar las dos funciones de autorización nuevas
+--
+-- Hotfix de permisos. NO cambia ninguna lógica.
+--
+-- ═════════════════════════════════════════════════════════════════════════════
+-- QUÉ FALLÓ Y POR QUÉ
+-- ═════════════════════════════════════════════════════════════════════════════
+--
+-- Las migraciones 027 y 028 terminaban con el patrón habitual:
+--
+--   revoke all on function … from public;
+--   grant execute on function … to authenticated, service_role;
+--
+-- Ese `revoke` NO retiró el privilegio a `anon`, y la ACL resultante quedó así:
+--
+--   org_module_enabled(uuid,text)   postgres=X | anon=X | authenticated=X | service_role=X
+--   market_enabled_for_user(uuid)   postgres=X | anon=X | authenticated=X | service_role=X
+--
+-- La causa está en `pg_default_acl`. El proyecto tiene, para el rol `postgres`
+-- y el esquema `public`:
+--
+--   ALTER DEFAULT PRIVILEGES … GRANT EXECUTE ON FUNCTIONS
+--     TO anon, authenticated, service_role;
+--
+-- Ese grant a `anon` es DIRECTO, no heredado de `PUBLIC`. Revocar de `PUBLIC`
+-- no lo toca, igual que revocar de `PUBLIC` no retira un grant nominal a
+-- cualquier otro rol. Comprobado: `has_function_privilege('public', …)` ya era
+-- `false` en ambas, y aun así `anon` conservaba EXECUTE.
+--
+-- Las funciones anteriores —`is_org_member`, `can_buy_in_org`,
+-- `is_platform_admin`…— tienen `anon=false` porque se crearon antes de que ese
+-- default privilege estuviera en vigor, no porque su `revoke` fuese distinto.
+--
+-- ═════════════════════════════════════════════════════════════════════════════
+-- ALCANCE — EXACTAMENTE DOS FUNCIONES
+-- ═════════════════════════════════════════════════════════════════════════════
+--
+-- Se auditaron las 23 funciones de `public`. SOLO estas dos tienen `anon=X`:
+--
+--   · public.org_module_enabled(uuid, text)     (027)
+--   · public.market_enabled_for_user(uuid)      (028)
+--
+-- Las otras 21 ya están correctas. No se toca ninguna más.
+--
+-- NO se modifica el `ALTER DEFAULT PRIVILEGES`, aunque sea la causa raíz:
+-- afecta a todo el esquema y a cualquier función futura, incluidas las que
+-- Supabase pueda crear, y ese cambio merece su propia decisión. Queda anotado
+-- al final como deuda técnica.
+--
+-- ═════════════════════════════════════════════════════════════════════════════
+-- IMPACTO REAL DEL AGUJERO (medido antes de cerrarlo)
+-- ═════════════════════════════════════════════════════════════════════════════
+--
+-- Menor, y conviene dejarlo dicho con precisión en lugar de exagerarlo:
+--
+--   · Las TABLAS ya estaban cerradas para `anon`. Comprobado con `set role
+--     anon`: un SELECT sobre `markets`, `products` o `product_price_records`
+--     falla con «permission denied for function is_platform_admin», porque la
+--     policy `admin_all_*` la invoca y `anon` tampoco puede ejecutarla. Lo
+--     mismo ocurre en `rfqs` con `is_org_member`. Así que por esta vía no había
+--     fuga.
+--   · `market_enabled_for_user` decide con `auth.uid()`, que para `anon` es
+--     NULL: el join no casa nunca y devuelve `true` sin leer ni revelar nada.
+--   · El vector real era una llamada RPC DIRECTA con la clave anónima:
+--     `POST /rest/v1/rpc/org_module_enabled` con un `org_id` conocido revelaba
+--     un booleano —si esa organización tiene el módulo contratado—. Requiere
+--     conocer el UUID de la organización y solo expone configuración comercial,
+--     pero es información de un cliente que `anon` no tiene por qué obtener.
+--
+-- Ninguna parte de la aplicación llama a estas funciones por RPC: solo se usan
+-- dentro de policies, evaluadas como el rol de la sesión. Revocar a `anon` por
+-- tanto no rompe ninguna superficie existente, y la landing pública no consulta
+-- estas tablas ni estas funciones.
+
+-- ═════════════════════════════════════════════════════════════════════════════
+-- 1. Revocar
+-- ═════════════════════════════════════════════════════════════════════════════
+--
+-- Firmas COMPLETAS en cada sentencia: sin los tipos, PostgreSQL no resuelve la
+-- función y una futura sobrecarga rompería la migración en silencio.
+--
+-- Se revoca de `PUBLIC` además de `anon` aunque `PUBLIC` ya no lo tuviera. Es
+-- idempotente, no cuesta nada y deja la intención escrita para quien reaplique
+-- estas migraciones sobre una base limpia, donde el default sí podría diferir.
+
+revoke all on function public.org_module_enabled(uuid, text) from public;
+revoke all on function public.org_module_enabled(uuid, text) from anon;
+
+revoke all on function public.market_enabled_for_user(uuid) from public;
+revoke all on function public.market_enabled_for_user(uuid) from anon;
+
+-- ═════════════════════════════════════════════════════════════════════════════
+-- 2. Conceder solo lo necesario
+-- ═════════════════════════════════════════════════════════════════════════════
+--
+-- El objetivo es dejar las dos funciones EXACTAMENTE con la misma ACL que las
+-- funciones de autorización anteriores:
+--
+--   postgres=X/postgres | authenticated=X/postgres | service_role=X/postgres
+--
+-- `authenticated` es imprescindible: las tres policies de catálogo de 028 y las
+-- cuatro de cotizaciones de 027 invocan estas funciones, y se evalúan con el
+-- rol de quien consulta.
+--
+-- `service_role` SE CONSERVA. No es un descuido: lo tienen las 23 funciones del
+-- esquema sin excepción, forma parte del default de Supabase y es el rol con el
+-- que corren las tareas administrativas y de mantenimiento. Quitarlo aquí
+-- convertiría estas dos funciones en las únicas distintas del proyecto, sin
+-- ganar nada — `service_role` ya salta RLS por completo, así que no ejecutar
+-- una función no le cierra ningún acceso.
+--
+-- `anon` NO recibe EXECUTE. Es todo el objeto de esta migración.
+
+grant execute on function public.org_module_enabled(uuid, text) to authenticated, service_role;
+grant execute on function public.market_enabled_for_user(uuid) to authenticated, service_role;
+
+-- ═════════════════════════════════════════════════════════════════════════════
+-- 3. Lo que esta migración NO toca
+-- ═════════════════════════════════════════════════════════════════════════════
+--
+-- Ni una línea de: cuerpos de las funciones, `security definer`, `stable`,
+-- `search_path`, policies, tablas, índices, constraints, triggers ni datos.
+-- Solo cambian los privilegios de ejecución de dos funciones.
+--
+-- El recuento de policies sigue siendo 58 y no se altera ninguna fila.
+--
+-- ── Deuda técnica anotada, deliberadamente fuera de este hotfix ─────────────
+--
+-- El `ALTER DEFAULT PRIVILEGES` sigue vigente, así que CUALQUIER función nueva
+-- creada en `public` volverá a nacer con `anon=X`. Mientras siga así, toda
+-- migración que añada una función de autorización debe incluir su
+-- `revoke … from anon` explícito, y conviene comprobarlo después de aplicar:
+--
+--   select p.oid::regprocedure::text,
+--          has_function_privilege('anon', p.oid, 'EXECUTE') as anon
+--   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+--   where n.nspname = 'public' and p.prokind = 'f'
+--     and has_function_privilege('anon', p.oid, 'EXECUTE');
+--
+-- Esa consulta debe devolver CERO filas. Hay un test que fija esta expectativa
+-- en `src/lib/auth/function-grants.test.ts`.
+--
+-- La corrección de raíz sería retirar `anon` del default privilege del esquema,
+-- pero eso afecta a todo `public` y a componentes de Supabase que no ha
+-- auditado este bloque. Debe decidirse aparte.
