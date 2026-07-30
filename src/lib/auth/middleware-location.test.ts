@@ -67,8 +67,16 @@ describe('el layout de /admin comprueba el rol en servidor', () => {
 
 describe('los Route Handlers de /api/admin no dependen del layout', () => {
   const rutas = [
-    'src/app/api/admin/price-template/route.ts',
+    // `price-template` se retiró con el importador antiguo (2.5): servía una
+    // plantilla desfasada —sin `lonja`, con `source_name`— que ya no enlazaba
+    // ninguna página. La sustituye `import-template`.
     'src/app/api/admin/supplier-template/route.ts',
+    // 2.5 — las cuatro rutas de la importación masiva. Dos devuelven CSV y dos
+    // JSON, pero todas exponen datos administrativos y necesitan su guard.
+    'src/app/api/admin/import-template/route.ts',
+    'src/app/api/admin/import-errors/route.ts',
+    'src/app/api/admin/import-rows/route.ts',
+    'src/app/api/admin/import-batch/route.ts',
   ]
 
   it('cada uno lleva su propio guard', () => {
