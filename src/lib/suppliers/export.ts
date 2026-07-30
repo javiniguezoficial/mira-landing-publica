@@ -83,6 +83,22 @@ const ADMIN_ONLY_COLUMNS: ExportColumn[] = [
   { key: 'is_active',  header: 'Activo',           width: 10, type: 'text', value: (s) => (s.is_active ? 'Sí' : 'No') },
   { key: 'created_at', header: 'Fecha de alta',    width: 18, type: 'date', value: (s) => s.created_at },
   { key: 'updated_at', header: 'Última actualización', width: 20, type: 'date', value: (s) => s.updated_at },
+  // ── Identificadores de taxonomía (3.2) ──────────────────────────────────
+  //
+  // «Clasificación» enseña el camino ya montado —«Cereales › Trigo › Blando»—,
+  // que se lee de maravilla y no sirve para nada al reimportar: habría que
+  // partirlo por un separador y adivinar a qué nivel corresponde cada trozo,
+  // con nombres que se repiten entre mercados.
+  //
+  // Estas cuatro columnas son las que hacen que la exportación administrativa
+  // sirva de verdad como plantilla de la actualización masiva: llevan el
+  // identificador exacto, que no admite interpretación. Se añaden al final y
+  // son OPCIONALES al subir, así que una exportación anterior a 3.2 —sin ellas—
+  // se sigue procesando igual.
+  { key: 'supplier_market_id',    header: 'Mercado ID',    width: 38, type: 'text', value: (s) => s.supplier_market_id ?? null },
+  { key: 'supplier_category_id',  header: 'Categoría ID',  width: 38, type: 'text', value: (s) => s.supplier_category_id ?? null },
+  { key: 'supplier_family_id',    header: 'Familia ID',    width: 38, type: 'text', value: (s) => s.supplier_family_id ?? null },
+  { key: 'supplier_subfamily_id', header: 'Subfamilia ID', width: 38, type: 'text', value: (s) => s.supplier_subfamily_id ?? null },
 ]
 
 export function exportColumnsFor(audience: ExportAudience): ExportColumn[] {

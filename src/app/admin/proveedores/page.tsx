@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Plus, Truck, Search, X, Upload, ListTree, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, Truck, Search, X, Upload, ListTree, FileSpreadsheet, ChevronLeft, ChevronRight } from 'lucide-react'
 import { listSuppliersFiltered, getSupplierFilterOptions, getSupplierProductionBounds, type SupplierFilters } from '@/lib/actions/suppliers'
 import { getActiveSupplierTaxonomyTree } from '@/lib/actions/supplier-taxonomy'
 import { SupplierTaxonomyFilterSelects } from '@/components/admin/suppliers/SupplierTaxonomyFilterSelects'
@@ -124,6 +124,11 @@ export default async function AdminSuppliersPage({
             </Link>
             <Link href="/admin/proveedores/importar" className={miraBtn.ghost}>
               <Upload size={14} /> Importar proveedores
+            </Link>
+            {/* 3.2 — actualizar ≠ importar. Dos enlaces distintos, a propósito:
+                uno da de alta y el otro NUNCA crea nada. */}
+            <Link href="/admin/proveedores/actualizar" className={miraBtn.ghost}>
+              <FileSpreadsheet size={14} /> Actualizar en masa
             </Link>
             <Link href="/admin/proveedores/nuevo" className={miraBtn.primary}>
               <Plus size={14} /> Nuevo proveedor
