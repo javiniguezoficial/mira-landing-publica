@@ -10,7 +10,9 @@ import { MiraChartCard } from '@/components/mira/MiraChartCard'
 import { MiraTable, MiraTr, MiraTd } from '@/components/mira/MiraTable'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ModuleDisabledNotice } from '@/components/shared/ModuleDisabledNotice'
+import { MarketPeriodSelector } from '@/components/app/markets/MarketPeriodSelector'
 import { isModuleEnabled } from '@/lib/queries/organization-modules'
+import { MARKET_PERIOD_PARAM, resolveMarketPeriod } from '@/lib/markets/period'
 import { miraBtn, miraField, miraLabel } from '@/lib/miraButtons'
 import { formatNumber, formatPrice, unitLabel } from '@/lib/utils'
 
@@ -36,6 +38,8 @@ type SP = {
   country?: string
   currency?: string
   page?: string
+  /** 2.3 — periodo rápido. Convive con `date_from`/`date_to`, que mandan. */
+  period?: string
 }
 
 function formatDate(d: string) {
@@ -70,6 +74,11 @@ export default async function ClientPreciosPage({ searchParams }: { searchParams
   const sp = await searchParams
   const page = Math.max(1, parseInt(sp.page ?? '1') || 1)
 
+  // 2.3 — el periodo fija el límite INFERIOR de la consulta. Un `date_from`
+  // escrito a mano en la URL manda sobre él: quien pide un rango exacto sabe lo
+  // que quiere, y el selector rápido es un atajo, no una jaula.
+  const periodo = resolveMarketPeriod(sp[MARKET_PERIOD_PARAM])
+
   const filters: PriceListFilters = {
     strategic_market_id: sp.strategic_market_id || undefined,
     category_id: sp.category_id || undefined,
@@ -82,7 +91,7 @@ export default async function ClientPreciosPage({ searchParams }: { searchParams
     tipo: sp.tipo || undefined,
     region: sp.region || undefined,
     unit: sp.unit || undefined,
-    date_from: sp.date_from || undefined,
+    date_from: sp.date_from || periodo.from || undefined,
     date_to: sp.date_to || undefined,
     country: sp.country || undefined,
     currency: sp.currency || undefined,
@@ -112,12 +121,24 @@ export default async function ClientPreciosPage({ searchParams }: { searchParams
         />
       </div>
 
+      {/* Periodo rápido, por encima del formulario: es el filtro que más se
+          toca y no debe obligar a pulsar «Buscar». */}
+      <MarketPeriodSelector
+        active={periodo.period}
+        basePath="/app/market-intelligent/precios"
+        searchParams={sp as Record<string, string | undefined>}
+      />
+
       <form
         key={JSON.stringify(filters)}
         method="GET"
         action="/app/market-intelligent/precios"
         className="mira-card space-y-4 rounded-2xl p-4"
       >
+        {/* El periodo viaja con el formulario: pulsar «Buscar» no debe
+            devolverlo silenciosamente al valor por defecto. */}
+        <input type="hidden" name={MARKET_PERIOD_PARAM} value={periodo.period} />
+
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <PricingHierarchySelects hierarchy={hierarchy} values={sp} />
         </div>

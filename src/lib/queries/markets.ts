@@ -18,6 +18,8 @@ export interface CategoryWithMarkets {
     products: {
       id: string; name: string; slug: string; unit: string
       tipo: string | null; variedad: string | null
+      /** 2.4 — la lonja es un atributo del PRODUCTO, no del registro de precio. */
+      lonja: string | null
     }[]
   }[]
 }
@@ -41,7 +43,7 @@ export async function getCategoriesWithMarkets(): Promise<CategoryWithMarkets[]>
       strategic_market:strategic_markets(id, name, slug, icon, sort_order),
       markets(
         id, name, slug, description, country_scope,
-        products(id, name, slug, unit, tipo, variedad)
+        products(id, name, slug, unit, tipo, variedad, lonja)
       )
     `)
     .eq('is_active', true)

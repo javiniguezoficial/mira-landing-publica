@@ -1,6 +1,7 @@
+import Link from 'next/link'
 import {
   Building2, Users, FileText, Newspaper, Truck, TrendingUp,
-  Plus, MapPin, HelpCircle, Zap, ArrowRight,
+  Plus, MapPin, HelpCircle, Zap, ArrowRight, Star,
 } from 'lucide-react'
 import { currencySymbol, unitLabel } from '@/lib/utils'
 import { redirect } from 'next/navigation'
@@ -11,7 +12,10 @@ import { organizationRoleLabel } from '@/lib/identity'
 import { getClientDashboardData } from '@/lib/queries/client-dashboard'
 import { getLatestPrices } from '@/lib/queries/admin-dashboard'
 import { getOrganizationModules } from '@/lib/queries/organization-modules'
+import { getFavoriteMarketCards, DASHBOARD_FAVORITES_PERIOD } from '@/lib/queries/favorite-markets'
+import { marketPeriodDescription } from '@/lib/markets/period'
 import { ModuleDisabledInline } from '@/components/shared/ModuleDisabledNotice'
+import { FavoriteMarketsBlock } from '@/components/app/markets/FavoriteMarketsBlock'
 import { createClient } from '@/lib/supabase/server'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 import { MiraKpiCard } from '@/components/mira/MiraKpiCard'
@@ -88,10 +92,13 @@ export default async function AppDashboard() {
   // precios ni se cargan, y las cotizaciones RLS las devolvería vacías de todos
   // modos. Enseñar los ceros sería peor que no enseñar nada — parecería que la
   // empresa nunca ha pedido una cotización.
-  const [data, latestPrices, puedeCrearRfq] = await Promise.all([
+  const [data, latestPrices, puedeCrearRfq, favoritos] = await Promise.all([
     getClientDashboardData(org.id, user.id),
     modules.markets ? getLatestPrices(5) : Promise.resolve([]),
     canCreateRfq(),
+    // 2.1 — tres consultas fijas dentro, no una por favorito. Con el módulo
+    // apagado devuelve vacío sin consultar nada.
+    modules.markets ? getFavoriteMarketCards() : Promise.resolve([]),
   ])
 
   const roleLabel = organizationRoleLabel(org.userRole)
@@ -143,6 +150,31 @@ export default async function AppDashboard() {
         />
         <MiraKpiCard label="Proveedores" value={data.suppliersAvailable} sublabel="disponibles" icon={Truck} tint="cyan" href="/app/proveedores" />
       </div>
+
+      {/* Mercados favoritos: por delante de los mercados generales, porque es
+          lo que esta persona ha señalado como suyo. Solo con el módulo activo;
+          si está apagado, el aviso ya lo da el panel de Market Intelligence. */}
+      {modules.markets && (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Star size={15} className="text-mira-magenta" aria-hidden="true" />
+              <h2 className="text-[15px] font-black text-mira-ink">Mis mercados favoritos</h2>
+            </div>
+            <Link
+              href="/app/market-intelligent"
+              className="flex items-center gap-1 text-xs font-bold text-mira-magenta hover:underline"
+            >
+              Ver todos <ArrowRight size={12} aria-hidden="true" />
+            </Link>
+          </div>
+          <FavoriteMarketsBlock
+            markets={favoritos}
+            periodDescription={marketPeriodDescription(DASHBOARD_FAVORITES_PERIOD)}
+            showAllLink={false}
+          />
+        </section>
+      )}
 
       {/* Market Intelligence protagonista + donut RFQs */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3 xl:gap-6">

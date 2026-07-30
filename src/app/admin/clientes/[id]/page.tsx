@@ -5,6 +5,8 @@ import { getOrganizationById, getOrganizationOwner, getPlans } from '@/lib/actio
 import { getOrganizationMembers, getProfiles } from '@/lib/actions/users'
 import { ClientLifecycleCard } from '@/components/admin/clients/ClientLifecycleCard'
 import { OrganizationModulesCard } from '@/components/admin/clients/OrganizationModulesCard'
+import { OrganizationMarketsCard } from '@/components/admin/clients/OrganizationMarketsCard'
+import { getOrganizationMarketOptions } from '@/lib/actions/organization-markets'
 import { parseOrganizationModules } from '@/lib/auth/modules'
 import { MiraStatusBadge } from '@/components/mira/MiraStatusBadge'
 import { MembersTable } from '@/components/admin/users/MembersTable'
@@ -26,14 +28,18 @@ function DetailRow({ label, value }: { label: string; value?: string | null }) {
 
 export default async function ClienteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const [org, members, allUsers, owner, planes] = await Promise.all([
+  const [org, members, allUsers, owner, planes, mercados] = await Promise.all([
     getOrganizationById(id),
     getOrganizationMembers(id),
     getProfiles(),
     getOrganizationOwner(id),
     getPlans(),
+    // 2.2 — catálogo con el estado por organización, en dos consultas fijas.
+    getOrganizationMarketOptions(id),
   ])
   if (!org) notFound()
+
+  const modules = parseOrganizationModules(org.modules)
 
   const existingMemberIds = members.map((m) => m.user_id)
 
@@ -91,9 +97,14 @@ export default async function ClienteDetailPage({ params }: { params: Promise<{ 
 
         {/* Módulos contratados (1.4). El jsonb llega crudo de PostgREST y se
             normaliza aquí; la tarjeta solo trabaja con el tipo ya validado. */}
-        <OrganizationModulesCard
+        <OrganizationModulesCard organizationId={org.id} modules={modules} />
+
+        {/* 2.2 — sección propia y separada de «Módulos disponibles»: una decide
+            si tiene el módulo, la otra qué mercados ve dentro de él. */}
+        <OrganizationMarketsCard
           organizationId={org.id}
-          modules={parseOrganizationModules(org.modules)}
+          markets={mercados}
+          moduleEnabled={modules.markets}
         />
 
         {/* Datos de empresa */}

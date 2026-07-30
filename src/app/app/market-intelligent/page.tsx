@@ -1,21 +1,40 @@
 import Link from 'next/link'
-import { TrendingUp, Package, ArrowRight, DollarSign } from 'lucide-react'
+import { TrendingUp, Package, ArrowRight, DollarSign, Star } from 'lucide-react'
 import { getStrategicMarketGroups } from '@/lib/queries/markets'
+import { getMarketAccessContext } from '@/lib/queries/market-access'
+import { getFavoriteMarketCards, DASHBOARD_FAVORITES_PERIOD } from '@/lib/queries/favorite-markets'
+import { marketPeriodDescription } from '@/lib/markets/period'
+import { collectLonjas, resolveLonja, LONJA_PARAM } from '@/lib/markets/lonja'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 import { MiraCategoryCard } from '@/components/mira/MiraCategoryCard'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ModuleDisabledNotice } from '@/components/shared/ModuleDisabledNotice'
-import { isModuleEnabled } from '@/lib/queries/organization-modules'
+import { FavoriteMarketButton } from '@/components/app/markets/FavoriteMarketButton'
+import { FavoriteMarketsBlock } from '@/components/app/markets/FavoriteMarketsBlock'
+import { LonjaFilter } from '@/components/app/markets/LonjaFilter'
 import { miraBtn } from '@/lib/miraButtons'
 
 export const dynamic = 'force-dynamic'
 
-export default async function MarketIntelligentPage() {
+const BASE_PATH = '/app/market-intelligent'
+
+type SP = { [LONJA_PARAM]?: string }
+
+export default async function MarketIntelligentPage({
+  searchParams,
+}: {
+  searchParams: Promise<SP>
+}) {
+  // Contexto de acceso resuelto UNA vez: módulo (1.4), mercados deshabilitados
+  // (2.2) y favoritos (2.1) en una sola carga. Ningún componente de más abajo
+  // vuelve a preguntar.
+  const access = await getMarketAccessContext()
+
   // El módulo se comprueba ANTES de consultar nada: con Market Intelligence
   // apagado no se carga ni se filtra contenido operativo, solo se explica.
   // Se llega aquí tanto desde el menú como escribiendo la URL, y en los dos
   // casos la respuesta es la misma pantalla — no una redirección al Dashboard.
-  if (!(await isModuleEnabled('markets'))) {
+  if (!access.moduleEnabled) {
     return (
       <div className="w-full space-y-6 p-4 md:p-6 xl:p-8">
         <MiraPageHeader
@@ -28,9 +47,45 @@ export default async function MarketIntelligentPage() {
     )
   }
 
-  const groups = await getStrategicMarketGroups()
-  const hasCategories = groups.some(g => g.categories.length > 0)
-  const showStrategicHeaders = groups.some(g => g.id !== null)
+  const sp = await searchParams
+  const [groups, favoritos] = await Promise.all([
+    // Los mercados deshabilitados para la organización ya NO llegan aquí:
+    // `client_read_markets` los excluye en SQL desde la migración 028. Este
+    // listado es, por tanto, exactamente lo que esta organización puede ver.
+    getStrategicMarketGroups(),
+    getFavoriteMarketCards(),
+  ])
+
+  // Lonjas realmente presentes en lo que esta persona puede ver. Se calculan
+  // sobre el árbol ya filtrado por RLS, así que nunca aparece una lonja que
+  // solo exista en un mercado deshabilitado.
+  const lonjasDisponibles = collectLonjas(
+    groups.flatMap((g) =>
+      g.categories.flatMap((c) => c.markets.flatMap((m) => m.products.map((p) => p.lonja))),
+    ),
+  )
+  const lonjaActiva = resolveLonja(sp[LONJA_PARAM], lonjasDisponibles)
+
+  // El filtro de lonja acota qué PRODUCTOS se listan; un mercado sin productos
+  // de esa lonja desaparece, y una categoría sin mercados también.
+  const gruposFiltrados = lonjaActiva
+    ? groups
+        .map((g) => ({
+          ...g,
+          categories: g.categories
+            .map((c) => ({
+              ...c,
+              markets: c.markets
+                .map((m) => ({ ...m, products: m.products.filter((p) => p.lonja === lonjaActiva) }))
+                .filter((m) => m.products.length > 0),
+            }))
+            .filter((c) => c.markets.length > 0),
+        }))
+        .filter((g) => g.categories.length > 0)
+    : groups
+
+  const hasCategories = gruposFiltrados.some((g) => g.categories.length > 0)
+  const showStrategicHeaders = gruposFiltrados.some((g) => g.id !== null)
 
   return (
     <div className="w-full space-y-6 p-4 md:p-6 xl:p-8">
@@ -39,22 +94,62 @@ export default async function MarketIntelligentPage() {
         title="Market Intelligence"
         subtitle="Mercados y referencias disponibles en tu plan"
         actions={
-          <Link href="/app/market-intelligent/precios" className={miraBtn.primary}>
+          <Link href={`${BASE_PATH}/precios`} className={miraBtn.primary}>
             <DollarSign size={14} /> Ver y filtrar precios
           </Link>
         }
       />
 
+      {/* 1. Favoritos primero: es lo que esta persona ha dicho que le importa. */}
+      <section className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Star size={15} className="text-mira-magenta" aria-hidden="true" />
+          <h2 className="text-sm font-black uppercase tracking-wider text-mira-ink">
+            Mis mercados favoritos
+          </h2>
+        </div>
+        <FavoriteMarketsBlock
+          markets={favoritos}
+          periodDescription={marketPeriodDescription(DASHBOARD_FAVORITES_PERIOD)}
+          showAllLink={false}
+        />
+      </section>
+
+      {/* 2. Filtro de lonja sobre el catálogo completo. */}
+      {lonjasDisponibles.length > 0 && (
+        <div className="mira-card flex flex-wrap items-end gap-4 rounded-2xl p-4">
+          <LonjaFilter
+            available={lonjasDisponibles}
+            active={lonjaActiva}
+            basePath={BASE_PATH}
+            searchParams={sp as Record<string, string | undefined>}
+          />
+          {lonjaActiva && (
+            <Link href={BASE_PATH} className={miraBtn.ghost}>
+              Quitar filtro
+            </Link>
+          )}
+        </div>
+      )}
+
       {!hasCategories ? (
         <div className="mira-card rounded-2xl">
-          <EmptyState icon={TrendingUp} title="Sin mercados disponibles" description="No hay mercados disponibles en este momento. Contacta con tu administrador." />
+          <EmptyState
+            icon={TrendingUp}
+            title={lonjaActiva ? 'Sin resultados para esta lonja' : 'Sin mercados disponibles'}
+            description={
+              lonjaActiva
+                ? `No hay productos de la lonja «${lonjaActiva}» en los mercados disponibles. Prueba con otra lonja o quita el filtro.`
+                : 'No hay mercados disponibles en este momento. Contacta con tu administrador.'
+            }
+          />
         </div>
       ) : (
         <>
           {/* Navegación rápida por mercado estratégico */}
-          {showStrategicHeaders && groups.length > 1 && (
+          {showStrategicHeaders && gruposFiltrados.length > 1 && (
             <nav className="flex flex-wrap gap-2 rounded-2xl border border-mira-line bg-mira-canvas/40 p-3">
-              {groups.map(group => (
+              {gruposFiltrados.map(group => (
                 <a
                   key={group.id ?? 'otros'}
                   href={`#sm-${group.id ?? 'otros'}`}
@@ -71,7 +166,7 @@ export default async function MarketIntelligentPage() {
           )}
 
           <div className="space-y-8">
-            {groups.map(group => (
+            {gruposFiltrados.map(group => (
               <div
                 key={group.id ?? 'sin-mercado-estrategico'}
                 id={`sm-${group.id ?? 'otros'}`}
@@ -106,6 +201,14 @@ export default async function MarketIntelligentPage() {
                             {market.description && (
                               <span className="hidden text-xs text-slate-400 sm:inline">— {market.description}</span>
                             )}
+                            {/* La estrella cierra la fila: alterna sin recargar. */}
+                            <span className="ml-auto">
+                              <FavoriteMarketButton
+                                marketId={market.id}
+                                marketName={market.name}
+                                initialIsFavorite={access.favoriteMarketIds.has(market.id)}
+                              />
+                            </span>
                           </div>
 
                           {market.products.length > 0 && (
@@ -113,7 +216,7 @@ export default async function MarketIntelligentPage() {
                               {market.products.map(product => (
                                 <Link
                                   key={product.id}
-                                  href={`/app/market-intelligent/${market.slug}/${product.slug}`}
+                                  href={`${BASE_PATH}/${market.slug}/${product.slug}`}
                                   className="group flex items-center gap-2 rounded-xl border border-mira-line bg-white px-3 py-2 transition-all hover:-translate-y-0.5 hover:border-mira-magenta/30 hover:shadow-sm"
                                 >
                                   <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-mira-magenta-soft">

@@ -8,15 +8,27 @@ export interface PricePoint {
   avg_price: number | null
 }
 
+/**
+ * Estadísticas de un producto SOBRE EL PERIODO PEDIDO (2.3).
+ *
+ * Los nombres eran `avg30` / `min30` / `max30` / `change30` cuando la ventana
+ * era siempre de 90 días y las estadísticas se calculaban sobre las últimas 30
+ * filas. Con el periodo ya variable, esos nombres mentían: en `ALL` no había
+ * nada de «30» en el cálculo. Se renombran para que la etiqueta de la interfaz
+ * y el dato digan lo mismo.
+ */
 export interface ProductPriceStats {
   current: number
   unit: string
   currency: string
-  avg30: number
-  min30: number
-  max30: number
-  change30: number        // % cambio vs hace 30 días
-  history: PricePoint[]  // últimos 90 días ordenados ASC
+  /** Media de todos los registros del periodo. */
+  avgPeriod: number
+  minPeriod: number
+  maxPeriod: number
+  /** % de variación entre el primer y el último registro del periodo. */
+  changePeriod: number
+  /** Serie completa del periodo, ascendente por `recorded_at`. */
+  history: PricePoint[]
 }
 
 export interface ProductDetail {
@@ -25,6 +37,8 @@ export interface ProductDetail {
   slug: string
   unit: string
   description: string | null
+  /** 2.4 — lonja de referencia. Texto libre en `products`; puede faltar. */
+  lonja: string | null
   market: { id: string; name: string; slug: string; country_scope: string }
   category: { id: string; name: string; slug: string; icon: string | null }
 }
@@ -40,7 +54,7 @@ export async function getProductDetail(
   const { data } = await supabase
     .from('products')
     .select(`
-      id, name, slug, unit, description,
+      id, name, slug, unit, description, lonja,
       market:markets(
         id, name, slug, country_scope,
         category:market_categories(id, name, slug, icon)
@@ -65,6 +79,7 @@ export async function getProductDetail(
     slug:        data.slug,
     unit:        data.unit,
     description: data.description,
+    lonja:       (data as unknown as { lonja: string | null }).lonja ?? null,
     market: {
       id:            market.id,
       name:          market.name,
@@ -82,18 +97,34 @@ export async function getProductDetail(
 
 // ── Stats de precio ───────────────────────────────────────────────────────────
 
+/**
+ * Serie y estadísticas de un producto para el periodo pedido (2.3).
+ *
+ * `from` es la fecha inicial `YYYY-MM-DD` que devuelve `marketPeriodStartDate`,
+ * o `null` para todo el histórico. Antes había aquí una ventana fija de 90 días
+ * calculada con `toISOString()`, que además convertía a UTC y podía desplazar
+ * el límite un día en horario español.
+ *
+ * El recorte lo hace PostgreSQL con `recorded_at >= from`, apoyado en el índice
+ * `idx_ppr_product_recorded (product_id, recorded_at DESC)` que ya existía. No
+ * se trae el histórico completo para filtrarlo en el servidor de Next ni, mucho
+ * menos, en el navegador.
+ */
 export async function getProductPriceStats(
   productId: string,
+  from: string | null = null,
 ): Promise<ProductPriceStats | null> {
   const supabase = await createClient()
 
-  // Últimos 90 días, ordenados ASC para el gráfico
-  const { data, error } = await supabase
+  let query = supabase
     .from('product_price_records')
     .select('recorded_at, price, min_price, max_price, avg_price, unit, currency')
     .eq('product_id', productId)
-    .gte('recorded_at', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10))
-    .order('recorded_at', { ascending: true })
+
+  // `ALL` (from = null) no añade filtro: se pide el histórico entero.
+  if (from) query = query.gte('recorded_at', from)
+
+  const { data, error } = await query.order('recorded_at', { ascending: true })
 
   if (error || !data || data.length === 0) return null
 
@@ -111,14 +142,15 @@ export async function getProductPriceStats(
   const last  = rows[rows.length - 1]
   const first = rows[0]
 
-  // Stats 30 días
-  const rows30 = rows.slice(-30)
-  const avg30  = rows30.reduce((s, r) => s + r.price, 0) / rows30.length
-  const min30  = Math.min(...rows30.map(r => r.min_price ?? r.price))
-  const max30  = Math.max(...rows30.map(r => r.max_price ?? r.price))
+  // Estadísticas sobre TODO el periodo, no sobre un recorte de 30 filas: la
+  // ventana ya la eligió quien mira, y volver a recortarla aquí produciría un
+  // «mínimo» que no es el mínimo de lo que se está viendo en el gráfico.
+  const avgPeriod = rows.reduce((s, r) => s + r.price, 0) / rows.length
+  const minPeriod = Math.min(...rows.map(r => r.min_price ?? r.price))
+  const maxPeriod = Math.max(...rows.map(r => r.max_price ?? r.price))
 
-  // Cambio respecto al primer día disponible
-  const change30 = first.price > 0
+  // Variación entre el primer y el último registro del periodo.
+  const changePeriod = first.price > 0
     ? ((last.price - first.price) / first.price) * 100
     : 0
 
@@ -126,10 +158,10 @@ export async function getProductPriceStats(
     current:  last.price,
     unit:     (last as unknown as { unit: string }).unit ?? '',
     currency: (last as unknown as { currency: string }).currency ?? 'EUR',
-    avg30:    Math.round(avg30 * 10000) / 10000,
-    min30,
-    max30,
-    change30: Math.round(change30 * 100) / 100,
+    avgPeriod: Math.round(avgPeriod * 10000) / 10000,
+    minPeriod,
+    maxPeriod,
+    changePeriod: Math.round(changePeriod * 100) / 100,
     history:  rows,
   }
 }
