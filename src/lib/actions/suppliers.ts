@@ -2,6 +2,7 @@
 
 import { requirePlatformAdmin } from '@/lib/auth/guards'
 import { createClient } from '@/lib/supabase/server'
+import { DEFAULT_SUPPLIER_SORT, type SupplierSort } from '@/lib/suppliers/list-params'
 import {
   buildSupplierFilterOptions,
   type SupplierFacetRow,
@@ -294,7 +295,7 @@ export async function deleteSupplier(id: string): Promise<SupplierVoidResult> {
 const SUPPLIER_SELECT =
   'id, name, email, phone, website, tax_id, country, region, city, postal_code, ' +
   'address, latitude, longitude, category, market_id, family, subfamily, ' +
-  'produccion, produccion_value, produccion_unit, medida, notes, is_active, created_at, updated_at, ' +
+  'produccion, produccion_value, produccion_unit, medida, is_active, created_at, updated_at, ' +
   'market:markets(id, name), ' +
   'supplier_market_id, supplier_category_id, supplier_family_id, supplier_subfamily_id, ' +
   'supplier_market:supplier_markets(id, name), ' +
@@ -321,6 +322,10 @@ export interface SupplierFilters {
   supplier_family_id?: string
   supplier_subfamily_id?: string
   is_active?: boolean
+  /** 3.1 — búsqueda secundaria multicampo, sobre el conjunto ya filtrado. */
+  secondary_search?: string
+  /** 3.1 — clave de ordenación de la allowlist. Nunca un nombre de columna. */
+  sort?: SupplierSort
   limit?: number
   offset?: number
 }
@@ -362,6 +367,10 @@ export async function listSuppliersFiltered(filters: SupplierFilters = {}): Prom
     p_supplier_subfamily_id: filters.supplier_subfamily_id || null,
     p_produccion_min:        filters.produccion_min ?? null,
     p_produccion_max:        filters.produccion_max ?? null,
+    // 3.1 — la ordenación se valida contra la allowlist ANTES de salir de aquí:
+    // a la función SQL solo llegan claves conocidas, nunca texto libre.
+    p_secondary_search:      filters.secondary_search?.trim() || null,
+    p_sort:                  filters.sort ?? DEFAULT_SUPPLIER_SORT,
   })
 
   if (error || !data) return { suppliers: [], total: 0, hasMore: false }
@@ -391,7 +400,7 @@ export async function listSuppliersFiltered(filters: SupplierFilters = {}): Prom
     produccion_value: r.produccion_value != null ? Number(r.produccion_value) : null,
     produccion_unit:  (r.produccion_unit as string | null) ?? null,
     medida:      (r.medida as string | null) ?? null,
-    notes:       (r.notes as string | null) ?? null,
+    notes:       null, // 032 — la RPC ya no devuelve notes; ver getSupplierNotes()
     is_active:   r.is_active as boolean,
     created_at:  r.created_at as string,
     updated_at:  r.updated_at as string,
@@ -427,7 +436,37 @@ export async function getSupplier(id: string): Promise<Supplier | null> {
     .single()
 
   if (error || !data) return null
-  return data as unknown as Supplier
+
+  // 032 — `notes` ya no se puede leer de la tabla: el privilegio de columna
+  // está revocado para `authenticated`, que es el rol tanto del cliente como de
+  // la administración. Se pide aparte a `admin_supplier_notes`, que solo
+  // devuelve algo si quien llama es platform_admin. Para un cliente el array
+  // viene vacío y `notes` se queda a null, sin error.
+  const notes = await getSupplierNotes([id])
+
+  return { ...(data as unknown as Supplier), notes: notes.get(id) ?? null }
+}
+
+/**
+ * Notas internas de varios proveedores (032).
+ *
+ * La comprobación de permisos NO está aquí: vive dentro de
+ * `admin_supplier_notes`, que es `security definer` y valida
+ * `is_platform_admin()` por su cuenta. Quien no lo sea recibe un conjunto
+ * vacío, no un error — así la exportación de un cliente sigue generándose,
+ * simplemente sin esa columna.
+ */
+export async function getSupplierNotes(ids: string[]): Promise<Map<string, string | null>> {
+  const resultado = new Map<string, string | null>()
+  if (ids.length === 0) return resultado
+
+  const supabase = await createClient()
+  const { data } = await supabase.rpc('admin_supplier_notes', { p_ids: ids })
+
+  for (const fila of (data ?? []) as Array<{ id: string; notes: string | null }>) {
+    resultado.set(fila.id, fila.notes)
+  }
+  return resultado
 }
 
 // ── Límite superior de producción (para el slider de rango) ───────────────────

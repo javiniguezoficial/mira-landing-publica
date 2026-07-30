@@ -1,13 +1,13 @@
 import Link from 'next/link'
 import { Plus, Truck, Search, X, Upload, ListTree, ChevronLeft, ChevronRight } from 'lucide-react'
-import { listSuppliersFiltered, getSupplierFilterOptions, getSupplierProductionBounds, type SupplierFilters, type Supplier } from '@/lib/actions/suppliers'
+import { listSuppliersFiltered, getSupplierFilterOptions, getSupplierProductionBounds, type SupplierFilters } from '@/lib/actions/suppliers'
 import { getActiveSupplierTaxonomyTree } from '@/lib/actions/supplier-taxonomy'
 import { SupplierTaxonomyFilterSelects } from '@/components/admin/suppliers/SupplierTaxonomyFilterSelects'
 import { ProductionRangeFilter } from '@/components/app/suppliers/ProductionRangeFilter'
-import { ToggleActiveSupplier } from './ToggleActiveSupplier'
-import { DeleteSupplierButton } from './DeleteSupplierButton'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
-import { MiraTable, MiraTr, MiraTd } from '@/components/mira/MiraTable'
+import { AdminSupplierTable } from '@/components/admin/suppliers/AdminSupplierTable'
+import type { SupplierListParams } from '@/lib/suppliers/list-params'
+import { parseSupplierSort, parseSecondarySearch } from '@/lib/suppliers/list-params'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { miraBtn, miraField } from '@/lib/miraButtons'
 import { parsePage, pageOffset, totalPages, pageRange, toNum, buildUrl } from '@/lib/pagination'
@@ -20,20 +20,8 @@ const PAGE_SIZE = 200
 
 const adminLabelCls = 'mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400'
 
-function formatDate(d: string) {
-  return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
-}
 
-function taxonomyBreadcrumb(s: Supplier): string | null {
-  if (!s.supplier_market) return null
-  return [s.supplier_market?.name, s.supplier_category?.name, s.supplier_family?.name, s.supplier_subfamily?.name]
-    .filter(Boolean).join(' › ')
-}
 
-function legacyLabel(s: Supplier): string | null {
-  const parts = [s.market?.name, s.category, s.family, s.subfamily].filter(Boolean)
-  return parts.length ? parts.join(' · ') : null
-}
 
 type AdminSP = {
   q?: string
@@ -45,6 +33,10 @@ type AdminSP = {
   supplier_category_id?: string
   supplier_family_id?: string
   supplier_subfamily_id?: string
+  /** 3.1 — búsqueda secundaria dentro de los resultados. */
+  qr?: string
+  /** 3.1 — clave de ordenación (allowlist). */
+  sort?: string
   page?: string
 }
 
@@ -71,8 +63,23 @@ export default async function AdminSuppliersPage({
     supplier_subfamily_id: sp.supplier_subfamily_id || undefined,
   }
 
+  // 3.1 — se normalizan aquí, contra la allowlist, antes de tocar la consulta.
+  const secondarySearch = parseSecondarySearch(sp.qr)
+  const sort = parseSupplierSort(sp.sort)
+
+  // Parámetros tal y como deben viajar en la URL: los filtros más la búsqueda
+  // secundaria y el orden. Los comparte la barra de resultados y la exportación,
+  // que así exporta exactamente lo que se está viendo.
+  const urlParams: SupplierListParams = {
+    ...filterParams,
+    qr: secondarySearch || undefined,
+    sort,
+  }
+
   const filters: SupplierFilters = {
     search: filterParams.q,        // la URL usa 'q', SupplierFilters usa 'search'
+    secondary_search: secondarySearch || undefined,
+    sort,
     country: filterParams.country,
     region: filterParams.region,
     supplier_market_id: filterParams.supplier_market_id,
@@ -93,9 +100,9 @@ export default async function AdminSuppliersPage({
   const hasActiveFilters = Object.values(filterParams).some(Boolean)
   const pages = totalPages(total, PAGE_SIZE)
   const range = pageRange(page, PAGE_SIZE, suppliers.length)
-  const firstPageUrl = buildUrl('/admin/proveedores', filterParams)
-  const prevUrl = page > 1 ? buildUrl('/admin/proveedores', { ...filterParams, page: page - 1 }) : null
-  const nextUrl = hasMore ? buildUrl('/admin/proveedores', { ...filterParams, page: page + 1 }) : null
+  const firstPageUrl = buildUrl('/admin/proveedores', urlParams)
+  const prevUrl = page > 1 ? buildUrl('/admin/proveedores', { ...urlParams, page: page - 1 }) : null
+  const nextUrl = hasMore ? buildUrl('/admin/proveedores', { ...urlParams, page: page + 1 }) : null
   // `?page=9999`: la consulta no falla, simplemente no devuelve filas. Se
   // detecta para ofrecer una salida en vez de dejar la pantalla vacía.
   const outOfRange = suppliers.length === 0 && page > 1
@@ -247,71 +254,7 @@ export default async function AdminSuppliersPage({
           )}
         </div>
       ) : (
-        <MiraTable
-          headers={[
-            'Nombre',
-            'Clasificación',
-            'Ubicación',
-            'Contacto',
-            { label: 'Estado / Acciones', align: 'right' },
-          ]}
-        >
-          {suppliers.map((s) => {
-            const clasif = taxonomyBreadcrumb(s) ?? legacyLabel(s)
-            const isLegacy = !taxonomyBreadcrumb(s) && !!legacyLabel(s)
-            return (
-              <MiraTr key={s.id}>
-                <MiraTd className="max-w-[200px]">
-                  <Link
-                    href={`/admin/proveedores/${s.id}`}
-                    className="block truncate font-bold text-mira-ink hover:text-mira-magenta"
-                    title={s.name}
-                  >
-                    {s.name}
-                  </Link>
-                  {s.tax_id && <p className="truncate text-xs text-slate-400">{s.tax_id}</p>}
-                </MiraTd>
-                <MiraTd className="max-w-[240px]">
-                  {clasif ? (
-                    <div className="flex items-center gap-1.5">
-                      {isLegacy && (
-                        <span className="shrink-0 rounded bg-slate-100 px-1 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">legacy</span>
-                      )}
-                      <span className={`truncate text-sm ${isLegacy ? 'text-slate-500' : 'font-medium text-mira-ink'}`} title={clasif}>
-                        {clasif}
-                      </span>
-                    </div>
-                  ) : (
-                    <span className="text-slate-300">Sin clasificar</span>
-                  )}
-                </MiraTd>
-                <MiraTd className="max-w-[160px]">
-                  <div className="truncate text-sm text-slate-600">{s.region ?? '—'}</div>
-                  {s.city && <div className="truncate text-xs text-slate-400">{s.city}</div>}
-                </MiraTd>
-                <MiraTd className="max-w-[200px]">
-                  <div className="truncate text-sm text-slate-600" title={s.email ?? undefined}>{s.email || '—'}</div>
-                  {s.phone && <div className="truncate text-xs text-slate-400">{s.phone}</div>}
-                </MiraTd>
-                <MiraTd align="right">
-                  <div className="flex items-center justify-end gap-3">
-                    <div className="flex flex-col items-end gap-1">
-                      <ToggleActiveSupplier id={s.id} isActive={s.is_active} />
-                      <span className="whitespace-nowrap text-[10px] text-slate-400">Alta {formatDate(s.created_at)}</span>
-                    </div>
-                    <Link
-                      href={`/admin/proveedores/${s.id}`}
-                      className="whitespace-nowrap text-xs font-bold text-mira-magenta hover:underline"
-                    >
-                      Ver →
-                    </Link>
-                    <DeleteSupplierButton id={s.id} name={s.name} variant="icon" />
-                  </div>
-                </MiraTd>
-              </MiraTr>
-            )
-          })}
-        </MiraTable>
+        <AdminSupplierTable suppliers={suppliers} total={total} params={urlParams} />
       )}
 
       {/* Paginación — mismo patrón que el listado de cliente */}

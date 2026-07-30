@@ -11,6 +11,9 @@ import { MiraViewToggle } from '@/components/mira/MiraViewToggle'
 import { SupplierTaxonomyFilterSelects } from '@/components/admin/suppliers/SupplierTaxonomyFilterSelects'
 import { ProductionRangeFilter } from './ProductionRangeFilter'
 import { miraField, miraLabel, miraBtn } from '@/lib/miraButtons'
+import { SupplierResultsToolbar } from './SupplierResultsToolbar'
+import { useSupplierSelection } from './useSupplierSelection'
+import type { SupplierListParams } from '@/lib/suppliers/list-params'
 
 // Breadcrumb de la taxonomía propia de proveedores, o null si no está clasificado.
 function taxonomyBreadcrumb(s: Supplier): string | null {
@@ -33,6 +36,10 @@ const SupplierMap = dynamic(
 
 interface FilterValues {
   q?: string
+  /** 3.1 — búsqueda secundaria dentro de los resultados. */
+  qr?: string
+  /** 3.1 — clave de ordenación. */
+  sort?: string
   country?: string
   region?: string
   produccion_min?: string
@@ -82,6 +89,10 @@ export function SupplierListClient({
 }: Props) {
   // Solo el toggle mapa/lista es estado local — el filtrado es 100% server-side
   const [view, setView] = useState<'list' | 'map'>('map')
+
+  // 3.3 — la selección se reconcilia sola con lo visible: al cambiar filtros,
+  // búsqueda, orden o página deja de contener lo que ya no está en pantalla.
+  const seleccion = useSupplierSelection(suppliers.map((s) => s.id))
 
   const hasActiveFilters = Object.values(filters).some(Boolean)
 
@@ -199,8 +210,30 @@ export function SupplierListClient({
         </div>
       )}
 
+      {/* 3.1 y 3.4 — búsqueda en resultados, orden y exportación */}
+      <SupplierResultsToolbar
+        basePath="/app/proveedores"
+        params={filters as SupplierListParams}
+        total={total}
+        selectedIds={seleccion.selectedIds}
+        onClearSelection={seleccion.clear}
+      />
+
       {/* Contador + toggle vista */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        {/* 3.3 — la selección abarca la página actual, que es lo que se ve. */}
+        {view === 'list' && suppliers.length > 0 && (
+          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-500">
+            <input
+              type="checkbox"
+              checked={seleccion.allVisibleSelected}
+              onChange={seleccion.togglePage}
+              aria-label="Seleccionar todos los proveedores de esta página"
+              className="h-4 w-4 accent-mira-magenta"
+            />
+            Seleccionar esta página
+          </label>
+        )}
         <p className="text-sm text-slate-500">
           <span className="font-black text-mira-ink">{suppliers.length}</span>{' '}
           {suppliers.length === 1 ? 'proveedor' : 'proveedores'} en esta página
@@ -261,8 +294,17 @@ export function SupplierListClient({
             return (
               <div
                 key={s.id}
-                className="mira-card flex items-start gap-3.5 rounded-2xl p-4 transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-mira-ink/10"
+                className={`mira-card flex items-start gap-3.5 rounded-2xl p-4 transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-mira-ink/10 ${
+                  seleccion.isSelected(s.id) ? 'border-mira-magenta/40 bg-mira-magenta-soft/30' : ''
+                }`}
               >
+                <input
+                  type="checkbox"
+                  checked={seleccion.isSelected(s.id)}
+                  onChange={() => seleccion.toggle(s.id)}
+                  aria-label={`Seleccionar ${s.name}`}
+                  className="mt-1 h-4 w-4 shrink-0 accent-mira-magenta"
+                />
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-mira-magenta-soft">
                   <Building2 size={20} className="text-mira-magenta" />
                 </div>

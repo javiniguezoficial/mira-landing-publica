@@ -4,6 +4,11 @@ import { getSupplierTaxonomyTreeForClient } from '@/lib/actions/supplier-taxonom
 import { SupplierListClient } from '@/components/app/suppliers/SupplierListClient'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 import { parsePage, pageOffset, totalPages, toNum, buildUrl } from '@/lib/pagination'
+import {
+  parseSecondarySearch,
+  parseSupplierSort,
+  type SupplierListParams,
+} from '@/lib/suppliers/list-params'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +24,10 @@ type SP = {
   supplier_category_id?: string
   supplier_family_id?: string
   supplier_subfamily_id?: string
+  /** 3.1 — búsqueda secundaria dentro de los resultados. */
+  qr?: string
+  /** 3.1 — clave de ordenación (allowlist). */
+  sort?: string
   page?: string
 }
 
@@ -43,6 +52,20 @@ export default async function ClientSuppliersPage({
     supplier_subfamily_id: sp.supplier_subfamily_id || undefined,
   }
 
+  // 3.1 — se normalizan contra la allowlist antes de llegar a la consulta: de
+  // la URL nunca sale un nombre de columna ni un término sin acotar.
+  const secondarySearch = parseSecondarySearch(sp.qr)
+  const sort = parseSupplierSort(sp.sort)
+
+  // Lo que viaja en la URL: filtros + búsqueda secundaria + orden. Lo comparten
+  // la barra de resultados y la exportación, así que se exporta exactamente lo
+  // que se está viendo.
+  const urlParams: SupplierListParams = {
+    ...filterParams,
+    qr: secondarySearch || undefined,
+    sort,
+  }
+
   const [{ suppliers, total, hasMore }, filterOptions, taxonomyTree] = await Promise.all([
     listSuppliersFiltered({
       search: filterParams.q,        // SupplierFilters usa 'search', la URL usa 'q'
@@ -54,6 +77,8 @@ export default async function ClientSuppliersPage({
       supplier_category_id: filterParams.supplier_category_id,
       supplier_family_id: filterParams.supplier_family_id,
       supplier_subfamily_id: filterParams.supplier_subfamily_id,
+      secondary_search: secondarySearch || undefined,
+      sort,
       is_active: true,
       limit: PAGE_SIZE,
       offset: pageOffset(page, PAGE_SIZE),
@@ -65,8 +90,8 @@ export default async function ClientSuppliersPage({
   const productionBounds = await getSupplierProductionBounds()
 
   const pages = totalPages(total, PAGE_SIZE)
-  const prevUrl = page > 1 ? buildUrl('/app/proveedores', { ...filterParams, page: page - 1 }) : null
-  const nextUrl = hasMore ? buildUrl('/app/proveedores', { ...filterParams, page: page + 1 }) : null
+  const prevUrl = page > 1 ? buildUrl('/app/proveedores', { ...urlParams, page: page - 1 }) : null
+  const nextUrl = hasMore ? buildUrl('/app/proveedores', { ...urlParams, page: page + 1 }) : null
   const hasActiveFilters = Object.values(filterParams).some(Boolean)
 
   return (
@@ -88,7 +113,7 @@ export default async function ClientSuppliersPage({
         totalPages={pages}
         prevUrl={prevUrl}
         nextUrl={nextUrl}
-        filters={filterParams}
+        filters={urlParams}
         countries={filterOptions.countries}
         regions={filterOptions.regions}
         taxonomyTree={taxonomyTree}
