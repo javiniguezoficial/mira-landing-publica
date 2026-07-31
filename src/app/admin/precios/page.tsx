@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Plus, Upload, DollarSign, Search, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, Upload, Trash2, DollarSign, Search, X, ChevronLeft, ChevronRight } from 'lucide-react'
 import { listPriceRecordsFiltered, getPricingTree, getPriceInsights, type PriceListFilters } from '@/lib/actions/prices'
 import { PricingHierarchySelects } from '@/components/admin/prices/PricingHierarchySelects'
 import { PriceExtraFilters } from '@/components/admin/prices/PriceExtraFilters'
@@ -91,6 +91,11 @@ export default async function AdminPreciosPage({ searchParams }: { searchParams:
           <div className="flex items-center gap-2">
             <Link href="/admin/precios/importar" className={miraBtn.ghost}>
               <Upload size={14} /> Importar precios
+            </Link>
+            {/* 035 — retirar precios mal cargados sin entrar a la base de datos.
+                Separado de «Importar» a propósito: son operaciones opuestas. */}
+            <Link href="/admin/precios/eliminar" className={miraBtn.ghost}>
+              <Trash2 size={14} /> Eliminar precios
             </Link>
             <Link href="/admin/precios/nuevo" className={miraBtn.primary}>
               <Plus size={14} /> Añadir precio
