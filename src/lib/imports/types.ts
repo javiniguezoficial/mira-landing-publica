@@ -115,6 +115,15 @@ export interface ImportRowError {
   message: string
 }
 
+/**
+ * De dónde ha salido la lonja de la fila (034).
+ *
+ * Se guarda para poder explicarlo en la vista previa: no es lo mismo «lo dice
+ * el fichero» que «lo he cogido de la ficha del producto porque el fichero no
+ * lo decía».
+ */
+export type LonjaSource = 'file' | 'product' | null
+
 /** Fila ya normalizada y resuelta contra el catálogo. */
 export interface NormalizedImportRow {
   line: number
@@ -128,7 +137,14 @@ export interface NormalizedImportRow {
   marketName: string | null
   productId: string | null
   productName: string | null
+  /**
+   * 034 — lonja RESUELTA del registro de precio, no la del producto.
+   *
+   * Prioridad: la del fichero; si no viene, la configurada en el producto. Es
+   * lo que se guarda en `product_price_records.lonja`.
+   */
   lonja: string | null
+  lonjaSource: LonjaSource
 
   recordedAt: string | null
   price: number | null

@@ -13,6 +13,9 @@ import { FavoriteMarketButton } from '@/components/app/markets/FavoriteMarketBut
 import { isModuleEnabled } from '@/lib/queries/organization-modules'
 import { getMarketAccessContext } from '@/lib/queries/market-access'
 import { MARKET_PERIOD_PARAM, resolveMarketPeriod } from '@/lib/markets/period'
+import { LONJA_PARAM, resolveLonja } from '@/lib/markets/lonja'
+import { LonjaFilter } from '@/components/app/markets/LonjaFilter'
+import { getProductLonjas } from '@/lib/queries/lonjas'
 import { formatNumber, currencySymbol, unitLabel } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
@@ -51,8 +54,25 @@ export default async function ProductDetailPage({
   // 2.3 — el periodo llega por URL y se resuelve UNA vez. `from` va directo a la
   // consulta, así que el recorte lo hace PostgreSQL.
   const periodo = resolveMarketPeriod(sp[MARKET_PERIOD_PARAM])
+
+  // 034 — de qué lonjas hay precios para ESTA referencia.
+  const lonjas = await getProductLonjas(product.id)
+
+  // ── «Todas las lonjas» no existe aquí, y es una decisión ─────────────────
+  //
+  // El gráfico dibuja UNA serie. Con precios de España, Alemania y Europa
+  // mezclados en una sola línea, cada cambio de plaza parecería un movimiento
+  // de mercado; con varias líneas habría que rehacer el gráfico, las cuatro
+  // tarjetas de estadísticas y la comparación de periodos.
+  //
+  // Se elige lo más honesto de lo que cabe hoy: si hay varias lonjas, se exige
+  // elegir una, y por defecto se toma la primera en orden alfabético. Las
+  // estadísticas y el gráfico corresponden SIEMPRE a la lonja seleccionada.
+  const lonjaPedida = resolveLonja(sp[LONJA_PARAM], lonjas)
+  const lonjaActiva = lonjaPedida || (lonjas.length > 0 ? lonjas[0] : '')
+
   const [priceStats, { favoriteMarketIds }] = await Promise.all([
-    getProductPriceStats(product.id, periodo.from),
+    getProductPriceStats(product.id, periodo.from, lonjaActiva || null),
     getMarketAccessContext(),
   ])
 
@@ -83,11 +103,12 @@ export default async function ProductDetailPage({
             </div>
             <h1 className="text-2xl font-black tracking-tight text-mira-ink">{product.name}</h1>
             {product.description && <p className="mt-1 text-sm text-slate-500">{product.description}</p>}
-            {/* La lonja es un atributo del PRODUCTO: aquí es un dato, no un
-                filtro. Comparar entre lonjas se hace en «Ver y filtrar precios». */}
+            {/* 034 — `products.lonja` pasa a ser la lonja POR DEFECTO de la
+                referencia. Las que de verdad tienen precios salen en el
+                selector de abajo, y pueden ser varias. */}
             {product.lonja && (
               <p className="mt-1 text-xs text-slate-400">
-                Lonja de referencia: <span className="font-bold text-slate-600">{product.lonja}</span>
+                Lonja por defecto: <span className="font-bold text-slate-600">{product.lonja}</span>
               </p>
             )}
           </div>
@@ -103,12 +124,33 @@ export default async function ProductDetailPage({
           initialIsFavorite={favoriteMarketIds.has(product.market.id)}
           variant="button"
         />
-        <MarketPeriodSelector
-          active={periodo.period}
-          basePath={`/app/market-intelligent/${marketSlug}/${productSlug}`}
-          searchParams={sp}
-        />
+        <div className="flex flex-wrap items-end gap-3">
+          {/* Con una sola lonja el desplegable no aporta nada: se dice cuál es
+              y se deja el espacio al periodo. */}
+          {lonjas.length > 1 && (
+            <LonjaFilter
+              available={lonjas}
+              active={lonjaActiva}
+              basePath={`/app/market-intelligent/${marketSlug}/${productSlug}`}
+              searchParams={sp}
+              requireSelection
+            />
+          )}
+          <MarketPeriodSelector
+            active={periodo.period}
+            basePath={`/app/market-intelligent/${marketSlug}/${productSlug}`}
+            searchParams={sp}
+          />
+        </div>
       </div>
+
+      {lonjas.length > 1 && (
+        <p className="text-xs text-slate-500">
+          Esta referencia cotiza en {lonjas.length} lonjas. El gráfico y las estadísticas
+          corresponden a <span className="font-bold text-mira-ink">{lonjaActiva}</span>; los precios de
+          distintas lonjas no se mezclan en una misma serie.
+        </p>
+      )}
 
       {priceStats ? (
         <>

@@ -75,13 +75,19 @@ export default async function ImportarPreciosPage() {
         <div className="space-y-1.5 rounded-xl bg-mira-canvas/60 p-4">
           {[
             'Los nombres de las columnas deben coincidir exactamente. No se aceptan variantes.',
-            'Fechas en formato AAAA-MM-DD (por ejemplo 2026-07-27).',
-            'Decimales con punto o con coma, pero nunca los dos en el mismo número: «1.482,5» se rechaza por ambiguo.',
+            'Fechas en AAAA-MM-DD o DD/MM/AAAA. El primer número es SIEMPRE el día: 01/02/2024 es el 1 de febrero.',
+            'Precios con punto o con coma decimal, con separador de miles y con símbolo: «285,00 €», «1.285,50» y «1,285.50 USD» valen.',
+            'Un separador suelto seguido de tres cifras («1.285») se rechaza por ambiguo: escribe 1285 o 1.285,00.',
+            'Monedas admitidas: EUR (€), USD ($) y GBP (£). Se guarda siempre el código ISO; los precios no se convierten nunca.',
+            'La unidad admite «€/100 Kg», «EUR/100 kg» o solo «100 kg». La moneda se separa y se guarda aparte.',
+            'Si la moneda de la columna, la de la unidad y la del precio no coinciden, la fila se rechaza: no se elige una en silencio.',
+            'La unidad debe coincidir con la configurada en la ficha de la referencia. Mezclar «kg» y «100 kg» multiplicaría la serie por cien.',
             'market_slug y product_slug deben existir ya en MIRA. La importación nunca crea mercados ni productos.',
-            'Si indicas lonja, debe coincidir con la del producto. La lonja del producto no se modifica.',
-            'La moneda y la unidad deben estar entre las ya utilizadas en la plataforma.',
+            'La lonja del archivo MANDA: una misma referencia puede tener precio en España, Alemania y Europa el mismo día. Si no la indicas, se hereda la de la ficha del producto.',
+            'Si no hay lonja ni en el archivo ni en la ficha, la fila se rechaza: sin ella no se pueden distinguir dos precios del mismo día.',
+            'La lonja del producto NO se modifica al importar.',
             'Todas las fechas deben caer dentro del periodo que selecciones arriba.',
-            'Un precio ya existente para el mismo producto, fecha, moneda y unidad se marca como duplicado y NO se sobrescribe.',
+            'Un precio ya existente para el mismo producto, fecha, moneda, unidad y LONJA se marca como duplicado y NO se sobrescribe.',
           ].map((t, i) => (
             <p key={i} className="flex items-start gap-2 text-xs text-slate-500">
               <span className="shrink-0 text-slate-300">·</span>

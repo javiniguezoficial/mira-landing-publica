@@ -11,6 +11,16 @@ interface Props {
   active: string
   basePath: string
   searchParams: Record<string, string | undefined>
+  /**
+   * 034 — oculta la opción «Todas las lonjas».
+   *
+   * Se usa en la ficha de producto, donde el gráfico dibuja UNA serie: ofrecer
+   * «todas» ahí significaría pintar los precios de España, Alemania y Europa
+   * como una sola línea con saltos, que es peor que no poder elegirlo. En el
+   * catálogo, donde «todas» solo significa «no filtres el listado», sí se
+   * ofrece.
+   */
+  requireSelection?: boolean
 }
 
 /**
@@ -36,7 +46,7 @@ interface Props {
  * paginación anterior ya no significa lo mismo. `router.push` navega sin
  * recargar la página entera.
  */
-export function LonjaFilter({ available, active, basePath, searchParams }: Props) {
+export function LonjaFilter({ available, active, basePath, searchParams, requireSelection = false }: Props) {
   const router = useRouter()
 
   if (available.length === 0) {
@@ -75,7 +85,7 @@ export function LonjaFilter({ available, active, basePath, searchParams }: Props
         aria-label={lonjaAriaLabel(active)}
         className={miraField}
       >
-        <option value="">{ALL_LONJAS_LABEL}</option>
+        {!requireSelection && <option value="">{ALL_LONJAS_LABEL}</option>}
         {available.map((lonja) => (
           <option key={lonja} value={lonja}>
             {lonja}

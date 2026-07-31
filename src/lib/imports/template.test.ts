@@ -113,12 +113,13 @@ describe('la plantilla la acepta el validador real', () => {
             marketSlug: TEMPLATE_EXAMPLE_ROW.market_slug,
             marketName: 'Cereales nacional',
             lonja: TEMPLATE_EXAMPLE_ROW.lonja,
+            // 034 — la unidad configurada de la referencia, en la forma
+            // combinada real del catálogo.
+            unit: '€/TN',
           },
         ],
       ]),
       marketSlugs: new Set([TEMPLATE_EXAMPLE_ROW.market_slug]),
-      currencies: new Set(['EUR']),
-      units: new Set(['ton']),
       existingKeys: new Set(),
     }
   }
@@ -171,8 +172,6 @@ describe('la plantilla la acepta el validador real', () => {
     const vacio: ValidationCatalog = {
       products: new Map(),
       marketSlugs: new Set(),
-      currencies: new Set(['EUR']),
-      units: new Set(['ton']),
       existingKeys: new Set(),
     }
     const parsed = parseImportTemplateCsv()

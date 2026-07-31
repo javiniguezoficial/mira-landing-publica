@@ -187,7 +187,11 @@ export async function getPricingTree(): Promise<PricingHierarchy> {
     // unit vive también en products, pero con otro significado (precio/medida del
     // producto, p.ej. "€/kg"). El filtro real se aplica sobre product_price_records.unit
     // (p.ej. "kg", "ton"), así que el facet de unidades debe salir de esta tabla.
-    supabase.from('product_price_records').select('unit'),
+    //
+    // 034 — y la lonja, igual: desde que cada precio lleva la suya, el desplegable
+    // tiene que ofrecer las que existen en los PRECIOS. Ofrecer las de
+    // `products.lonja` daría opciones sin ningún resultado detrás.
+    supabase.from('product_price_records').select('unit, lonja'),
   ])
 
   const rawProducts = (pr.data ?? []) as Array<{
@@ -200,13 +204,15 @@ export async function getPricingTree(): Promise<PricingHierarchy> {
     Array.from(new Set(vals.map((v) => v?.trim()).filter((v): v is string => !!v)))
       .sort((a, b) => a.localeCompare(b, 'es'))
 
+  const registros = (ppr.data ?? []) as Array<{ unit: string | null; lonja: string | null }>
+
   const facets: PricingFacets = {
-    lonjas:     uniq(rawProducts.map((p) => p.lonja)),
+    lonjas:     uniq(registros.map((r) => r.lonja)),
     variedades: uniq(rawProducts.map((p) => p.variedad)),
     calibres:   uniq(rawProducts.map((p) => p.calibre)),
     incoterms:  uniq(rawProducts.map((p) => p.incoterm)),
     tipos:      uniq(rawProducts.map((p) => p.tipo)),
-    units:      uniq(((ppr.data ?? []) as Array<{ unit: string | null }>).map((r) => r.unit)),
+    units:      uniq(registros.map((r) => r.unit)),
   }
 
   return {
@@ -294,7 +300,11 @@ function applyPriceListFilters<Q>(query: Q, filters: PriceListFilters): Q {
   if (filters.market_id)           q = q.eq('product.market_id', filters.market_id)
   if (filters.category_id)         q = q.eq('product.market.category_id', filters.category_id)
   if (filters.strategic_market_id) q = q.eq('product.market.category.strategic_market_id', filters.strategic_market_id)
-  if (filters.lonja)               q = q.eq('product.lonja', filters.lonja)
+  // 034 — la lonja se filtra sobre el REGISTRO, no sobre el producto. Antes
+  // `product.lonja` devolvía todos los precios de un producto cuya ficha decía
+  // esa lonja, incluidos los de otras plazas, y se dejaba fuera cualquier precio
+  // de esa plaza cuyo producto estuviera fichado en otra.
+  if (filters.lonja)               q = q.eq('lonja', filters.lonja)
   if (filters.variedad)            q = q.eq('product.variedad', filters.variedad)
   if (filters.calibre)             q = q.eq('product.calibre', filters.calibre)
   if (filters.incoterm)            q = q.eq('product.incoterm', filters.incoterm)
@@ -477,6 +487,19 @@ export async function createPriceManual(
   if (form.source_name?.trim()) metadata.source_name = form.source_name.trim()
   if (form.notes?.trim()) metadata.notes = form.notes.trim()
 
+  // 034 — un alta manual sin lonja quedaría fuera del filtro de Market
+  // Intelligence, que ahora agrupa por `product_price_records.lonja`. Se hereda
+  // la de la ficha del producto, que es el valor por defecto de la referencia.
+  // Si el producto tampoco la tiene, se guarda NULL: el índice único la trata
+  // como cadena vacía, así que la clave natural sigue protegiendo.
+  const { data: producto } = await supabase
+    .from('products')
+    .select('lonja')
+    .eq('id', productId)
+    .maybeSingle()
+
+  const lonja = (producto?.lonja ?? '').trim() || null
+
   const { data, error } = await supabase
     .from('product_price_records')
     .insert({
@@ -487,6 +510,7 @@ export async function createPriceManual(
       country:     form.country?.trim() || 'ES',
       region:      form.region?.trim() || null,
       recorded_at: form.recorded_at,
+      lonja,
       min_price:   form.min_price ?? null,
       max_price:   form.max_price ?? null,
       avg_price:   form.avg_price ?? null,

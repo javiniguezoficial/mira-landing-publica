@@ -5,6 +5,7 @@ import { getMarketAccessContext } from '@/lib/queries/market-access'
 import { getFavoriteMarketCards, DASHBOARD_FAVORITES_PERIOD } from '@/lib/queries/favorite-markets'
 import { marketPeriodDescription } from '@/lib/markets/period'
 import { collectLonjas, resolveLonja, LONJA_PARAM } from '@/lib/markets/lonja'
+import { getLonjasByProduct } from '@/lib/queries/lonjas'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 import { MiraCategoryCard } from '@/components/mira/MiraCategoryCard'
 import { EmptyState } from '@/components/shared/EmptyState'
@@ -48,26 +49,39 @@ export default async function MarketIntelligentPage({
   }
 
   const sp = await searchParams
-  const [groups, favoritos] = await Promise.all([
+  const [groups, favoritos, lonjasPorProducto] = await Promise.all([
     // Los mercados deshabilitados para la organización ya NO llegan aquí:
     // `client_read_markets` los excluye en SQL desde la migración 028. Este
     // listado es, por tanto, exactamente lo que esta organización puede ver.
     getStrategicMarketGroups(),
     getFavoriteMarketCards(),
+    // 034 — las lonjas salen de los PRECIOS, no de `products.lonja`. Una
+    // consulta para todo el catálogo, no una por producto.
+    getLonjasByProduct(),
   ])
 
-  // Lonjas realmente presentes en lo que esta persona puede ver. Se calculan
-  // sobre el árbol ya filtrado por RLS, así que nunca aparece una lonja que
-  // solo exista en un mercado deshabilitado.
+  // Lonjas realmente presentes en lo que esta persona puede ver.
+  //
+  // Se cruzan las del mapa de precios con los productos del árbol —que ya viene
+  // filtrado por RLS—, así que una lonja que solo exista en un mercado
+  // deshabilitado para esta organización no aparece en el desplegable.
+  const productosVisibles = new Set(
+    groups.flatMap((g) => g.categories.flatMap((c) => c.markets.flatMap((m) => m.products.map((p) => p.id)))),
+  )
   const lonjasDisponibles = collectLonjas(
-    groups.flatMap((g) =>
-      g.categories.flatMap((c) => c.markets.flatMap((m) => m.products.map((p) => p.lonja))),
-    ),
+    [...lonjasPorProducto.entries()]
+      .filter(([productId]) => productosVisibles.has(productId))
+      .flatMap(([, lonjas]) => [...lonjas]),
   )
   const lonjaActiva = resolveLonja(sp[LONJA_PARAM], lonjasDisponibles)
 
-  // El filtro de lonja acota qué PRODUCTOS se listan; un mercado sin productos
-  // de esa lonja desaparece, y una categoría sin mercados también.
+  // El filtro acota qué PRODUCTOS se listan: se queda con los que tienen algún
+  // precio de esa lonja. Un mercado sin productos así desaparece, y una
+  // categoría sin mercados también.
+  //
+  // Ojo con la diferencia respecto a 2.4: antes se comparaba `p.lonja` —un solo
+  // valor por producto—, así que una referencia que cotiza en cinco plazas solo
+  // aparecía bajo una de ellas.
   const gruposFiltrados = lonjaActiva
     ? groups
         .map((g) => ({
@@ -76,7 +90,10 @@ export default async function MarketIntelligentPage({
             .map((c) => ({
               ...c,
               markets: c.markets
-                .map((m) => ({ ...m, products: m.products.filter((p) => p.lonja === lonjaActiva) }))
+                .map((m) => ({
+                  ...m,
+                  products: m.products.filter((p) => lonjasPorProducto.get(p.id)?.has(lonjaActiva)),
+                }))
                 .filter((m) => m.products.length > 0),
             }))
             .filter((c) => c.markets.length > 0),

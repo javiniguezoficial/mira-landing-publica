@@ -113,6 +113,7 @@ export async function getProductDetail(
 export async function getProductPriceStats(
   productId: string,
   from: string | null = null,
+  lonja: string | null = null,
 ): Promise<ProductPriceStats | null> {
   const supabase = await createClient()
 
@@ -123,6 +124,11 @@ export async function getProductPriceStats(
 
   // `ALL` (from = null) no añade filtro: se pide el histórico entero.
   if (from) query = query.gte('recorded_at', from)
+
+  // 034 — el recorte por lonja lo hace PostgreSQL, apoyado en
+  // `idx_ppr_product_lonja_recorded`. Mezclar plazas en una sola serie daría un
+  // gráfico con saltos que parecen movimientos de mercado y no lo son.
+  if (lonja) query = query.eq('lonja', lonja)
 
   const { data, error } = await query.order('recorded_at', { ascending: true })
 

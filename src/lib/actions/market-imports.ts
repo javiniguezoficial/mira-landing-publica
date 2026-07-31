@@ -23,6 +23,7 @@ import {
 } from '@/lib/imports/types'
 import {
   naturalKey,
+  flagConflictingDuplicates,
   summarize,
   validateHeaders,
   validateRow,
@@ -131,15 +132,20 @@ export async function validateImportFile(formData: FormData): Promise<ValidateIm
 
   // ── Catálogo, en consultas fijas ──────────────────────────────────────────
   //
-  // Tres consultas para TODO el fichero, no una por fila. Con 20.000 filas la
+  // DOS consultas para TODO el fichero, no una por fila. Con 20.000 filas la
   // diferencia entre esto y un N+1 es entre segundos y horas.
-  const [productosResult, unidadesResult, existentesResult] = await Promise.all([
+  //
+  // 034 — desaparece la tercera consulta, la que sacaba las monedas y unidades
+  // «admitidas» de los valores que ya existían. Esa allowlist se calculaba a
+  // partir del histórico y por tanto no admitía nada nuevo NUNCA: como los 608
+  // registros son todos EUR, `USD` salía como moneda no reconocida. Ahora la
+  // lista es explícita y vive en `imports/currency.ts` e `imports/units.ts`.
+  const [productosResult, existentesResult] = await Promise.all([
     supabase
       .from('products')
-      .select('id, name, slug, lonja, market:markets!inner(id, name, slug, is_active)')
+      .select('id, name, slug, lonja, unit, market:markets!inner(id, name, slug, is_active)')
       .eq('is_active', true),
-    supabase.from('product_price_records').select('currency, unit'),
-    supabase.from('product_price_records').select('product_id, recorded_at, currency, unit'),
+    supabase.from('product_price_records').select('product_id, recorded_at, currency, unit, lonja'),
   ])
 
   const products = new Map<string, CatalogProduct>()
@@ -160,24 +166,24 @@ export async function validateImportFile(formData: FormData): Promise<ValidateIm
       marketSlug: market.slug,
       marketName: market.name,
       lonja: (p.lonja as string | null) ?? null,
+      // 034 — la unidad CONFIGURADA de la referencia, del tipo «€/100 Kg». Es la
+      // que el validador usa para resolver y comprobar la del fichero.
+      unit: (p.unit as string | null) ?? null,
     })
   }
 
-  // Allowlist de monedas y unidades tomada de los datos REALES. Es lo que
-  // impide que «Tn», «TN» y «ton» entren como tres unidades distintas.
-  const currencies = new Set<string>(['EUR'])
-  const units = new Set<string>()
-  for (const r of (unidadesResult.data ?? []) as Array<{ currency: string; unit: string }>) {
-    if (r.currency) currencies.add(r.currency)
-    if (r.unit) units.add(r.unit)
-  }
-
   const existingKeys = new Set<string>()
-  for (const r of (existentesResult.data ?? []) as Array<Record<string, string>>) {
-    existingKeys.add(naturalKey(r.product_id, r.recorded_at, r.currency, r.unit))
+  for (const r of (existentesResult.data ?? []) as Array<Record<string, string | null>>) {
+    existingKeys.add(naturalKey(
+      r.product_id as string,
+      r.recorded_at as string,
+      r.currency as string,
+      r.unit as string,
+      r.lonja ?? null,
+    ))
   }
 
-  const catalog: ValidationCatalog = { products, marketSlugs, currencies, units, existingKeys }
+  const catalog: ValidationCatalog = { products, marketSlugs, existingKeys }
 
   // ── Validar ───────────────────────────────────────────────────────────────
   const seenKeys = new Set<string>()
@@ -193,7 +199,7 @@ export async function validateImportFile(formData: FormData): Promise<ValidateIm
       errors: [{ column: null, message: e.message }],
       raw: {},
       marketSlug: '', productSlug: '', marketId: null, marketName: null,
-      productId: null, productName: null, lonja: null,
+      productId: null, productName: null, lonja: null, lonjaSource: null,
       recordedAt: null, price: null, currency: null, unit: null,
       country: 'ES', region: null, minPrice: null, maxPrice: null,
       avgPrice: null, volume: null, source: null, notes: null,
@@ -201,7 +207,12 @@ export async function validateImportFile(formData: FormData): Promise<ValidateIm
   }
   filas.sort((a, b) => a.line - b.line)
 
-  const resumen = summarize(filas)
+  // 034 — segunda pasada: si dos filas comparten clave natural pero traen
+  // precios DISTINTOS, no entra ninguna. Quedarse con la primera sería elegir a
+  // ciegas entre dos precios de mercado.
+  const revisadas = flagConflictingDuplicates(filas)
+
+  const resumen = summarize(revisadas)
   const estado: ImportBatchStatus = resumen.validRows > 0 ? 'ready' : 'invalid'
 
   // ── Persistir ─────────────────────────────────────────────────────────────
@@ -235,8 +246,8 @@ export async function validateImportFile(formData: FormData): Promise<ValidateIm
   // Inserción por lotes: un solo INSERT de 20.000 filas puede superar los
   // límites de tamaño de petición de PostgREST.
   const LOTE = 500
-  for (let i = 0; i < filas.length; i += LOTE) {
-    const trozo = filas.slice(i, i + LOTE).map((f) => ({
+  for (let i = 0; i < revisadas.length; i += LOTE) {
+    const trozo = revisadas.slice(i, i + LOTE).map((f) => ({
       batch_id: batch.id,
       row_number: f.line,
       status: f.status,
@@ -248,6 +259,9 @@ export async function validateImportFile(formData: FormData): Promise<ValidateIm
       resolved_price: f.price,
       resolved_currency: f.currency,
       resolved_unit: f.unit,
+      // 034 — la lonja resuelta por el SERVIDOR. Es lo que escribirá
+      // `commit_market_import`; el navegador no interviene.
+      resolved_lonja: f.lonja,
       resolved_country: f.country,
       resolved_region: f.region,
       resolved_min_price: f.minPrice,
@@ -366,9 +380,9 @@ export async function getImportRows(
     .from('market_import_rows')
     .select(
       `row_number, status, resolved_recorded_at, resolved_price, resolved_currency,
-       resolved_unit, validation_errors,
+       resolved_unit, resolved_lonja, validation_errors,
        market:markets!market_import_rows_resolved_market_id_fkey(name),
-       product:products!market_import_rows_resolved_product_id_fkey(name, lonja)`,
+       product:products!market_import_rows_resolved_product_id_fkey(name)`,
       { count: 'exact' },
     )
     .eq('batch_id', batchId)
@@ -380,16 +394,16 @@ export async function getImportRows(
 
   const rows: ImportRowView[] = ((data ?? []) as unknown as Array<Record<string, unknown>>).map((r) => {
     const market = (Array.isArray(r.market) ? r.market[0] : r.market) as { name: string } | null
-    const product = (Array.isArray(r.product) ? r.product[0] : r.product) as
-      | { name: string; lonja: string | null }
-      | null
+    const product = (Array.isArray(r.product) ? r.product[0] : r.product) as { name: string } | null
 
     return {
       line: r.row_number as number,
       status: r.status as ImportRowStatus,
       marketName: market?.name ?? null,
       productName: product?.name ?? null,
-      lonja: product?.lonja ?? null,
+      // 034 — la lonja que se va a ESCRIBIR, no la del producto. Son cosas
+      // distintas desde que una referencia puede cotizar en varias plazas.
+      lonja: (r.resolved_lonja as string | null) ?? null,
       recordedAt: (r.resolved_recorded_at as string | null) ?? null,
       price: r.resolved_price != null ? Number(r.resolved_price) : null,
       currency: (r.resolved_currency as string | null) ?? null,
