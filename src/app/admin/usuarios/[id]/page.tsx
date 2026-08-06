@@ -15,6 +15,7 @@ import { AssignOrganizationCard } from '@/components/admin/users/AssignOrganizat
 import { UserProfileForm } from '@/components/admin/users/UserProfileForm'
 import { PlatformAccessCard } from '@/components/admin/users/PlatformAccessCard'
 import { ADMIN_AUDIT_ACTION_LABELS, isAdminAuditAction } from '@/lib/audit/actions'
+import { assignmentSectionHelp, assignmentSectionTitle } from '@/lib/users/assignment-copy'
 import { formatChartDateLong } from '@/lib/markets/chart-dates'
 import { statusLabel } from '@/lib/identity'
 
@@ -103,11 +104,15 @@ export default async function UsuarioDetailPage({ params }: { params: Promise<{ 
         </div>
       </MiraSectionCard>
 
-      {/* ── Asignación ── */}
-      <MiraSectionCard icon={UserPlus} title="Asignar a una organización">
+      {/* ── Asignación ──
+          El título y el texto dependen de si ya pertenece a alguna
+          organización: este bloque SIEMPRE crea una pertenencia nueva, y con un
+          usuario que ya está en una empresa «Asignar a una organización»
+          invitaba a usarlo para moverlo de sitio. Ver `lib/users/assignment-copy.ts`. */}
+      <MiraSectionCard icon={UserPlus} title={assignmentSectionTitle(user.memberships.length)}>
         <div className="space-y-4 p-4">
           <p className="text-xs text-slate-500">
-            Añade a esta persona a una empresa existente. No crea cuentas ni envía invitaciones.
+            {assignmentSectionHelp(user.memberships.length)}
           </p>
           <AssignOrganizationCard
             userId={user.id}

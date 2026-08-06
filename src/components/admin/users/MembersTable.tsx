@@ -20,6 +20,7 @@ import {
 import { normalizeCommercialProfile, organizationRoleLabel, statusLabel } from '@/lib/identity'
 import { formatChartDateLong } from '@/lib/markets/chart-dates'
 import { miraField } from '@/lib/miraButtons'
+import { cn } from '@/lib/utils'
 
 interface Props {
   members: OrgMember[]
@@ -34,6 +35,33 @@ function fullName(m: OrgMember) {
   const u = m.user
   return [u?.first_name, u?.last_name].filter(Boolean).join(' ') || '—'
 }
+
+/**
+ * Reparto de las siete columnas.
+ *
+ * ── El problema que se corrige ──────────────────────────────────────────────
+ *
+ * TODAS las celdas llevaban `whitespace-nowrap`, así que la tabla exigía el
+ * ancho de su contenido más largo —un correo completo— y aparecía scroll
+ * horizontal incluso en un monitor grande.
+ *
+ * Ahora el `nowrap` queda SOLO donde es necesario: los dos desplegables, la
+ * fecha y los iconos de acción, que partidos quedan ilegibles. Nombre, correo y
+ * capacidades pueden envolver en dos líneas, que es preferible a un scroll.
+ *
+ * Los anchos son porcentajes con `table-fixed`: reparten el espacio disponible
+ * en lugar de imponer un mínimo. Nombre y correo se llevan casi la mitad, que
+ * es lo que se lee de verdad.
+ */
+const COLUMNAS: { label: string; width: string; nowrap?: boolean }[] = [
+  { label: 'Miembro',       width: 'w-[22%]' },
+  { label: 'Email',         width: 'w-[24%]' },
+  { label: 'Rol',           width: 'w-[13%]', nowrap: true },
+  { label: 'Pertenencia',   width: 'w-[14%]', nowrap: true },
+  { label: 'Capacidades',   width: 'w-[15%]' },
+  { label: 'Incorporación', width: 'w-[9%]',  nowrap: true },
+  { label: '',              width: 'w-[3%]',  nowrap: true },
+]
 
 /**
  * Equipo de una organización (039).
@@ -63,20 +91,30 @@ export function MembersTable({ members, commercialProfile, actorId }: Props) {
   }
 
   return (
+    // `overflow-x-auto` se conserva como red de seguridad para pantallas
+    // estrechas: solo aparece scrollbar si el contenido no cabe. En escritorio
+    // ya no se dispara porque se ha quitado el `whitespace-nowrap` que forzaba
+    // a la tabla a ser más ancha que su contenedor.
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      {/* Sin `min-width`: la tabla se adapta al contenedor en lugar de imponerle
+          un ancho fijo. Los porcentajes de `COLUMNAS` son una sugerencia de
+          reparto, no un mínimo. */}
+      <table className="w-full table-fixed text-sm">
         <thead>
           <tr className="border-b border-mira-line bg-mira-canvas/60">
-            {['Miembro', 'Email', 'Rol', 'Pertenencia', 'Capacidades', 'Incorporación', ''].map(
-              (h, i) => (
-                <th
-                  key={i}
-                  className="whitespace-nowrap px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500"
-                >
-                  {h}
-                </th>
-              ),
-            )}
+            {COLUMNAS.map((c) => (
+              <th
+                key={c.label || 'acciones'}
+                scope="col"
+                className={cn(
+                  'px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500',
+                  c.width,
+                  c.nowrap && 'whitespace-nowrap',
+                )}
+              >
+                {c.label || <span className="sr-only">Acciones</span>}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody className="divide-y divide-mira-line">
@@ -125,21 +163,23 @@ function MemberRow({
   return (
     <>
       <tr className={`transition-colors hover:bg-mira-canvas/70 ${pending ? 'opacity-50' : ''}`}>
-        <td className="whitespace-nowrap px-4 py-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-mira-magenta-soft text-xs font-bold text-mira-magenta">
+        <td className="px-4 py-3 align-top">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-mira-magenta-soft text-xs font-bold text-mira-magenta">
               {(member.user?.first_name ?? member.user?.email)?.[0]?.toUpperCase() ?? '?'}
             </div>
-            <span className="text-sm font-bold text-mira-ink">{fullName(member)}</span>
+            <span className="min-w-0 text-sm font-bold text-mira-ink">{fullName(member)}</span>
           </div>
         </td>
 
-        <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-600">
+        {/* El correo es el valor más largo de la fila: `break-words` lo parte en
+            dos líneas antes que ensanchar la tabla entera. */}
+        <td className="px-4 py-3 align-top text-sm break-words text-slate-600">
           {member.user?.email || '—'}
         </td>
 
         {/* ── Rol ── */}
-        <td className="whitespace-nowrap px-4 py-3">
+        <td className="whitespace-nowrap px-4 py-3 align-top">
           {esPropietario ? (
             <span
               className="inline-flex items-center gap-1 rounded-lg bg-violet-100 px-2 py-1 text-xs font-bold text-violet-700"
@@ -156,7 +196,7 @@ function MemberRow({
               onChange={(e) =>
                 ejecutar(() => updateMembershipRole(member.id, e.target.value as AssignableOrgRole))
               }
-              className={`${miraField} w-auto py-1.5 text-xs disabled:bg-mira-canvas disabled:text-slate-400`}
+              className={`${miraField} w-full px-2 py-1.5 text-xs disabled:bg-mira-canvas disabled:text-slate-400`}
             >
               <option value="admin">{ASSIGNABLE_ORG_ROLE_LABELS.admin}</option>
               <option value="member">{ASSIGNABLE_ORG_ROLE_LABELS.member}</option>
@@ -165,7 +205,7 @@ function MemberRow({
         </td>
 
         {/* ── Estado de la pertenencia ── */}
-        <td className="whitespace-nowrap px-4 py-3">
+        <td className="whitespace-nowrap px-4 py-3 align-top">
           {esPropietario ? (
             <span className="text-xs text-slate-500">{statusLabel(member.status)}</span>
           ) : (
@@ -178,7 +218,7 @@ function MemberRow({
                   updateMembershipStatus(member.id, e.target.value as AssignableMembershipStatus),
                 )
               }
-              className={`${miraField} w-auto py-1.5 text-xs disabled:bg-mira-canvas disabled:text-slate-400`}
+              className={`${miraField} w-full px-2 py-1.5 text-xs disabled:bg-mira-canvas disabled:text-slate-400`}
             >
               <option value="active">{MEMBERSHIP_STATUS_LABELS.active}</option>
               <option value="suspended">{MEMBERSHIP_STATUS_LABELS.suspended}</option>
@@ -187,8 +227,8 @@ function MemberRow({
         </td>
 
         {/* ── Capacidades ── */}
-        <td className="whitespace-nowrap px-4 py-3">
-          <div className="flex items-center gap-3">
+        <td className="px-4 py-3 align-top">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <label className="flex items-center gap-1.5 text-xs text-slate-600">
               <input
                 type="checkbox"
@@ -228,11 +268,11 @@ function MemberRow({
           </div>
         </td>
 
-        <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-500">
+        <td className="whitespace-nowrap px-4 py-3 align-top text-xs text-slate-500">
           {formatChartDateLong(member.joined_at.slice(0, 10))}
         </td>
 
-        <td className="whitespace-nowrap px-4 py-3">
+        <td className="whitespace-nowrap px-4 py-3 align-top">
           {!esPropietario && (
             <button
               onClick={() => {

@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, UserPlus } from 'lucide-react'
+import { AlertTriangle, Loader2, UserPlus } from 'lucide-react'
 import { assignUserToOrganization } from '@/lib/actions/user-admin'
 import {
   ASSIGNABLE_ORG_ROLE_LABELS,
@@ -10,6 +10,11 @@ import {
   type AssignableOrgRole,
 } from '@/lib/auth/user-admin'
 import { commercialProfileLabel, normalizeCommercialProfile } from '@/lib/identity'
+import {
+  OWNER_ASSIGNMENT_ACKNOWLEDGEMENT,
+  OWNER_ASSIGNMENT_WARNING,
+  requiresOwnerConfirmation,
+} from '@/lib/users/assignment-copy'
 import { miraBtn, miraField } from '@/lib/miraButtons'
 import type { AssignableOrganization } from '@/lib/actions/users'
 
@@ -58,6 +63,10 @@ export function AssignOrganizationCard({
   const [canSell, setCanSell] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [ok, setOk] = useState<string | null>(null)
+  // Confirmación reforzada de la propiedad. Se reinicia al cambiar de rol o de
+  // organización: una casilla marcada que sobrevive a un cambio de contexto ya
+  // no confirma lo que dice confirmar.
+  const [ownerAck, setOwnerAck] = useState(false)
 
   const disponibles = useMemo(
     () => organizations.filter((o) => !currentOrganizationIds.includes(o.id)),
@@ -74,6 +83,12 @@ export function AssignOrganizationCard({
   // el índice único de la base rechazaría igualmente.
   const puedeSerPropietario = !!org && !org.hasOwner
 
+  // Confirmación reforzada SOLO para `owner`: es la única asignación que el
+  // panel no puede deshacer después. Pedirla también en `admin` o `member` la
+  // convertiría en un trámite que se marca sin leer.
+  const exigeConfirmacion = requiresOwnerConfirmation(role)
+  const bloqueadoPorConfirmacion = exigeConfirmacion && !ownerAck
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
@@ -81,6 +96,10 @@ export function AssignOrganizationCard({
 
     if (!orgId) {
       setError('Selecciona una organización.')
+      return
+    }
+    if (bloqueadoPorConfirmacion) {
+      setError('Marca la casilla de confirmación para asignar la propiedad.')
       return
     }
 
@@ -101,6 +120,7 @@ export function AssignOrganizationCard({
         setRole('member')
         setCanBuy(false)
         setCanSell(false)
+        setOwnerAck(false)
         router.refresh()
       } else {
         setError(r.error)
@@ -139,6 +159,7 @@ export function AssignOrganizationCard({
               setRole('member')
               setCanBuy(false)
               setCanSell(false)
+              setOwnerAck(false)
             }}
             className={miraField}
           >
@@ -159,7 +180,10 @@ export function AssignOrganizationCard({
           <select
             id="asignar-rol"
             value={role}
-            onChange={(e) => setRole(e.target.value as AssignableOrgRole)}
+            onChange={(e) => {
+              setRole(e.target.value as AssignableOrgRole)
+              setOwnerAck(false)
+            }}
             disabled={!org}
             className={`${miraField} disabled:bg-mira-canvas disabled:text-slate-400`}
           >
@@ -210,6 +234,32 @@ export function AssignOrganizationCard({
         </fieldset>
       </div>
 
+      {/* Advertencia de propiedad. Va ANTES del resumen y del botón: quien
+          concede la propiedad tiene que leerlo antes de pulsar, no descubrirlo
+          al intentar revertirlo. No cambia ninguna protección — el rol `owner`
+          solo se ofrece si la organización no tiene propietario, y el trigger
+          de 023 sigue siendo quien lo impone. */}
+      {exigeConfirmacion && org && (
+        <div
+          role="alert"
+          className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3"
+        >
+          <p className="flex items-start gap-2 text-xs font-semibold text-amber-900">
+            <AlertTriangle size={15} className="mt-0.5 shrink-0" aria-hidden="true" />
+            {OWNER_ASSIGNMENT_WARNING}
+          </p>
+          <label className="flex items-start gap-2 text-xs font-bold text-amber-900">
+            <input
+              type="checkbox"
+              checked={ownerAck}
+              onChange={(e) => setOwnerAck(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-amber-400 text-amber-700 focus:ring-amber-500/40"
+            />
+            {OWNER_ASSIGNMENT_ACKNOWLEDGEMENT}
+          </label>
+        </div>
+      )}
+
       {/* Impacto, en palabras, antes de confirmar. */}
       {org && (
         <div className="rounded-xl border border-mira-line bg-mira-canvas/50 px-4 py-3 text-xs text-slate-600">
@@ -241,7 +291,11 @@ export function AssignOrganizationCard({
       )}
 
       <div className="flex flex-wrap items-center gap-3">
-        <button type="submit" disabled={pending || !orgId} className={miraBtn.primary}>
+        <button
+          type="submit"
+          disabled={pending || !orgId || bloqueadoPorConfirmacion}
+          className={`${miraBtn.primary} disabled:opacity-40`}
+        >
           {pending ? (
             <>
               <Loader2 size={14} className="animate-spin" /> Asignando…

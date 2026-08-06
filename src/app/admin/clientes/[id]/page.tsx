@@ -54,9 +54,14 @@ export default async function ClienteDetailPage({ params }: { params: Promise<{ 
   })
 
   return (
-    <div className="w-full max-w-4xl space-y-6 p-4 md:p-6 xl:p-8">
+    // El ancho ya NO se fija aquí: la tabla de miembros tiene 7 columnas y
+    // dentro de `max-w-4xl` (896 px) no cabía, así que aparecía scroll
+    // horizontal incluso en escritorio. El límite estrecho se aplica ahora al
+    // contenido que sí lo necesita —cabecera y tarjetas de formulario— y el
+    // bloque de miembros usa un contenedor más ancho.
+    <div className="w-full space-y-6 p-4 md:p-6 xl:p-8">
       {/* Cabecera */}
-      <div>
+      <div className="max-w-4xl">
         <Link
           href="/admin/clientes"
           className="mb-4 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 transition-colors hover:text-mira-magenta"
@@ -89,7 +94,7 @@ export default async function ClienteDetailPage({ params }: { params: Promise<{ 
         </div>
       </div>
 
-      <div className="space-y-6">
+      <div className="max-w-4xl space-y-6">
         <ClientLifecycleCard
           organizationId={org.id}
           status={org.status}
@@ -184,7 +189,13 @@ export default async function ClienteDetailPage({ params }: { params: Promise<{ 
           </div>
         </section>
 
-        {/* Miembros */}
+      </div>
+
+      {/* Miembros — fuera del contenedor estrecho.
+          Siete columnas no caben en 896 px. Con `max-w-6xl` (1152 px) entran
+          holgadas en escritorio y el scroll horizontal queda reservado a
+          pantallas pequeñas, que es donde es inevitable. */}
+      <div className="max-w-6xl">
         <section className="mira-card overflow-hidden rounded-2xl">
           <div className="flex items-center justify-between border-b border-mira-line px-5 py-3.5">
             <div className="flex items-center gap-2">
