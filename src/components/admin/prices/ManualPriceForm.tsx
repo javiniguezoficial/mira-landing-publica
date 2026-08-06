@@ -7,6 +7,7 @@ import { MiraFormCard } from '@/components/mira/MiraFormCard'
 import { miraBtn, miraField, miraLabel } from '@/lib/miraButtons'
 import { createPriceManual, type PricingHierarchy, type ManualPriceFormData } from '@/lib/actions/prices'
 import { PricingHierarchySelects } from './PricingHierarchySelects'
+import { isNonMonetaryUnit } from '@/lib/utils'
 
 const SALE_CURRENCIES = ['EUR', 'USD', 'GBP']
 
@@ -29,6 +30,10 @@ export function ManualPriceForm({ hierarchy }: { hierarchy: PricingHierarchy }) 
   const [avgPrice, setAvgPrice] = useState('')
   const [sourceName, setSourceName] = useState('')
   const [notes, setNotes] = useState('')
+
+  // 037 — la unidad decide si esta fila lleva moneda. `%` y `Unidades` —los
+  // indicadores del INE y los índices FAO— no están en ninguna divisa.
+  const esNoMonetaria = isNonMonetaryUnit(unit)
 
   function handleProductChange(id: string, productUnit: string | null) {
     setProductId(id)
@@ -54,7 +59,8 @@ export function ManualPriceForm({ hierarchy }: { hierarchy: PricingHierarchy }) 
       recorded_at: recordedAt,
       price: priceNum,
       unit: unit.trim(),
-      currency: currency || 'EUR',
+      // 037 — con «%» o «Unidades» no se envía moneda: no existe ninguna.
+      currency: esNoMonetaria ? '' : (currency || 'EUR'),
       country: country.trim() || 'ES',
       region: region.trim() || undefined,
       min_price: num(minPrice),
@@ -118,13 +124,32 @@ export function ManualPriceForm({ hierarchy }: { hierarchy: PricingHierarchy }) 
           </div>
           <div>
             <label className={miraLabel}>Unidad <span className="text-red-500">*</span></label>
-            <input required value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="kg, ton, MWh…" className={`${miraField} font-mono`} />
+            <input required value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="kg, ton, MWh, %, Unidades…" className={`${miraField} font-mono`} />
           </div>
           <div>
             <label className={miraLabel}>Moneda</label>
-            <select value={currency} onChange={(e) => setCurrency(e.target.value)} className={miraField}>
-              {SALE_CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            {/*
+              037 — un porcentaje o un índice NO llevan moneda, y la restricción
+              de la base lo exige. El selector se apaga en cuanto la unidad es
+              «%» o «Unidades»: es más honesto que dejar elegir EUR y devolver un
+              error al guardar. El servidor lo vuelve a comprobar de todas
+              formas — esto es comodidad, no la barrera.
+            */}
+            <select
+              value={esNoMonetaria ? '' : currency}
+              onChange={(e) => setCurrency(e.target.value)}
+              disabled={esNoMonetaria}
+              className={`${miraField} disabled:cursor-not-allowed disabled:bg-mira-canvas disabled:text-slate-400`}
+            >
+              {esNoMonetaria
+                ? <option value="">No aplica</option>
+                : SALE_CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
+            {esNoMonetaria && (
+              <p className="mt-1 text-[11px] text-slate-400">
+                «{unit.trim()}» es una magnitud sin divisa.
+              </p>
+            )}
           </div>
           <div>
             <label className={miraLabel}>País</label>

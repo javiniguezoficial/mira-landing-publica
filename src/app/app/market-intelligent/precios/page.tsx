@@ -12,8 +12,14 @@ import { EmptyState } from '@/components/shared/EmptyState'
 import { ModuleDisabledNotice } from '@/components/shared/ModuleDisabledNotice'
 import { MarketPeriodSelector } from '@/components/app/markets/MarketPeriodSelector'
 import { isModuleEnabled } from '@/lib/queries/organization-modules'
-import { MARKET_PERIOD_PARAM, resolveMarketPeriod } from '@/lib/markets/period'
+import {
+  MARKET_FROM_PARAM,
+  MARKET_PERIOD_PARAM,
+  MARKET_TO_PARAM,
+  resolveMarketPeriod,
+} from '@/lib/markets/period'
 import { miraBtn, miraField, miraLabel } from '@/lib/miraButtons'
+import { formatChartDateLong } from '@/lib/markets/chart-dates'
 import { formatNumber, formatPrice, unitLabel } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
@@ -40,10 +46,14 @@ type SP = {
   page?: string
   /** 2.3 — periodo rápido. Convive con `date_from`/`date_to`, que mandan. */
   period?: string
+  /** 037 — extremos del rango personalizado. */
+  from?: string
+  to?: string
 }
 
+// 037 — fecha civil, sin pasar por UTC. Ver `lib/markets/chart-dates.ts`.
 function formatDate(d: string) {
-  return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+  return formatChartDateLong(d)
 }
 
 function buildUrl(base: string, params: Record<string, string | number | undefined>) {
@@ -77,7 +87,16 @@ export default async function ClientPreciosPage({ searchParams }: { searchParams
   // 2.3 — el periodo fija el límite INFERIOR de la consulta. Un `date_from`
   // escrito a mano en la URL manda sobre él: quien pide un rango exacto sabe lo
   // que quiere, y el selector rápido es un atajo, no una jaula.
-  const periodo = resolveMarketPeriod(sp[MARKET_PERIOD_PARAM])
+  //
+  // 037 — con `period=CUSTOM` la ventana la fijan `from` y `to`, ambos
+  // inclusivos. Un rango mal escrito cae al periodo por defecto y el error se
+  // enseña junto al selector; nunca abre el histórico entero.
+  const periodo = resolveMarketPeriod(
+    sp[MARKET_PERIOD_PARAM],
+    new Date(),
+    sp[MARKET_FROM_PARAM],
+    sp[MARKET_TO_PARAM],
+  )
 
   const filters: PriceListFilters = {
     strategic_market_id: sp.strategic_market_id || undefined,
@@ -92,7 +111,9 @@ export default async function ClientPreciosPage({ searchParams }: { searchParams
     region: sp.region || undefined,
     unit: sp.unit || undefined,
     date_from: sp.date_from || periodo.from || undefined,
-    date_to: sp.date_to || undefined,
+    // 037 — el techo del rango personalizado. Sigue mandando un `date_to`
+    // escrito a mano: quien pide un rango exacto sabe lo que quiere.
+    date_to: sp.date_to || periodo.to || undefined,
     country: sp.country || undefined,
     currency: sp.currency || undefined,
   }
@@ -124,9 +145,12 @@ export default async function ClientPreciosPage({ searchParams }: { searchParams
       {/* Periodo rápido, por encima del formulario: es el filtro que más se
           toca y no debe obligar a pulsar «Buscar». */}
       <MarketPeriodSelector
-        active={periodo.period}
+        active={periodo.requested}
         basePath="/app/market-intelligent/precios"
         searchParams={sp as Record<string, string | undefined>}
+        customFrom={periodo.customFromInput}
+        customTo={periodo.customToInput}
+        customError={periodo.customError}
       />
 
       <form
@@ -136,8 +160,15 @@ export default async function ClientPreciosPage({ searchParams }: { searchParams
         className="mira-card space-y-4 rounded-2xl p-4"
       >
         {/* El periodo viaja con el formulario: pulsar «Buscar» no debe
-            devolverlo silenciosamente al valor por defecto. */}
-        <input type="hidden" name={MARKET_PERIOD_PARAM} value={periodo.period} />
+            devolverlo silenciosamente al valor por defecto. Con un rango a
+            medida viajan también sus dos extremos, por lo mismo. */}
+        <input type="hidden" name={MARKET_PERIOD_PARAM} value={periodo.requested} />
+        {periodo.requested === 'CUSTOM' && (
+          <>
+            <input type="hidden" name={MARKET_FROM_PARAM} value={periodo.customFromInput} />
+            <input type="hidden" name={MARKET_TO_PARAM} value={periodo.customToInput} />
+          </>
+        )}
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <PricingHierarchySelects hierarchy={hierarchy} values={sp} />
@@ -201,7 +232,12 @@ export default async function ClientPreciosPage({ searchParams }: { searchParams
             title="Evolución de precios"
             subtitle="Precio promedio diario según los filtros aplicados"
           >
-            <PriceEvolutionChart series={insights.series} unit={insights.unit} currency={insights.currency} />
+            <PriceEvolutionChart
+              series={insights.series}
+              unit={insights.unit}
+              currency={insights.currency}
+              mixed={insights.mixedUnit || insights.mixedCurrency}
+            />
           </MiraChartCard>
 
           <MiraTable

@@ -12,11 +12,16 @@ import { MarketPeriodSelector } from '@/components/app/markets/MarketPeriodSelec
 import { FavoriteMarketButton } from '@/components/app/markets/FavoriteMarketButton'
 import { isModuleEnabled } from '@/lib/queries/organization-modules'
 import { getMarketAccessContext } from '@/lib/queries/market-access'
-import { MARKET_PERIOD_PARAM, resolveMarketPeriod } from '@/lib/markets/period'
-import { LONJA_PARAM, resolveLonja } from '@/lib/markets/lonja'
+import {
+  MARKET_FROM_PARAM,
+  MARKET_PERIOD_PARAM,
+  MARKET_TO_PARAM,
+  resolveMarketPeriod,
+} from '@/lib/markets/period'
+import { LONJA_PARAM, LONJA_FILTER_LABEL, resolveLonja } from '@/lib/markets/lonja'
 import { LonjaFilter } from '@/components/app/markets/LonjaFilter'
 import { getProductLonjas } from '@/lib/queries/lonjas'
-import { formatNumber, currencySymbol, unitLabel } from '@/lib/utils'
+import { formatNumber, isNonMonetaryUnit, magnitudeLabel } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,9 +56,19 @@ export default async function ProductDetailPage({
   const product = await getProductDetail(marketSlug, productSlug)
   if (!product) notFound()
 
-  // 2.3 — el periodo llega por URL y se resuelve UNA vez. `from` va directo a la
-  // consulta, así que el recorte lo hace PostgreSQL.
-  const periodo = resolveMarketPeriod(sp[MARKET_PERIOD_PARAM])
+  // 2.3 — el periodo llega por URL y se resuelve UNA vez. `from` y `to` van
+  // directos a la consulta, así que el recorte lo hace PostgreSQL: nunca se trae
+  // el histórico al navegador para filtrarlo después.
+  //
+  // 037 — con `period=CUSTOM` la ventana la fijan `from` y `to`. Un rango mal
+  // escrito NO abre el histórico entero: `resolveMarketPeriod` cae al periodo por
+  // defecto y devuelve el error para enseñarlo junto al selector.
+  const periodo = resolveMarketPeriod(
+    sp[MARKET_PERIOD_PARAM],
+    new Date(),
+    sp[MARKET_FROM_PARAM],
+    sp[MARKET_TO_PARAM],
+  )
 
   // 034 — de qué lonjas hay precios para ESTA referencia.
   const lonjas = await getProductLonjas(product.id)
@@ -72,9 +87,21 @@ export default async function ProductDetailPage({
   const lonjaActiva = lonjaPedida || (lonjas.length > 0 ? lonjas[0] : '')
 
   const [priceStats, { favoriteMarketIds }] = await Promise.all([
-    getProductPriceStats(product.id, periodo.from, lonjaActiva || null),
+    getProductPriceStats(product.id, periodo.from, lonjaActiva || null, periodo.to),
     getMarketAccessContext(),
   ])
+
+  // 037 — la magnitud se compone de las DOS columnas: «€/100 kg», «%»,
+  // «Unidades». Nunca se supone euros cuando no hay moneda.
+  const magnitud = magnitudeLabel(priceStats?.currency ?? null, priceStats?.unit ?? null)
+
+  // `%` y `Unidades` no son precios: son un porcentaje o un índice. Cambia el
+  // rótulo de la tarjeta, no el cálculo.
+  const esIndicador = isNonMonetaryUnit(priceStats?.unit)
+
+  // Con un rango a medida la etiqueta del periodo no es una letra: se recorta la
+  // descripción para que quepa en el rótulo de la tarjeta.
+  const etiquetaPeriodo = periodo.period === 'CUSTOM' ? 'rango' : periodo.period
 
   const changePositive = (priceStats?.changePeriod ?? 0) > 0
   const changeNeutral  = (priceStats?.changePeriod ?? 0) === 0
@@ -134,12 +161,19 @@ export default async function ProductDetailPage({
               basePath={`/app/market-intelligent/${marketSlug}/${productSlug}`}
               searchParams={sp}
               requireSelection
+              // Aquí el selector SÍ se llama «Lonja»: sus valores incluyen
+              // «Ebro», «Europa» y «Naciones Unidas», que no son países. El
+              // cambio a «País» es solo de la portada (037).
+              label={LONJA_FILTER_LABEL}
             />
           )}
           <MarketPeriodSelector
-            active={periodo.period}
+            active={periodo.requested}
             basePath={`/app/market-intelligent/${marketSlug}/${productSlug}`}
             searchParams={sp}
+            customFrom={periodo.customFromInput}
+            customTo={periodo.customToInput}
+            customError={periodo.customError}
           />
         </div>
       </div>
@@ -156,22 +190,22 @@ export default async function ProductDetailPage({
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <MiraKpiCard
-              label="Precio actual"
+              label={esIndicador ? 'Valor actual' : 'Precio actual'}
               value={formatNumber(priceStats.current, 2)}
-              sublabel={`${currencySymbol(priceStats.currency)} / ${unitLabel(priceStats.unit)}`}
+              sublabel={magnitud}
               icon={TrendingUp}
               tint="magenta"
               delta={!changeNeutral ? { value: `${formatNumber(Math.abs(priceStats.changePeriod), 2)}%`, up: changePositive } : undefined}
             />
-            <MiraKpiCard label={`Media · ${periodo.period}`} value={formatNumber(priceStats.avgPeriod, 2)} sublabel={`${currencySymbol(priceStats.currency)} / ${unitLabel(priceStats.unit)}`} icon={BarChart3} tint="violet" />
-            <MiraKpiCard label={`Mínimo · ${periodo.period}`} value={formatNumber(priceStats.minPeriod, 2)} sublabel={`${currencySymbol(priceStats.currency)} / ${unitLabel(priceStats.unit)}`} icon={TrendingDown} tint="emerald" />
-            <MiraKpiCard label={`Máximo · ${periodo.period}`} value={formatNumber(priceStats.maxPeriod, 2)} sublabel={`${currencySymbol(priceStats.currency)} / ${unitLabel(priceStats.unit)}`} icon={TrendingUp} tint="pink" />
+            <MiraKpiCard label={`Media · ${etiquetaPeriodo}`} value={formatNumber(priceStats.avgPeriod, 2)} sublabel={magnitud} icon={BarChart3} tint="violet" />
+            <MiraKpiCard label={`Mínimo · ${etiquetaPeriodo}`} value={formatNumber(priceStats.minPeriod, 2)} sublabel={magnitud} icon={TrendingDown} tint="emerald" />
+            <MiraKpiCard label={`Máximo · ${etiquetaPeriodo}`} value={formatNumber(priceStats.maxPeriod, 2)} sublabel={magnitud} icon={TrendingUp} tint="pink" />
           </div>
 
           <MiraChartCard
             icon={BarChart3}
             title="Evolución histórica"
-            subtitle={`${periodo.description} · ${priceStats.history.length} registros · ${currencySymbol(priceStats.currency)}/${unitLabel(priceStats.unit)}`}
+            subtitle={`${periodo.description} · ${priceStats.history.length} registros · ${magnitud}`}
           >
             <PriceChart data={priceStats.history} unit={priceStats.unit} currency={priceStats.currency} />
             <p className="mt-3 text-center text-[10px] text-slate-400">— Precio · - - Mín/Máx</p>
@@ -187,8 +221,10 @@ export default async function ProductDetailPage({
             title="Sin datos en este periodo"
             description={
               periodo.period === 'ALL'
-                ? 'No hay datos de precio disponibles para esta referencia.'
-                : `No hay registros de precio en ${periodo.description.toLowerCase()}. Prueba con un periodo más amplio o con ALL.`
+                ? 'No hay datos disponibles para esta referencia.'
+                : periodo.period === 'CUSTOM'
+                  ? `No hay registros en el rango seleccionado (${periodo.description.toLowerCase()}). Amplía las fechas o prueba con ALL.`
+                  : `No hay registros en ${periodo.description.toLowerCase()}. Prueba con un periodo más amplio o con ALL.`
             }
           />
         </div>

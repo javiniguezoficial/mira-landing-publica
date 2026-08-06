@@ -582,3 +582,220 @@ describe('summarize', () => {
     expect(summarize([])).toMatchObject({ totalRows: 0, validRows: 0 })
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INDICADORES SIN MONEDA (037)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// El catálogo tiene 16 referencias que NO son precios y por eso no se podían
+// cargar: 12 índices FAO (`unidad`) y 4 indicadores del INE (`%`). La moneda era
+// obligatoria, así que había que decirle a la base que el 2,5 % está en euros.
+//
+// La regla que se fija aquí es simétrica y la decide la UNIDAD:
+//
+//   unidad no monetaria  →  la moneda DEBE faltar
+//   cualquier otra       →  la moneda es obligatoria
+
+/** IPC: porcentaje, sin moneda. Configurado en la ficha como «%». */
+const IPC: CatalogProduct = {
+  productId: 'p-ipc', productSlug: 'ipc', productName: 'Índice de Precios de Consumo (IPC)',
+  marketId: 'm-ipc', marketSlug: 'ipc', marketName: 'IPC',
+  lonja: 'España', unit: '%',
+}
+/** Índice FAO: adimensional, sin moneda. La ficha dice «unidad». */
+const FAO: CatalogProduct = {
+  productId: 'p-fao', productSlug: 'food-price-index', productName: 'Food Price Index',
+  marketId: 'm-fao', marketSlug: 'fao-index', marketName: 'FAO Index',
+  lonja: 'Naciones Unidas', unit: 'unidad',
+}
+
+function catalogoIndicadores(overrides: Partial<ValidationCatalog> = {}): ValidationCatalog {
+  return {
+    products: new Map([
+      ['cereales::trigo', TRIGO],
+      ['ipc::ipc', IPC],
+      ['fao-index::food-price-index', FAO],
+    ]),
+    marketSlugs: new Set(['cereales', 'ipc', 'fao-index']),
+    existingKeys: new Set<string>(),
+    ...overrides,
+  }
+}
+
+function filaIpc(over: Record<string, string> = {}): Record<string, string> {
+  return {
+    market_slug: 'ipc',
+    product_slug: 'ipc',
+    recorded_at: '2026-07-27',
+    price: '2,5',
+    currency: '',
+    unit: '%',
+    ...over,
+  }
+}
+
+function filaFao(over: Record<string, string> = {}): Record<string, string> {
+  return {
+    market_slug: 'fao-index',
+    product_slug: 'food-price-index',
+    recorded_at: '2026-07-27',
+    price: '123,45',
+    currency: '',
+    unit: 'Unidades',
+    ...over,
+  }
+}
+
+describe('037 — se aceptan los indicadores sin moneda', () => {
+  it('porcentaje: price 2,5 · currency vacía · unit «%»', () => {
+    const r = validateRow(2, filaIpc(), catalogoIndicadores(), SEMANA, new Set())
+    expect(r.errors).toEqual([])
+    expect(r.status).toBe('valid')
+    expect(r.currency).toBeNull()
+    expect(r.unit).toBe('%')
+    expect(r.price).toBe(2.5)
+  })
+
+  it('índice: price 123,45 · currency vacía · unit «Unidades»', () => {
+    const r = validateRow(2, filaFao(), catalogoIndicadores(), SEMANA, new Set())
+    expect(r.errors).toEqual([])
+    expect(r.status).toBe('valid')
+    expect(r.currency).toBeNull()
+    expect(r.unit).toBe('Unidades')
+    expect(r.price).toBe(123.45)
+  })
+
+  it('las tres grafías del índice canonizan a «Unidades»', () => {
+    for (const escrita of ['Unidades', 'unidades', 'unidad']) {
+      const r = validateRow(2, filaFao({ unit: escrita }), catalogoIndicadores(), SEMANA, new Set())
+      expect(r.errors, escrita).toEqual([])
+      expect(r.unit, escrita).toBe('Unidades')
+    }
+  })
+
+  it('la unidad se hereda de la ficha si el archivo la deja vacía', () => {
+    const r = validateRow(2, filaIpc({ unit: '' }), catalogoIndicadores(), SEMANA, new Set())
+    expect(r.errors).toEqual([])
+    expect(r.unit).toBe('%')
+    expect(r.currency).toBeNull()
+  })
+})
+
+describe('037 — se rechazan las combinaciones imposibles', () => {
+  // Quien escribe «EUR» en la fila del IPC se ha equivocado de columna o de
+  // fila. Ignorarlo en silencio dejaría el error sin ver.
+  it('EUR + «%» se RECHAZA', () => {
+    const r = validateRow(2, filaIpc({ currency: 'EUR' }), catalogoIndicadores(), SEMANA, new Set())
+    expect(r.status).toBe('invalid')
+    const e = r.errors.find((x) => x.column === 'currency')
+    expect(e?.message).toContain('no lleva moneda')
+  })
+
+  it('USD + «Unidades» se RECHAZA', () => {
+    const r = validateRow(2, filaFao({ currency: 'USD' }), catalogoIndicadores(), SEMANA, new Set())
+    expect(r.status).toBe('invalid')
+    expect(r.errors.some((x) => x.column === 'currency')).toBe(true)
+  })
+
+  // La moneda también puede colarse por el precio o por la unidad combinada.
+  it('un precio con símbolo sobre un porcentaje también se RECHAZA', () => {
+    const r = validateRow(2, filaIpc({ price: '2,5 €' }), catalogoIndicadores(), SEMANA, new Set())
+    expect(r.status).toBe('invalid')
+    expect(r.errors.some((x) => x.column === 'currency')).toBe(true)
+  })
+
+  it('moneda vacía con unidad MONETARIA se RECHAZA', () => {
+    const r = validateRow(2, fila({ currency: '' }), catalogo(), SEMANA, new Set())
+    expect(r.status).toBe('invalid')
+    const e = r.errors.find((x) => x.column === 'currency')
+    expect(e?.message).toContain('obligatoria')
+  })
+
+  it('el mensaje de moneda obligatoria dice cuáles van sin ella', () => {
+    const r = validateRow(2, fila({ currency: '' }), catalogo(), SEMANA, new Set())
+    const e = r.errors.find((x) => x.column === 'currency')
+    expect(e?.message).toContain('%')
+    expect(e?.message).toContain('Unidades')
+  })
+})
+
+describe('037 — la clave natural aguanta sin moneda', () => {
+  // En SQL, NULL nunca es igual a NULL. Si la clave no colapsara la moneda
+  // ausente a cadena vacía, se podrían insertar infinitas filas del mismo IPC
+  // del mismo día — el agujero exacto que la clave existe para tapar.
+  it('la moneda ausente colapsa a cadena vacía, igual que en el índice', () => {
+    expect(naturalKey('p', '2026-01-01', null, '%', 'España'))
+      .toBe(naturalKey('p', '2026-01-01', '', '%', 'España'))
+    expect(naturalKey('p', '2026-01-01', undefined, '%', 'España'))
+      .toBe(naturalKey('p', '2026-01-01', null, '%', 'España'))
+  })
+
+  it('un indicador sin moneda repetido en el archivo sale como duplicado', () => {
+    const vistas = new Set<string>()
+    const primera = validateRow(2, filaIpc(), catalogoIndicadores(), SEMANA, vistas)
+    const segunda = validateRow(3, filaIpc(), catalogoIndicadores(), SEMANA, vistas)
+    expect(primera.status).toBe('valid')
+    expect(segunda.status).toBe('duplicate')
+  })
+
+  it('un indicador ya guardado sale como duplicado contra la base', () => {
+    const existentes = new Set([naturalKey('p-ipc', '2026-07-27', null, '%', 'España')])
+    const r = validateRow(2, filaIpc(), catalogoIndicadores({ existingKeys: existentes }), SEMANA, new Set())
+    expect(r.status).toBe('duplicate')
+  })
+
+  // La segunda pasada excluía las filas con `currency === null`, así que dos
+  // valores DISTINTOS del mismo índice y día se colaban eligiendo el primero.
+  it('dos valores distintos del mismo indicador y día no entran ninguno', () => {
+    const vistas = new Set<string>()
+    const filas = [
+      validateRow(2, filaIpc({ price: '2,5' }), catalogoIndicadores(), SEMANA, vistas),
+      validateRow(3, filaIpc({ price: '3,1' }), catalogoIndicadores(), SEMANA, vistas),
+    ]
+    const revisadas = flagConflictingDuplicates(filas)
+    expect(revisadas.every((f) => f.status === 'duplicate')).toBe(true)
+  })
+
+  it('dos lonjas distintas del mismo indicador y día SÍ entran las dos', () => {
+    const vistas = new Set<string>()
+    const a = validateRow(2, filaIpc({ lonja: 'España' }), catalogoIndicadores(), SEMANA, vistas)
+    const b = validateRow(3, filaIpc({ lonja: 'Zona euro' }), catalogoIndicadores(), SEMANA, vistas)
+    expect(a.status).toBe('valid')
+    expect(b.status).toBe('valid')
+  })
+})
+
+describe('037 — regresión: los precios de siempre siguen igual', () => {
+  it('EUR + 100 kg', () => {
+    const r = validateRow(2, filaPollo({ recorded_at: '2026-07-27', currency: 'EUR', unit: '100 kg' }), catalogo(), SEMANA, new Set())
+    expect(r.errors).toEqual([])
+    expect(r.currency).toBe('EUR')
+    expect(r.unit).toBe('100 kg')
+  })
+
+  it('USD + ton', () => {
+    const r = validateRow(2, fila({ currency: 'USD' }), catalogo(), SEMANA, new Set())
+    expect(r.errors).toEqual([])
+    expect(r.currency).toBe('USD')
+    expect(r.unit).toBe('ton')
+  })
+
+  it('GBP + ton', () => {
+    const r = validateRow(2, fila({ currency: 'GBP' }), catalogo(), SEMANA, new Set())
+    expect(r.errors).toEqual([])
+    expect(r.currency).toBe('GBP')
+  })
+
+  it('«€/100 Kg» sigue partiéndose en EUR + 100 kg', () => {
+    const r = validateRow(2, filaPollo({ recorded_at: '2026-07-27', currency: '', unit: '€/100 Kg' }), catalogo(), SEMANA, new Set())
+    expect(r.errors).toEqual([])
+    expect(r.currency).toBe('EUR')
+    expect(r.unit).toBe('100 kg')
+  })
+
+  it('la contradicción de monedas se sigue detectando', () => {
+    const r = validateRow(2, fila({ currency: 'USD', price: '241,50 €' }), catalogo(), SEMANA, new Set())
+    expect(r.status).toBe('invalid')
+    expect(r.errors.some((x) => x.message.includes('Contradicción'))).toBe(true)
+  })
+})

@@ -3,6 +3,7 @@
 import { createHash } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
 import { requirePlatformAdmin } from '@/lib/auth/guards'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
 import { buildCsv, parseCsv } from '@/lib/imports/csv'
 import { buildImportTemplateCsv } from '@/lib/imports/template'
 import {
@@ -140,18 +141,32 @@ export async function validateImportFile(formData: FormData): Promise<ValidateIm
   // partir del histórico y por tanto no admitía nada nuevo NUNCA: como los 608
   // registros son todos EUR, `USD` salía como moneda no reconocida. Ahora la
   // lista es explícita y vive en `imports/currency.ts` e `imports/units.ts`.
-  const [productosResult, existentesResult] = await Promise.all([
-    supabase
-      .from('products')
-      .select('id, name, slug, lonja, unit, market:markets!inner(id, name, slug, is_active)')
-      .eq('is_active', true),
-    supabase.from('product_price_records').select('product_id, recorded_at, currency, unit, lonja'),
-  ])
+  //
+  // 037 — el catálogo se lee PAGINADO. Hay 973 productos activos y PostgREST
+  // recorta toda respuesta en 1.000 filas sin dar ningún error: 27 altas más y
+  // el producto 1.001 habría empezado a rechazarse con «no existe o no está
+  // activo», que es exactamente el error que nadie sabría dónde buscar.
+  const productosResult = await fetchAllRows<Record<string, unknown>>(
+    () =>
+      supabase
+        .from('products')
+        .select('id, name, slug, lonja, unit, market:markets!inner(id, name, slug, is_active)')
+        .eq('is_active', true)
+        .order('id'),
+    { label: 'import/products' },
+  )
+
+  if (!productosResult.complete) {
+    // Un catálogo incompleto resolvería mal los productos y marcaría filas
+    // buenas como inexistentes. Mejor no validar que validar con medio catálogo.
+    console.error('[import] catálogo de productos incompleto: se aborta la validación.')
+    return { error: MESSAGES.generico }
+  }
 
   const products = new Map<string, CatalogProduct>()
   const marketSlugs = new Set<string>()
 
-  for (const p of (productosResult.data ?? []) as unknown as Array<Record<string, unknown>>) {
+  for (const p of productosResult.rows) {
     const market = (Array.isArray(p.market) ? p.market[0] : p.market) as
       | { id: string; name: string; slug: string; is_active: boolean }
       | undefined
@@ -172,15 +187,38 @@ export async function validateImportFile(formData: FormData): Promise<ValidateIm
     })
   }
 
+  // ── Claves ya guardadas (037) ─────────────────────────────────────────────
+  //
+  // Se leía `product_price_records` ENTERA para saber qué filas del fichero ya
+  // existían. Con 73.340 precios eso era inviable y, sobre todo, silenciosamente
+  // erróneo: PostgREST devolvía 1.000 filas y la vista previa daba por nuevas
+  // las otras 72.340. El índice único seguía protegiendo la base —esas filas se
+  // descartaban en la confirmación—, pero el resumen prometía importar miles de
+  // registros que luego no entraban.
+  //
+  // Ahora lo agrega PostgreSQL, acotado por los dos ejes que el propio
+  // importador ya garantiza: los productos que aparecen en el fichero y el
+  // periodo del batch. Una fila fuera del periodo se rechaza por fecha, así que
+  // sus duplicados no pueden importar.
+  const productIds = [...new Set([...products.values()].map((p) => p.productId))]
+
+  const { data: existentes, error: existentesError } = await supabase.rpc(
+    'market_existing_price_keys',
+    { p_product_ids: productIds, p_from: rango.from, p_to: rango.to },
+  )
+
+  if (existentesError) {
+    console.error(`[import] claves existentes: ${existentesError.code ?? '?'} ${existentesError.message}`)
+    return { error: MESSAGES.generico }
+  }
+
   const existingKeys = new Set<string>()
-  for (const r of (existentesResult.data ?? []) as Array<Record<string, string | null>>) {
-    existingKeys.add(naturalKey(
-      r.product_id as string,
-      r.recorded_at as string,
-      r.currency as string,
-      r.unit as string,
-      r.lonja ?? null,
-    ))
+  for (const tupla of (Array.isArray(existentes) ? existentes : []) as unknown[]) {
+    if (!Array.isArray(tupla) || tupla.length < 5) continue
+    const [productId, recordedAt, currency, unit, lonja] = tupla as string[]
+    // La moneda llega ya colapsada a cadena vacía cuando es NULL, igual que hace
+    // el índice único con `coalesce(currency, '')`.
+    existingKeys.add(naturalKey(productId, recordedAt, currency || null, unit, lonja || null))
   }
 
   const catalog: ValidationCatalog = { products, marketSlugs, existingKeys }

@@ -20,7 +20,8 @@ export interface PricePoint {
 export interface ProductPriceStats {
   current: number
   unit: string
-  currency: string
+  /** 037 — `null` en indicadores no monetarios (`%`, `Unidades`). */
+  currency: string | null
   /** Media de todos los registros del periodo. */
   avgPeriod: number
   minPeriod: number
@@ -114,6 +115,7 @@ export async function getProductPriceStats(
   productId: string,
   from: string | null = null,
   lonja: string | null = null,
+  to: string | null = null,
 ): Promise<ProductPriceStats | null> {
   const supabase = await createClient()
 
@@ -124,6 +126,14 @@ export async function getProductPriceStats(
 
   // `ALL` (from = null) no añade filtro: se pide el histórico entero.
   if (from) query = query.gte('recorded_at', from)
+
+  // 037 — límite SUPERIOR, que solo fija el rango personalizado.
+  //
+  // Los seis atajos siguen sin techo a propósito (ver `lib/markets/period.ts`):
+  // hay precios con fecha futura y recortarlos los escondería. Un rango elegido
+  // a mano sí lo tiene, y es INCLUSIVO: `to` entra en el resultado. `lte` sobre
+  // una columna `date` compara fechas civiles, sin hora y sin zona horaria.
+  if (to) query = query.lte('recorded_at', to)
 
   // 034 — el recorte por lonja lo hace PostgreSQL, apoyado en
   // `idx_ppr_product_lonja_recorded`. Mezclar plazas en una sola serie daría un
@@ -142,7 +152,7 @@ export async function getProductPriceStats(
     max_price: r.max_price != null ? parseFloat(r.max_price as unknown as string) : null,
     avg_price: r.avg_price != null ? parseFloat(r.avg_price as unknown as string) : null,
     unit:     (r as unknown as { unit: string }).unit,
-    currency: (r as unknown as { currency: string }).currency,
+    currency: (r as unknown as { currency: string | null }).currency ?? null,
   }))
 
   const last  = rows[rows.length - 1]
@@ -163,7 +173,9 @@ export async function getProductPriceStats(
   return {
     current:  last.price,
     unit:     (last as unknown as { unit: string }).unit ?? '',
-    currency: (last as unknown as { currency: string }).currency ?? 'EUR',
+    // 037 — sin `?? 'EUR'`. Un índice FAO no está en euros, y suponerlo aquí
+    // era exactamente lo que pintaba «123,45 €» sobre un número adimensional.
+    currency: (last as unknown as { currency: string | null }).currency ?? null,
     avgPeriod: Math.round(avgPeriod * 10000) / 10000,
     minPeriod,
     maxPeriod,

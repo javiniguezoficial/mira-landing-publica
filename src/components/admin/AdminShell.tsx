@@ -51,5 +51,18 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     })
   }, [])
 
-  return <MiraPageShell nav={nav} user={user} badge="admin">{children}</MiraPageShell>
+  return (
+    // 037 — el logo lleva al Dashboard de administración. Este shell solo lo
+    // monta el layout de `/admin/*`, que ya ha pasado `requirePlatformAdmin`:
+    // llegar aquí ES la prueba del rol, no hace falta volver a preguntarlo.
+    <MiraPageShell
+      nav={nav}
+      user={user}
+      badge="admin"
+      homeHref="/admin/dashboard"
+      homeLabel="MIRA — ir al Dashboard de administración"
+    >
+      {children}
+    </MiraPageShell>
+  )
 }

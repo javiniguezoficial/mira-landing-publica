@@ -1,31 +1,42 @@
 import { Hash, TrendingDown, TrendingUp, Coins, Calendar, Package } from 'lucide-react'
 import { MiraKpiCard } from '@/components/mira/MiraKpiCard'
-import { formatNumber, formatPrice, unitLabel } from '@/lib/utils'
+import { formatChartDateLong } from '@/lib/markets/chart-dates'
+import { formatNumber, formatPrice, magnitudeLabel } from '@/lib/utils'
 import type { PriceInsights } from '@/lib/actions/prices'
 
+// 037 — fecha civil, sin pasar por UTC. Ver `lib/markets/chart-dates.ts`.
 function formatDate(d: string) {
-  return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+  return formatChartDateLong(d)
 }
 
-// Formatea un valor de precio: con símbolo/unidad si la muestra es homogénea
-// (mismo unit + currency en todos los registros), o como número plano si no lo
-// es (mostrar un símbolo de moneda fijo sería engañoso con monedas mixtas).
-function formatMaybeMixedPrice(value: number | null, unit: string | null, currency: string | null): string {
+// Formatea un valor: con su magnitud si la muestra es homogénea (misma unidad y
+// misma moneda en todos los registros), o como número plano si no lo es —
+// enseñar un símbolo fijo sería engañoso con monedas mezcladas.
+//
+// 037 — la homogeneidad ya no se deduce de «currency != null». Una muestra
+// entera de índices tiene la moneda a NULL y es perfectamente homogénea; lo que
+// la rompe es que haya VARIAS, y eso lo dicen `mixedUnit` y `mixedCurrency`.
+function formatMaybeMixedPrice(
+  value: number | null,
+  unit: string | null,
+  currency: string | null,
+  homogeneous: boolean,
+): string {
   if (value == null) return '—'
-  if (unit != null && currency != null) return formatPrice(value, { unit, currency })
+  if (homogeneous) return formatPrice(value, { unit, currency })
   return formatNumber(value, 2)
 }
 
 /** Resumen de precios (PR3.2): KPIs sobre el conjunto filtrado actual. Reutilizable en cliente y admin. */
 export function PriceSummaryCards({ insights }: { insights: PriceInsights }) {
-  const homogeneous = insights.unit != null && insights.currency != null
+  const homogeneous = !insights.mixedUnit && !insights.mixedCurrency && insights.unit != null
 
   // Aviso sobre los valores que SÍ dependen de la muestra acotada (mín/máx/prom):
   // "Registros" siempre es el total exacto (no limitado por la cota) y "Última
   // fecha" también es exacta (viene ordenada DESC), así que no lo necesitan.
   const sampleCaveats: string[] = []
   if (insights.capped) sampleCaveats.push(`sobre los ${formatNumber(insights.sampleSize)} más recientes`)
-  if (!homogeneous) sampleCaveats.push('unidad/moneda mixtas')
+  if (!homogeneous) sampleCaveats.push('magnitudes mixtas')
   const sampleCaveat = sampleCaveats.length ? sampleCaveats.join(' · ') : undefined
 
   return (
@@ -39,21 +50,21 @@ export function PriceSummaryCards({ insights }: { insights: PriceInsights }) {
       />
       <MiraKpiCard
         label="Mínimo"
-        value={formatMaybeMixedPrice(insights.min, insights.unit, insights.currency)}
+        value={formatMaybeMixedPrice(insights.min, insights.unit, insights.currency, homogeneous)}
         sublabel={sampleCaveat}
         icon={TrendingDown}
         tint="emerald"
       />
       <MiraKpiCard
         label="Máximo"
-        value={formatMaybeMixedPrice(insights.max, insights.unit, insights.currency)}
+        value={formatMaybeMixedPrice(insights.max, insights.unit, insights.currency, homogeneous)}
         sublabel={sampleCaveat}
         icon={TrendingUp}
         tint="amber"
       />
       <MiraKpiCard
         label="Promedio"
-        value={formatMaybeMixedPrice(insights.avg, insights.unit, insights.currency)}
+        value={formatMaybeMixedPrice(insights.avg, insights.unit, insights.currency, homogeneous)}
         sublabel={sampleCaveat}
         icon={Coins}
         tint="violet"
@@ -66,8 +77,15 @@ export function PriceSummaryCards({ insights }: { insights: PriceInsights }) {
         tint="cyan"
       />
       <MiraKpiCard
-        label="Unidad · Moneda"
-        value={`${insights.unit ? unitLabel(insights.unit) : 'Varias'} · ${insights.currency ?? 'Varias'}`}
+        label="Magnitud"
+        // 037 — una sola tarjeta con la magnitud completa: «€/100 kg», «%»,
+        // «Unidades». La anterior decía «Unidad · Moneda» y con un índice
+        // habría escrito «Unidades · Varias», que es falso: no hay ninguna.
+        value={
+          insights.mixedUnit || insights.mixedCurrency
+            ? 'Varias'
+            : magnitudeLabel(insights.currency, insights.unit) || '—'
+        }
         icon={Package}
         tint="blue"
       />

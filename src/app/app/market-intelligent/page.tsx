@@ -4,7 +4,7 @@ import { getStrategicMarketGroups } from '@/lib/queries/markets'
 import { getMarketAccessContext } from '@/lib/queries/market-access'
 import { getFavoriteMarketCards, DASHBOARD_FAVORITES_PERIOD } from '@/lib/queries/favorite-markets'
 import { marketPeriodDescription } from '@/lib/markets/period'
-import { collectLonjas, resolveLonja, LONJA_PARAM } from '@/lib/markets/lonja'
+import { collectLonjas, resolveLonja, COUNTRY_FILTER_LABEL, LONJA_PARAM } from '@/lib/markets/lonja'
 import { getLonjasByProduct } from '@/lib/queries/lonjas'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 import { MiraCategoryCard } from '@/components/mira/MiraCategoryCard'
@@ -132,7 +132,11 @@ export default async function MarketIntelligentPage({
         />
       </section>
 
-      {/* 2. Filtro de lonja sobre el catálogo completo. */}
+      {/* 2. Filtro sobre el catálogo completo.
+          037 — se presenta como «País». Solo cambia el rótulo: el parámetro
+          sigue siendo `?lonja=`, la columna sigue siendo
+          `product_price_records.lonja` y los valores ofrecidos son exactamente
+          los mismos. Ver `lib/markets/lonja.ts`. */}
       {lonjasDisponibles.length > 0 && (
         <div className="mira-card flex flex-wrap items-end gap-4 rounded-2xl p-4">
           <LonjaFilter
@@ -140,10 +144,11 @@ export default async function MarketIntelligentPage({
             active={lonjaActiva}
             basePath={BASE_PATH}
             searchParams={sp as Record<string, string | undefined>}
+            label={COUNTRY_FILTER_LABEL}
           />
           {lonjaActiva && (
             <Link href={BASE_PATH} className={miraBtn.ghost}>
-              Quitar filtro
+              Quitar filtro de país
             </Link>
           )}
         </div>
@@ -153,10 +158,10 @@ export default async function MarketIntelligentPage({
         <div className="mira-card rounded-2xl">
           <EmptyState
             icon={TrendingUp}
-            title={lonjaActiva ? 'Sin resultados para esta lonja' : 'Sin mercados disponibles'}
+            title={lonjaActiva ? 'Sin resultados para este país' : 'Sin mercados disponibles'}
             description={
               lonjaActiva
-                ? `No hay productos de la lonja «${lonjaActiva}» en los mercados disponibles. Prueba con otra lonja o quita el filtro.`
+                ? `No hay referencias de «${lonjaActiva}» en los mercados disponibles. Prueba con otro país o quita el filtro.`
                 : 'No hay mercados disponibles en este momento. Contacta con tu administrador.'
             }
           />

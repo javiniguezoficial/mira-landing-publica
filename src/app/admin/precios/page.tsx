@@ -8,6 +8,7 @@ import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 import { MiraTable, MiraTr, MiraTd } from '@/components/mira/MiraTable'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { miraBtn, miraField } from '@/lib/miraButtons'
+import { formatChartDateLong } from '@/lib/markets/chart-dates'
 import { formatNumber, formatPrice, unitLabel } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
@@ -35,8 +36,12 @@ type SP = {
   page?: string
 }
 
+// 037 — `recorded_at` es una fecha CIVIL (`date`), no un instante.
+// `new Date('2026-05-15')` la interpreta como medianoche UTC y en una zona con
+// desfase negativo la enseñaba como día 14. `formatCivilDateLong` la parte a
+// mano, así que el día es siempre el que dice la base.
 function formatDate(d: string) {
-  return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+  return formatChartDateLong(d)
 }
 
 function buildUrl(base: string, params: Record<string, string | number | undefined>) {
@@ -169,20 +174,44 @@ export default async function AdminPreciosPage({ searchParams }: { searchParams:
         <>
           <PriceSummaryCards insights={insights} />
 
+          {/*
+            037 — columnas del histórico, según lo pedido:
+
+              · fuera «Rango (mín – máx)» y «Prom.». Son opcionales y casi
+                siempre vacías en las cargas reales; ocupaban dos columnas para
+                enseñar dos guiones. Los datos NO se borran: siguen en la tabla
+                y en el detalle del registro.
+              · dentro «Lonja» y «Source».
+
+            «Lonja» sale del REGISTRO (`product_price_records.lonja`), no de la
+            ficha del producto: desde 034 una misma referencia cotiza en varias
+            plazas, y `product.lonja` es solo el valor por defecto. Por eso
+            también desaparece de la línea secundaria de «Referencia», donde
+            repetía —y a veces contradecía— la columna nueva.
+
+            «Source» es `metadata->>'source'`, que es donde el importador la
+            guarda desde 030. Las 73.340 filas actuales la tienen informada.
+            NO se deduce del nombre del fichero ni de `source_id`, que sigue
+            siendo una columna huérfana con 0 filas: una fuente inventada es
+            peor que un guion.
+
+            Las dos vienen en el mismo `select` de la página (50 filas): ni una
+            consulta más, ni N+1.
+          */}
           <MiraTable
             headers={[
               'Fecha',
               'Referencia',
               'Clasificación',
+              'Lonja',
               { label: 'Precio', align: 'right' },
-              { label: 'Rango (mín – máx)', align: 'right' },
-              { label: 'Prom.', align: 'right' },
               { label: 'Volumen', align: 'right' },
+              'Source',
               'País · Zona',
             ]}
           >
             {rows.map((r) => {
-              const sub = [r.product?.variedad, r.product?.calibre, r.product?.lonja, r.product?.incoterm, r.product?.tipo].filter(Boolean)
+              const sub = [r.product?.variedad, r.product?.calibre, r.product?.incoterm, r.product?.tipo].filter(Boolean)
               return (
               <MiraTr key={r.id}>
                 <MiraTd className="whitespace-nowrap text-slate-500">{formatDate(r.recorded_at)}</MiraTd>
@@ -195,22 +224,16 @@ export default async function AdminPreciosPage({ searchParams }: { searchParams:
                 <MiraTd className="text-xs text-slate-500">
                   {[r.strategic?.name, r.category?.name, r.market?.name].filter(Boolean).join(' › ') || '—'}
                 </MiraTd>
+                <MiraTd className="text-slate-600">{r.lonja ?? '—'}</MiraTd>
                 <MiraTd align="right">
                   <span className="font-bold tabular-nums text-mira-ink">
                     {formatPrice(r.price, { unit: r.unit, currency: r.currency })}
                   </span>
                 </MiraTd>
-                <MiraTd align="right" className="tabular-nums text-xs text-slate-400">
-                  {r.min_price != null || r.max_price != null
-                    ? `${formatPrice(r.min_price, { currency: r.currency })} – ${formatPrice(r.max_price, { currency: r.currency })}`
-                    : '—'}
-                </MiraTd>
-                <MiraTd align="right" className="tabular-nums text-slate-600">
-                  {r.avg_price != null ? formatPrice(r.avg_price, { currency: r.currency }) : '—'}
-                </MiraTd>
                 <MiraTd align="right" className="tabular-nums text-slate-600">
                   {r.volume != null ? `${formatNumber(r.volume)}${r.unit ? ` ${unitLabel(r.unit)}` : ''}` : '—'}
                 </MiraTd>
+                <MiraTd className="text-xs text-slate-500">{r.source ?? '—'}</MiraTd>
                 <MiraTd className="text-slate-600">
                   {[r.country, r.region].filter(Boolean).join(' · ') || '—'}
                 </MiraTd>

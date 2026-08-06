@@ -10,23 +10,18 @@ import {
   Tooltip,
 } from 'recharts'
 import type { PricePoint } from '@/lib/queries/prices'
+import {
+  formatChartDate,
+  formatChartDateLong,
+  spansMultipleYears,
+} from '@/lib/markets/chart-dates'
+import { formatPrice, magnitudeLabel } from '@/lib/utils'
 
 interface Props {
   data: PricePoint[]
   unit: string
-  currency: string
-}
-
-function formatDate(dateStr: string) {
-  const d = new Date(dateStr)
-  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })
-}
-
-function formatPrice(value: number, currency: string) {
-  return new Intl.NumberFormat('es-ES', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 4,
-  }).format(value) + ' ' + currency
+  /** 037 — `null` en indicadores no monetarios (`%`, `Unidades`). */
+  currency: string | null
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -34,15 +29,21 @@ function CustomTooltip({ active, payload, label, currency, unit }: any) {
   if (!active || !payload?.length) return null
   return (
     <div className="bg-white border border-slate-200 rounded-lg shadow-lg px-3 py-2 text-xs">
-      <p className="font-bold text-slate-700 mb-1">{formatDate(label)}</p>
+      {/* El tooltip lleva SIEMPRE el año, incluso en periodos cortos: es el
+          punto concreto que se está señalando y no cuesta espacio. */}
+      <p className="font-bold text-slate-700 mb-1">{formatChartDateLong(label)}</p>
       <p className="text-mira-magenta font-bold">
-        {formatPrice(payload[0].value, currency)} / {unit}
+        {formatPrice(payload[0].value, { unit, currency })}
       </p>
       {payload[1] && (
-        <p className="text-slate-400">Mín: {formatPrice(payload[1].value, currency)}</p>
+        <p className="text-slate-400">
+          Mín: {formatPrice(payload[1].value, { unit, currency })}
+        </p>
       )}
       {payload[2] && (
-        <p className="text-slate-400">Máx: {formatPrice(payload[2].value, currency)}</p>
+        <p className="text-slate-400">
+          Máx: {formatPrice(payload[2].value, { unit, currency })}
+        </p>
       )}
     </div>
   )
@@ -57,8 +58,23 @@ export function PriceChart({ data, unit, currency }: Props) {
     )
   }
 
-  // Mostrar solo ~30 etiquetas de eje X para no saturar
-  const step = Math.ceil(data.length / 10)
+  // ── El año en el eje X (037) ──────────────────────────────────────────────
+  //
+  // El eje escribía `15 may.` siempre. Con `3Y`, `ALL` o un rango a medida
+  // multianual eso significa que el 15 de mayo de 2024, el de 2025 y el de 2026
+  // se leen igual: la serie parece repetir fechas.
+  //
+  // La decisión se toma sobre los DATOS, no sobre el periodo pedido: lo que
+  // importa es si lo dibujado cruza un año, y un `Y` que va de diciembre a enero
+  // también lo cruza. En una serie de un solo año el año se omite para no
+  // saturar el eje, y el tooltip lo lleva de todas formas.
+  const conAnio = spansMultipleYears(data.map((p) => p.recorded_at))
+
+  // Mostrar ~10 etiquetas de eje X para no saturar. Con el año delante cada
+  // etiqueta es más ancha, así que se reservan menos.
+  const step = Math.max(1, Math.ceil(data.length / (conAnio ? 7 : 10)))
+
+  const sufijo = magnitudeLabel(currency, unit)
 
   return (
     <ResponsiveContainer width="100%" height={240}>
@@ -72,11 +88,12 @@ export function PriceChart({ data, unit, currency }: Props) {
         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
         <XAxis
           dataKey="recorded_at"
-          tickFormatter={formatDate}
+          tickFormatter={(v: string) => formatChartDate(v, conAnio)}
           tick={{ fontSize: 11, fill: '#94a3b8' }}
           interval={step - 1}
           axisLine={false}
           tickLine={false}
+          minTickGap={conAnio ? 24 : 8}
         />
         <YAxis
           tick={{ fontSize: 11, fill: '#94a3b8' }}
@@ -84,6 +101,8 @@ export function PriceChart({ data, unit, currency }: Props) {
           tickLine={false}
           tickFormatter={v => v.toLocaleString('es-ES')}
           width={60}
+          label={undefined}
+          aria-label={sufijo}
         />
         <Tooltip content={<CustomTooltip currency={currency} unit={unit} />} />
         <Area

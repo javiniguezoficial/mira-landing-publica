@@ -49,7 +49,7 @@ export const CANONICAL_MEASURES = [
   '100 kg',
   'ton',
   'MWh',
-  'unidad',
+  'Unidades',
   '100 uds',
   '100 docenas',
   '100 libras',
@@ -65,15 +65,67 @@ export const CANONICAL_MEASURES = [
 export type CanonicalMeasure = (typeof CANONICAL_MEASURES)[number]
 
 /**
+ * Medidas que NO llevan moneda (037).
+ *
+ * ── El caso real ───────────────────────────────────────────────────────────
+ *
+ * El catálogo tiene ya 16 referencias que no son precios y llevan años sin
+ * poder cargarse:
+ *
+ *   · 12 índices FAO —«Food Price Index», «Real Sugar Price»…— configurados
+ *     como `unidad`: números adimensionales, base 100. No están en euros.
+ *   ·  4 indicadores del INE —IPC, IPRI con y sin energía, tasa de paro—
+ *     configurados como `%`.
+ *
+ * Con `currency` obligatoria había que inventarles una moneda, y una tarjeta
+ * que dice «123,45 €» sobre el índice de precios de los alimentos es un dato
+ * falso, no una aproximación.
+ *
+ * ── Por qué la canónica es «Unidades» y no «unidad» ────────────────────────
+ *
+ * Porque es lo que se lee en pantalla —«123,45 Unidades»— y porque el histórico
+ * ya usaba esa grafía antes de que se borraran esas series. Las tres formas
+ * (`unidad`, `unidades`, `Unidades`) siguen aceptándose al escribir: se
+ * canonizan a la misma, así que una reimportación reconoce sus propios
+ * duplicados. Ningún precio guardado usa hoy ninguna de las tres, de modo que
+ * el cambio de canónica no parte ninguna serie existente.
+ *
+ * ── Lo que NO se hace ──────────────────────────────────────────────────────
+ *
+ * No se interpreta el `%` como una variación calculada. Es el VALOR importado
+ * tal cual: si el boletín del INE dice 2,5, se guarda 2,5 y se enseña «2,5 %».
+ * Nada se convierte, ni entre monedas ni entre bases.
+ */
+export const NON_MONETARY_MEASURES = ['%', 'Unidades'] as const
+
+export type NonMonetaryMeasure = (typeof NON_MONETARY_MEASURES)[number]
+
+/** ¿La medida describe una magnitud sin moneda? */
+export function isNonMonetaryMeasure(
+  measure: string | null | undefined,
+): measure is NonMonetaryMeasure {
+  return NON_MONETARY_MEASURES.some((m) => m === measure)
+}
+
+/** Lista legible de las no monetarias, para los mensajes de error. */
+export function nonMonetaryHelpText(): string {
+  return NON_MONETARY_MEASURES.join(' y ')
+}
+
+/**
  * Formas admitidas → forma canónica.
  *
  * Las claves están ya en minúsculas y con los espacios colapsados: la búsqueda
  * normaliza antes de mirar aquí.
  *
- * «unidades» y «Unidades» apuntan a «unidad» A PROPÓSITO. En el histórico
- * conviven las tres grafías para el MISMO producto —«Cereal Price Index» tiene
- * 65 filas «Unidades», 2 «unidad» y 1 «unidades»—, y sin unificarlas al comparar
- * una reimportación no vería sus propios duplicados.
+ * «unidad», «unidades» y «Unidades» apuntan todas a «Unidades» A PROPÓSITO. En
+ * el histórico convivían las tres grafías para el MISMO producto —«Cereal Price
+ * Index» llegó a tener 65 filas «Unidades», 2 «unidad» y 1 «unidades»—, y sin
+ * unificarlas al comparar una reimportación no vería sus propios duplicados.
+ *
+ * 037 — la canónica pasa de «unidad» a «Unidades»: ver `NON_MONETARY_MEASURES`.
+ * No hay ningún precio guardado con ninguna de las tres grafías, así que el
+ * cambio no separa ninguna serie en dos.
  */
 const MEASURE_ALIAS: ReadonlyMap<string, CanonicalMeasure> = new Map([
   ['kg', 'kg'], ['kilo', 'kg'], ['kilos', 'kg'], ['kilogramo', 'kg'], ['kilogramos', 'kg'],
@@ -81,7 +133,8 @@ const MEASURE_ALIAS: ReadonlyMap<string, CanonicalMeasure> = new Map([
   ['ton', 'ton'], ['tn', 'ton'], ['t', 'ton'], ['tonelada', 'ton'], ['toneladas', 'ton'],
   ['tonne', 'ton'], ['tonnes', 'ton'], ['tm', 'ton'],
   ['mwh', 'MWh'], ['mw/h', 'MWh'],
-  ['unidad', 'unidad'], ['unidades', 'unidad'], ['ud', 'unidad'], ['uds', 'unidad'], ['u', 'unidad'],
+  ['unidad', 'Unidades'], ['unidades', 'Unidades'], ['ud', 'Unidades'], ['uds', 'Unidades'], ['u', 'Unidades'],
+  ['indice', 'Unidades'], ['índice', 'Unidades'], ['index', 'Unidades'],
   ['100 uds', '100 uds'], ['100 ud', '100 uds'], ['100 unidades', '100 uds'],
   ['100 docenas', '100 docenas'], ['100 doc', '100 docenas'],
   ['100 libras', '100 libras'], ['100 lb', '100 libras'], ['100 lbs', '100 libras'],
@@ -91,7 +144,7 @@ const MEASURE_ALIAS: ReadonlyMap<string, CanonicalMeasure> = new Map([
   ['oz', 'oz'], ['onza', 'oz'], ['onzas', 'oz'],
   ['cabeza', 'cabeza'], ['cabezas', 'cabeza'],
   ['brt', 'BRT'],
-  ['%', '%'], ['porcentaje', '%'],
+  ['%', '%'], ['porcentaje', '%'], ['percent', '%'], ['pct', '%'],
 ])
 
 /**
@@ -201,13 +254,17 @@ export function parseUnitExpression(raw: string | undefined | null): UnitExpress
 }
 
 /**
- * Cómo se ENSEÑA una unidad: «€/100 kg».
+ * Cómo se ENSEÑA una unidad: «€/100 kg», «%», «Unidades».
  *
  * Se construye a partir de las dos columnas, nunca se lee de un texto guardado.
  * Es lo que permite que un precio en USD se etiquete «$/ton» sin que nadie haya
  * escrito esa cadena en ninguna parte.
+ *
+ * 037 — con una medida no monetaria la moneda se ignora: un porcentaje se
+ * enseña «%» aunque la fila traiga EUR.
  */
 export function formatUnitLabel(currency: string | null, measure: string | null): string {
+  if (isNonMonetaryMeasure(measure)) return measure
   const simbolo = currency === 'USD' ? '$' : currency === 'GBP' ? '£' : currency === 'EUR' ? '€' : (currency ?? '')
   if (!measure) return simbolo
   if (!simbolo) return measure

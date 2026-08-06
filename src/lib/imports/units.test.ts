@@ -16,7 +16,7 @@ describe('medidas canónicas', () => {
   // Las canónicas coinciden con lo que YA hay guardado. Cambiarlas partiría las
   // series históricas en dos.
   it('conserva las que existen en el histórico', () => {
-    for (const m of ['ton', 'kg', 'MWh', 'unidad']) {
+    for (const m of ['ton', 'kg', 'MWh', 'Unidades']) {
       expect(CANONICAL_MEASURES as readonly string[]).toContain(m)
     }
   })
@@ -35,10 +35,15 @@ describe('medidas canónicas', () => {
 
   // El histórico guarda «Unidades», «unidad» y «unidades» para el MISMO
   // producto. Sin unificarlas, una reimportación no vería sus duplicados.
+  //
+  // 037 — la canónica es «Unidades». Ningún precio guardado usa ninguna de las
+  // tres grafías, así que el cambio no parte ninguna serie existente.
   it('las tres grafías de unidad son la misma medida', () => {
-    expect(canonicalMeasure('Unidades')).toBe('unidad')
-    expect(canonicalMeasure('unidades')).toBe('unidad')
-    expect(canonicalMeasure('unidad')).toBe('unidad')
+    expect(canonicalMeasure('Unidades')).toBe('Unidades')
+    expect(canonicalMeasure('unidades')).toBe('Unidades')
+    expect(canonicalMeasure('unidad')).toBe('Unidades')
+    expect(canonicalMeasure('ud')).toBe('Unidades')
+    expect(canonicalMeasure('uds')).toBe('Unidades')
   })
 
   it('rechaza lo que no conoce', () => {

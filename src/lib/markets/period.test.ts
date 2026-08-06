@@ -9,11 +9,15 @@ import {
   DEFAULT_MARKET_PERIOD,
   MARKET_PERIODS,
   MARKET_PERIOD_PARAM,
+  MARKET_QUICK_PERIODS,
   buildPeriodHref,
+  customRangeDescription,
   isMarketPeriod,
   marketPeriodDays,
   marketPeriodDescription,
+  marketPeriodLabel,
   marketPeriodStartDate,
+  parseCustomRange,
   parseMarketPeriod,
   resolveMarketPeriod,
   toDateOnly,
@@ -25,8 +29,20 @@ import {
 const AHORA = new Date(2026, 6, 30, 12, 0, 0) // 30 de julio de 2026
 
 describe('catálogo de periodos', () => {
-  it('son exactamente W, 3W, 6W, Y, 3Y y ALL, en ese orden', () => {
-    expect([...MARKET_PERIODS]).toEqual(['W', '3W', '6W', 'Y', '3Y', 'ALL'])
+  // 037 — se añade CUSTOM AL FINAL. Los seis atajos conservan su sitio y su
+  // orden: quien ya sabía dónde estaba «3Y» lo sigue encontrando ahí.
+  it('son W, 3W, 6W, Y, 3Y, ALL y CUSTOM, en ese orden', () => {
+    expect([...MARKET_PERIODS]).toEqual(['W', '3W', '6W', 'Y', '3Y', 'ALL', 'CUSTOM'])
+  })
+
+  it('los atajos rápidos siguen siendo exactamente los seis de siempre', () => {
+    expect([...MARKET_QUICK_PERIODS]).toEqual(['W', '3W', '6W', 'Y', '3Y', 'ALL'])
+  })
+
+  it('CUSTOM se lee «Personalizado»; los demás, su propia clave', () => {
+    expect(marketPeriodLabel('CUSTOM')).toBe('Personalizado')
+    expect(marketPeriodLabel('3W')).toBe('3W')
+    expect(marketPeriodLabel('ALL')).toBe('ALL')
   })
 
   it('el periodo por defecto es Y', () => {
@@ -220,5 +236,183 @@ describe('buildPeriodHref — search params', () => {
     expect(href).toContain('lonja=A')
     expect(href).not.toContain('page=')
     expect(href).toContain('period=6W')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PERIODO PERSONALIZADO (037)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Semántica que se fija aquí: los DOS extremos son inclusivos, son fechas
+// civiles, no se corrige nada y un rango inválido cae al periodo por DEFECTO —
+// nunca a ALL, que barrería el histórico entero sin que nadie lo haya pedido.
+
+describe('parseCustomRange', () => {
+  it('acepta un rango bien formado', () => {
+    expect(parseCustomRange('2025-01-01', '2025-01-31')).toEqual({
+      range: { from: '2025-01-01', to: '2025-01-31' },
+    })
+  })
+
+  it('acepta un rango de un solo día: desde = hasta', () => {
+    expect(parseCustomRange('2025-06-10', '2025-06-10').range).toEqual({
+      from: '2025-06-10',
+      to: '2025-06-10',
+    })
+  })
+
+  it('acepta un rango multianual', () => {
+    expect(parseCustomRange('2020-01-01', '2026-12-31').range).toEqual({
+      from: '2020-01-01',
+      to: '2026-12-31',
+    })
+  })
+
+  it('rechaza que falten las dos fechas', () => {
+    const { range, error } = parseCustomRange('', '')
+    expect(range).toBeUndefined()
+    expect(error).toContain('fecha de inicio y la fecha final')
+  })
+
+  it('rechaza que falte solo la de inicio', () => {
+    const { range, error } = parseCustomRange('', '2025-01-31')
+    expect(range).toBeUndefined()
+    expect(error).toContain('inicio')
+  })
+
+  it('rechaza que falte solo la final', () => {
+    const { range, error } = parseCustomRange('2025-01-01', '')
+    expect(range).toBeUndefined()
+    expect(error).toContain('final')
+  })
+
+  // NO se intercambian los extremos. Intercambiarlos devolvería datos que nadie
+  // ha pedido y el error pasaría inadvertido.
+  it('rechaza desde POSTERIOR a hasta, y no los intercambia', () => {
+    const { range, error } = parseCustomRange('2025-03-01', '2025-01-01')
+    expect(range).toBeUndefined()
+    expect(error).toContain('no puede ser posterior')
+    expect(error).toContain('01/03/2025')
+    expect(error).toContain('01/01/2025')
+  })
+
+  it('rechaza fechas mal formadas', () => {
+    expect(parseCustomRange('01/01/2025', '2025-01-31').error).toContain('inicio')
+    expect(parseCustomRange('2025-01-01', 'mañana').error).toContain('final')
+  })
+
+  // Una fecha sintácticamente correcta que no existe en el calendario tampoco
+  // vale: corregirla al 3 de marzo en silencio es lo peor que se puede hacer.
+  it('rechaza un 31 de febrero', () => {
+    expect(parseCustomRange('2026-02-31', '2026-03-31').error).toContain('inicio')
+  })
+
+  it('describe el rango en formato español', () => {
+    expect(customRangeDescription({ from: '2025-01-01', to: '2025-01-31' }))
+      .toBe('Del 01/01/2025 al 31/01/2025')
+  })
+})
+
+describe('resolveMarketPeriod con CUSTOM', () => {
+  it('un rango válido fija from y to, ambos inclusivos', () => {
+    const r = resolveMarketPeriod('CUSTOM', AHORA, '2025-01-01', '2025-01-31')
+    expect(r.period).toBe('CUSTOM')
+    expect(r.requested).toBe('CUSTOM')
+    expect(r.from).toBe('2025-01-01')
+    expect(r.to).toBe('2025-01-31')
+    expect(r.customError).toBeNull()
+    expect(r.description).toBe('Del 01/01/2025 al 31/01/2025')
+  })
+
+  // Lo importante: NO cae en ALL. Una fecha mal escrita no puede acabar
+  // barriendo los 73.000 registros de la tabla.
+  it('un rango inválido cae al periodo por DEFECTO, no a ALL', () => {
+    const r = resolveMarketPeriod('CUSTOM', AHORA, '2025-03-01', '2025-01-01')
+    expect(r.period).toBe(DEFAULT_MARKET_PERIOD)
+    expect(r.period).not.toBe('ALL')
+    expect(r.from).toBe(marketPeriodStartDate(DEFAULT_MARKET_PERIOD, AHORA))
+    expect(r.to).toBeNull()
+  })
+
+  // …pero el selector sigue marcando «Personalizado» y los campos conservan lo
+  // que se escribió: saltar a otra pestaña perdería el error de vista.
+  it('un rango inválido conserva CUSTOM como periodo PEDIDO y lo escrito', () => {
+    const r = resolveMarketPeriod('CUSTOM', AHORA, '2025-03-01', '2025-01-01')
+    expect(r.requested).toBe('CUSTOM')
+    expect(r.customFromInput).toBe('2025-03-01')
+    expect(r.customToInput).toBe('2025-01-01')
+    expect(r.customError).toContain('no puede ser posterior')
+  })
+
+  it('CUSTOM sin fechas es un rango incompleto, no «todo el histórico»', () => {
+    const r = resolveMarketPeriod('CUSTOM', AHORA)
+    expect(r.period).toBe(DEFAULT_MARKET_PERIOD)
+    expect(r.to).toBeNull()
+    expect(r.customError).toBeTruthy()
+  })
+
+  it('los seis atajos siguen sin límite superior', () => {
+    for (const p of MARKET_QUICK_PERIODS) {
+      const r = resolveMarketPeriod(p, AHORA)
+      expect(r.to, p).toBeNull()
+      expect(r.requested, p).toBe(p)
+      expect(r.customError, p).toBeNull()
+    }
+  })
+
+  it('`from`/`to` sueltos NO tienen efecto si el periodo no es CUSTOM', () => {
+    const r = resolveMarketPeriod('W', AHORA, '2020-01-01', '2020-12-31')
+    expect(r.period).toBe('W')
+    expect(r.from).toBe(marketPeriodStartDate('W', AHORA))
+    expect(r.to).toBeNull()
+  })
+})
+
+describe('buildPeriodHref con CUSTOM', () => {
+  it('escribe period, from y to, y conserva el resto de la query', () => {
+    const href = buildPeriodHref('/x', { lonja: 'Ebro' }, 'CUSTOM', {
+      from: '2025-01-01',
+      to: '2025-01-31',
+    })
+    expect(href).toContain('period=CUSTOM')
+    expect(href).toContain('from=2025-01-01')
+    expect(href).toContain('to=2025-01-31')
+    expect(href).toContain('lonja=Ebro')
+  })
+
+  // Arrastrar el rango a un atajo dejaría en la URL un filtro que ya no se está
+  // aplicando, y bastaría volver a «Personalizado» para que reapareciera.
+  it('al volver a un atajo NO arrastra from ni to', () => {
+    const href = buildPeriodHref(
+      '/x',
+      { period: 'CUSTOM', from: '2025-01-01', to: '2025-01-31', lonja: 'Ebro' },
+      '3Y',
+    )
+    expect(href).toContain('period=3Y')
+    expect(href).not.toContain('from=')
+    expect(href).not.toContain('to=')
+    expect(href).toContain('lonja=Ebro')
+  })
+
+  it('mantiene la lonja al cambiar de rango: los dos filtros se combinan', () => {
+    const href = buildPeriodHref('/x', { lonja: 'España', market_id: 'm-1' }, 'CUSTOM', {
+      from: '2024-01-01',
+      to: '2024-06-30',
+    })
+    expect(href).toContain('lonja=España'.replace('ñ', '%C3%B1'))
+    expect(href).toContain('market_id=m-1')
+  })
+
+  it('no duplica from ni to cuando ya venían en la query', () => {
+    const href = buildPeriodHref(
+      '/x',
+      { from: '2000-01-01', to: '2000-12-31' },
+      'CUSTOM',
+      { from: '2025-01-01', to: '2025-01-31' },
+    )
+    expect(href.match(/from=/g)).toHaveLength(1)
+    expect(href.match(/[?&]to=/g)).toHaveLength(1)
+    expect(href).toContain('from=2025-01-01')
+    expect(href).toContain('to=2025-01-31')
   })
 })

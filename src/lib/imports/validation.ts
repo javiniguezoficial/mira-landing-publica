@@ -10,7 +10,13 @@ import { currencyHelpText, parseCurrency, type ImportCurrency } from './currency
 import { ACCEPTED_DATE_FORMATS, parseImportDate } from './date-input'
 import { parseMoney } from './money'
 import { isDateInPeriod, type ImportPeriodRange } from './period'
-import { canonicalMeasure, measureHelpText, parseUnitExpression } from './units'
+import {
+  canonicalMeasure,
+  isNonMonetaryMeasure,
+  measureHelpText,
+  nonMonetaryHelpText,
+  parseUnitExpression,
+} from './units'
 import {
   REQUIRED_IMPORT_COLUMNS,
   type ImportColumn,
@@ -80,16 +86,24 @@ export interface ValidationCatalog {
  * El índice único de PostgreSQL sigue comparando el texto exacto: es un suelo,
  * no el techo. Esta comparación es más estricta, y es la que ve el usuario en la
  * vista previa.
+ *
+ * ── 037: la moneda puede faltar ────────────────────────────────────────────
+ *
+ * Los indicadores no monetarios —`%`, `Unidades`— tienen `currency` a NULL. Se
+ * colapsa a cadena vacía, exactamente igual que hace el índice de PostgreSQL
+ * con `coalesce(currency, '')`. Sin ese colapso las dos comparaciones dirían
+ * cosas distintas: en SQL NULL nunca es igual a NULL, así que el índice dejaría
+ * entrar infinitas filas repetidas del mismo IPC del mismo día.
  */
 export function naturalKey(
   productId: string,
   recordedAt: string,
-  currency: string,
+  currency: string | null | undefined,
   unit: string,
   lonja: string | null,
 ): string {
   const medida = canonicalMeasure(unit) ?? unit.trim().toLowerCase()
-  return `${productId}|${recordedAt}|${currency}|${medida}|${normalizeLonjaKey(lonja)}`
+  return `${productId}|${recordedAt}|${currency ?? ''}|${medida}|${normalizeLonjaKey(lonja)}`
 }
 
 /**
@@ -285,52 +299,6 @@ export function validateRow(
     errors.push(error('price', `El precio debe ser mayor que 0 (recibido ${price}).`))
   }
 
-  // ── Moneda y unidad (034) ─────────────────────────────────────────────────
-  //
-  // Aquí confluyen TRES fuentes que pueden decir la moneda:
-  //
-  //   · la columna `currency`            → «USD»
-  //   · la columna `unit`, si es combinada → «€/100 Kg» lleva EUR dentro
-  //   · el propio precio                 → «285,00 €»
-  //
-  // Cuando coinciden, no hay nada que decidir. Cuando NO coinciden, se devuelve
-  // un error que las nombra todas. Elegir una en silencio es lo único que no se
-  // puede hacer: guardaría una serie entera bajo la divisa equivocada y nadie lo
-  // vería hasta comparar con la fuente original meses después.
-  const currencyRaw = texto(raw['currency'])
-  const unitRaw = texto(raw['unit'])
-
-  const expresion = parseUnitExpression(unitRaw)
-  const monedaColumna = currencyRaw ? parseCurrency(currencyRaw) : null
-
-  if (currencyRaw && !monedaColumna) {
-    errors.push(error('currency', `Moneda no reconocida: «${currencyRaw}». Admitidas: ${currencyHelpText()}.`))
-  }
-  if (unitRaw && expresion.error) {
-    errors.push(error('unit', `${expresion.error}. Medidas admitidas: ${measureHelpText()}.`))
-  }
-
-  // Candidatas, con su procedencia, para poder explicar el conflicto.
-  const candidatas: { valor: ImportCurrency; origen: string }[] = []
-  if (monedaColumna) candidatas.push({ valor: monedaColumna, origen: 'la columna currency' })
-  if (expresion.currency) candidatas.push({ valor: expresion.currency, origen: `la unidad «${unitRaw}»` })
-  if (precio.currency) candidatas.push({ valor: precio.currency, origen: `el precio «${priceRaw}»` })
-
-  const distintas = [...new Set(candidatas.map((c) => c.valor))]
-  let currency: ImportCurrency | null = null
-
-  if (distintas.length > 1) {
-    errors.push(error(
-      'currency',
-      `Contradicción de moneda: ${candidatas.map((c) => `${c.origen} dice ${c.valor}`).join(', ')}. ` +
-      'Corrige el archivo para que todas digan lo mismo.',
-    ))
-  } else if (distintas.length === 1) {
-    currency = distintas[0]
-  } else if (!currencyRaw) {
-    errors.push(error('currency', `La moneda es obligatoria. Admitidas: ${currencyHelpText()}.`))
-  }
-
   // ── Medida ────────────────────────────────────────────────────────────────
   //
   //   1. la del fichero, si la trae y se reconoce;
@@ -343,8 +311,19 @@ export function validateRow(
   // gráfico. Este es exactamente el caso que hacía fallar el fichero real:
   // el producto está configurado como «€/100 Kg» y el importador solo aceptaba
   // las medidas que ya estaban en el histórico.
+  //
+  // 037 — la medida se resuelve ANTES que la moneda, y el orden importa: es la
+  // medida la que decide si esta fila lleva moneda o no.
+  const currencyRaw = texto(raw['currency'])
+  const unitRaw = texto(raw['unit'])
+
+  const expresion = parseUnitExpression(unitRaw)
   const configurada = parseUnitExpression(producto?.unit ?? null)
   let unit: string | null = null
+
+  if (unitRaw && expresion.error) {
+    errors.push(error('unit', `${expresion.error}. Medidas admitidas: ${measureHelpText()}.`))
+  }
 
   if (expresion.measure && configurada.measure && expresion.measure !== configurada.measure) {
     errors.push(error(
@@ -357,12 +336,73 @@ export function validateRow(
     unit = expresion.measure
   } else if (!unitRaw && configurada.measure) {
     // El fichero no trae unidad: se hereda la de la referencia.
-    // El fichero no trae unidad: se hereda la de la referencia.
     unit = configurada.measure
   } else if (!unitRaw && !configurada.measure) {
     errors.push(error(
       'unit',
       `Falta la unidad: ni el archivo la indica ni la referencia la tiene configurada. Admitidas: ${measureHelpText()}.`,
+    ))
+  }
+
+  // ── Moneda (034, reescrita en 037) ────────────────────────────────────────
+  //
+  // Confluyen TRES fuentes que pueden decir la moneda:
+  //
+  //   · la columna `currency`              → «USD»
+  //   · la columna `unit`, si es combinada → «€/100 Kg» lleva EUR dentro
+  //   · el propio precio                   → «285,00 €»
+  //
+  // Cuando coinciden, no hay nada que decidir. Cuando NO coinciden, se devuelve
+  // un error que las nombra todas. Elegir una en silencio es lo único que no se
+  // puede hacer: guardaría una serie entera bajo la divisa equivocada y nadie lo
+  // vería hasta comparar con la fuente original meses después.
+  //
+  // ── 037: la medida manda sobre si HAY moneda ──────────────────────────────
+  //
+  // Con `%` o `Unidades` la moneda no es que sea opcional: es que NO EXISTE. Un
+  // IPC del 2,5 % no está en euros ni en dólares. Por eso una moneda escrita
+  // junto a una medida no monetaria es un ERROR y no algo que se ignore en
+  // silencio: quien escribe «EUR» en la fila del IPC se ha equivocado de
+  // columna o de fila, y las dos cosas conviene que las vea.
+  const monedaColumna = currencyRaw ? parseCurrency(currencyRaw) : null
+
+  if (currencyRaw && !monedaColumna) {
+    errors.push(error('currency', `Moneda no reconocida: «${currencyRaw}». Admitidas: ${currencyHelpText()}.`))
+  }
+
+  // Candidatas, con su procedencia, para poder explicar el conflicto.
+  const candidatas: { valor: ImportCurrency; origen: string }[] = []
+  if (monedaColumna) candidatas.push({ valor: monedaColumna, origen: 'la columna currency' })
+  if (expresion.currency) candidatas.push({ valor: expresion.currency, origen: `la unidad «${unitRaw}»` })
+  if (precio.currency) candidatas.push({ valor: precio.currency, origen: `el precio «${priceRaw}»` })
+
+  const distintas = [...new Set(candidatas.map((c) => c.valor))]
+  const esNoMonetaria = isNonMonetaryMeasure(unit)
+  let currency: ImportCurrency | null = null
+
+  if (esNoMonetaria) {
+    if (candidatas.length > 0) {
+      errors.push(error(
+        'currency',
+        `La unidad «${unit}» no lleva moneda y ${candidatas[0].origen} dice ${candidatas[0].valor}. ` +
+        `Deja la columna «currency» vacía: ${nonMonetaryHelpText()} son magnitudes sin divisa ` +
+        '(un índice o un porcentaje no está en euros).',
+      ))
+    }
+    // currency se queda en `null`. Es el valor correcto, no un hueco.
+  } else if (distintas.length > 1) {
+    errors.push(error(
+      'currency',
+      `Contradicción de moneda: ${candidatas.map((c) => `${c.origen} dice ${c.valor}`).join(', ')}. ` +
+      'Corrige el archivo para que todas digan lo mismo.',
+    ))
+  } else if (distintas.length === 1) {
+    currency = distintas[0]
+  } else if (!currencyRaw) {
+    errors.push(error(
+      'currency',
+      `La moneda es obligatoria para la unidad «${unit ?? '?'}». Admitidas: ${currencyHelpText()}. ` +
+      `Solo ${nonMonetaryHelpText()} van sin moneda.`,
     ))
   }
 
@@ -466,7 +506,9 @@ export function validateRow(
   // Se miran DOS orígenes, y ambos cuentan como duplicado:
   //   · el fichero contra sí mismo (`seenKeys`);
   //   · el fichero contra lo ya almacenado (`existingKeys`).
-  const key = naturalKey(base.productId!, base.recordedAt!, base.currency!, base.unit!, base.lonja)
+  // `currency` puede ser `null` legítimamente (037): una fila de índice o de
+  // porcentaje no tiene moneda y sigue siendo perfectamente válida.
+  const key = naturalKey(base.productId!, base.recordedAt!, base.currency, base.unit!, base.lonja)
 
   // El aviso sobre la lonja no es decorativo. En el fichero real que motivó
   // este bloque, 19 filas compartían producto, fecha, moneda, unidad y lonja
@@ -523,7 +565,11 @@ export function flagConflictingDuplicates(rows: NormalizedImportRow[]): Normaliz
   const porClave = new Map<string, NormalizedImportRow[]>()
 
   for (const fila of rows) {
-    if (fila.productId === null || fila.recordedAt === null || fila.currency === null || fila.unit === null) continue
+    // 037 — `currency` NO entra en esta guarda. Una fila sin moneda es válida
+    // (índices y porcentajes), y excluirla aquí la dejaba fuera de la detección
+    // de precios contradictorios: justo la comprobación que impide guardar a
+    // ciegas uno de dos valores distintos para el mismo día.
+    if (fila.productId === null || fila.recordedAt === null || fila.unit === null) continue
     if (fila.status !== 'valid' && fila.status !== 'duplicate') continue
     const clave = naturalKey(fila.productId, fila.recordedAt, fila.currency, fila.unit, fila.lonja)
     const grupo = porClave.get(clave)

@@ -33,6 +33,35 @@ export const LONJA_PARAM = 'lonja'
 /** Etiqueta de la opción sin filtro. */
 export const ALL_LONJAS_LABEL = 'Todas las lonjas'
 
+// ── La etiqueta visible del filtro de la portada (037) ──────────────────────
+//
+// El cliente pide que el desplegable de la PORTADA de Market Intelligence se
+// lea «País», no «Lonja». En sus datos ese selector ofrece casi siempre países
+// —España, Alemania, Bélgica, Polonia— y «Lonja» le resulta confuso ahí.
+//
+// Lo que cambia es EXCLUSIVAMENTE el texto. No cambia:
+//
+//   · la columna (`product_price_records.lonja`);
+//   · el search param (`?lonja=`);
+//   · el filtrado, la consulta ni el conjunto de valores ofrecidos.
+//
+// Y NO se aplica en la ficha de producto: ahí el mismo selector distingue entre
+// «Ebro», «Europa» y «Naciones Unidas», que no son países. Llamar «País» a eso
+// sería sustituir una etiqueta imprecisa por una falsa.
+//
+// Tampoco se sustituyen valores: «Europa» sigue diciendo «Europa». El cliente
+// ha pedido renombrar un rótulo, no migrar el modelo a una tabla de países —
+// eso exigiría decidir qué es «Naciones Unidas» y esa decisión no es del código.
+
+/** Rótulo del filtro en la portada de Market Intelligence. */
+export const COUNTRY_FILTER_LABEL = 'País'
+
+/** Rótulo del filtro donde de verdad representa una plaza de contratación. */
+export const LONJA_FILTER_LABEL = 'Lonja'
+
+/** Opción «sin filtro» cuando el selector se presenta como País. */
+export const ALL_COUNTRIES_LABEL = 'Todos los países'
+
 /**
  * Normaliza un valor de lonja para compararlo.
  *
@@ -74,7 +103,17 @@ export function collectLonjas(values: readonly (string | null | undefined)[]): s
   return Array.from(set).sort((a, b) => a.localeCompare(b, 'es'))
 }
 
-/** Texto accesible del selector según la lonja activa. */
-export function lonjaAriaLabel(active: string): string {
-  return active ? `Lonja seleccionada: ${active}` : `Lonja: ${ALL_LONJAS_LABEL.toLowerCase()}`
+/**
+ * Texto accesible del selector según el valor activo.
+ *
+ * Toma el rótulo como parámetro para que lo que oye un lector de pantalla sea
+ * lo mismo que se lee en la etiqueta: en la portada «País seleccionado: España»
+ * y en la ficha de producto «Lonja seleccionada: Ebro». Un `aria-label` que
+ * dijera «Lonja» bajo un rótulo que pone «País» sería peor que no ponerlo.
+ */
+export function lonjaAriaLabel(active: string, label: string = LONJA_FILTER_LABEL): string {
+  const esPais = label === COUNTRY_FILTER_LABEL
+  const vacio = esPais ? ALL_COUNTRIES_LABEL : ALL_LONJAS_LABEL
+  const concordado = esPais ? 'seleccionado' : 'seleccionada'
+  return active ? `${label} ${concordado}: ${active}` : `${label}: ${vacio.toLowerCase()}`
 }

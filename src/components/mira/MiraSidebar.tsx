@@ -36,6 +36,14 @@ interface Props {
   user: MiraUser
   badge?: string
   onClose?: () => void
+  /**
+   * 037 — destino del logo dentro de la aplicación.
+   *
+   * Lo fija el shell del área (`AppShell` / `AdminShell`), que a su vez lo monta
+   * el layout de servidor tras pasar los guards. Aquí no se decide nada.
+   */
+  homeHref?: string
+  homeLabel?: string
 }
 
 /** id estable y válido en HTML para enlazar el botón con su submenú (aria-controls). */
@@ -43,7 +51,14 @@ function submenuId(href: string) {
   return `mira-submenu-${href.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '')}`
 }
 
-export function MiraSidebar({ nav, user, badge, onClose }: Props) {
+export function MiraSidebar({
+  nav,
+  user,
+  badge,
+  onClose,
+  homeHref = '/',
+  homeLabel = 'MIRA — ir al inicio',
+}: Props) {
   const pathname = usePathname()
   const router = useRouter()
 
@@ -67,7 +82,7 @@ export function MiraSidebar({ nav, user, badge, onClose }: Props) {
     <aside className="mira-sidebar-bg flex h-full w-full flex-col text-white">
       {/* Logo */}
       <div className="relative flex items-center justify-center px-5 pb-5 pt-6">
-        <MiraBrand />
+        <MiraBrand href={homeHref} ariaLabel={homeLabel} />
         {badge && (
           <span className="absolute right-12 top-6 rounded-full bg-white/10 px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest text-white/60">
             {badge}

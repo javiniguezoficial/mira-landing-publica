@@ -60,10 +60,12 @@ describe('formato del archivo descargado', () => {
     expect(csv).toContain('\r\n')
   })
 
-  it('tiene cabecera y una sola fila de ejemplo', () => {
+  // 037 — DOS filas de ejemplo: un precio y un indicador sin moneda. La segunda
+  // existe porque la columna `currency` vacía parece un olvido y no lo es.
+  it('tiene cabecera y las dos filas de ejemplo', () => {
     const parsed = parseCsv(csv)
     expect(parsed.headers).toEqual([...TEMPLATE_COLUMNS])
-    expect(parsed.rows).toHaveLength(1)
+    expect(parsed.rows).toHaveLength(2)
   })
 
   it('no arrastra errores de parseo', () => {

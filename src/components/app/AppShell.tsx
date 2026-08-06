@@ -89,7 +89,15 @@ export function AppShell({ children, modules = DEFAULT_ORGANIZATION_MODULES }: A
   }, [])
 
   return (
-    <MiraPageShell nav={navConModulos(modules)} user={user}>
+    // 037 — el logo lleva al Dashboard del cliente, no a la landing pública.
+    // Este shell solo lo monta el layout de `/app/*`, así que el destino está
+    // decidido en servidor: no se consulta el rol en el navegador.
+    <MiraPageShell
+      nav={navConModulos(modules)}
+      user={user}
+      homeHref="/app/dashboard"
+      homeLabel="MIRA — ir al Dashboard"
+    >
       {children}
     </MiraPageShell>
   )

@@ -9,6 +9,9 @@ interface Props {
   user: MiraUser
   badge?: string
   children: React.ReactNode
+  /** 037 — destino del logo. Lo decide el shell del área, no este layout. */
+  homeHref?: string
+  homeLabel?: string
 }
 
 function getLabel(nav: NavItem[], pathname: string) {
@@ -19,7 +22,7 @@ function getLabel(nav: NavItem[], pathname: string) {
 }
 
 /** Layout unificado del panel: sidebar fijo (desktop) + header y drawer (móvil). */
-export function MiraPageShell({ nav, user, badge, children }: Props) {
+export function MiraPageShell({ nav, user, badge, children, homeHref, homeLabel }: Props) {
   const [open, setOpen] = useState(false)
   const pathname = usePathname()
   const label = getLabel(nav, pathname)
@@ -28,7 +31,7 @@ export function MiraPageShell({ nav, user, badge, children }: Props) {
     <div className="mira-content-bg flex min-h-screen">
       {/* Sidebar desktop */}
       <div className="hidden md:sticky md:top-0 md:flex md:h-screen md:w-[264px] md:shrink-0 md:flex-col">
-        <MiraSidebar nav={nav} user={user} badge={badge} />
+        <MiraSidebar nav={nav} user={user} badge={badge} homeHref={homeHref} homeLabel={homeLabel} />
       </div>
 
       {/* Overlay móvil */}
@@ -38,7 +41,7 @@ export function MiraPageShell({ nav, user, badge, children }: Props) {
 
       {/* Drawer móvil */}
       <div className={`fixed inset-y-0 left-0 z-50 h-screen w-[264px] transform transition-transform duration-300 ease-out md:hidden ${open ? 'translate-x-0' : '-translate-x-full'}`}>
-        <MiraSidebar nav={nav} user={user} badge={badge} onClose={() => setOpen(false)} />
+        <MiraSidebar nav={nav} user={user} badge={badge} homeHref={homeHref} homeLabel={homeLabel} onClose={() => setOpen(false)} />
       </div>
 
       {/* Contenido */}

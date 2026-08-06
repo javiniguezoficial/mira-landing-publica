@@ -2,6 +2,9 @@
 
 import { requirePlatformAdmin } from '@/lib/auth/guards'
 import { createClient } from '@/lib/supabase/server'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
+import { getPriceFacetValues } from '@/lib/queries/lonjas'
+import { isNonMonetaryUnit } from '@/lib/utils'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -99,7 +102,9 @@ export async function createPriceRecord(
       product_id:  productId,
       price:       form.price,
       unit:        form.unit.trim(),
-      currency:    form.currency.trim(),
+      // 037 — un porcentaje o un índice no llevan moneda. La restricción de la
+      // base lo exige; aquí se cumple en lugar de esperar a que reviente.
+      currency:    isNonMonetaryUnit(form.unit) ? null : form.currency.trim(),
       country:     form.country.trim(),
       region:      form.region?.trim() || null,
       recorded_at: form.recorded_at,
@@ -125,7 +130,9 @@ export async function updatePriceRecord(
     .update({
       price:       form.price,
       unit:        form.unit.trim(),
-      currency:    form.currency.trim(),
+      // 037 — un porcentaje o un índice no llevan moneda. La restricción de la
+      // base lo exige; aquí se cumple en lugar de esperar a que reviente.
+      currency:    isNonMonetaryUnit(form.unit) ? null : form.currency.trim(),
       country:     form.country.trim(),
       region:      form.region?.trim() || null,
       recorded_at: form.recorded_at,
@@ -177,42 +184,57 @@ export interface PricingHierarchy {
   facets: PricingFacets
 }
 
+interface RawPricingProduct {
+  id: string; name: string; unit: string; market_id: string
+  lonja: string | null; variedad: string | null; calibre: string | null; incoterm: string | null; tipo: string | null
+}
+
 export async function getPricingTree(): Promise<PricingHierarchy> {
   const supabase = await createClient()
-  const [sm, cat, mk, pr, ppr] = await Promise.all([
+  const [sm, cat, mk, productos, facetValues] = await Promise.all([
     supabase.from('strategic_markets').select('id, name').eq('is_active', true).order('sort_order').order('name'),
     supabase.from('market_categories').select('id, name, strategic_market_id').eq('is_active', true).order('sort_order').order('name'),
     supabase.from('markets').select('id, name, category_id').eq('is_active', true).order('name'),
-    supabase.from('products').select('id, name, unit, market_id, lonja, variedad, calibre, incoterm, tipo').eq('is_active', true).order('name'),
-    // unit vive también en products, pero con otro significado (precio/medida del
-    // producto, p.ej. "€/kg"). El filtro real se aplica sobre product_price_records.unit
-    // (p.ej. "kg", "ton"), así que el facet de unidades debe salir de esta tabla.
+    // 037 — PAGINADO. Hay 973 productos activos y PostgREST recorta en 1.000
+    // sin avisar: el desplegable de referencias estaba a 27 altas de empezar a
+    // perder productos en silencio.
+    fetchAllRows<RawPricingProduct>(
+      () =>
+        supabase
+          .from('products')
+          .select('id, name, unit, market_id, lonja, variedad, calibre, incoterm, tipo')
+          .eq('is_active', true)
+          .order('name'),
+      { label: 'pricing-tree/products' },
+    ),
+    // 037 — las facetas de lonja y unidad se calculan en SQL.
     //
-    // 034 — y la lonja, igual: desde que cada precio lleva la suya, el desplegable
-    // tiene que ofrecer las que existen en los PRECIOS. Ofrecer las de
-    // `products.lonja` daría opciones sin ningún resultado detrás.
-    supabase.from('product_price_records').select('unit, lonja'),
+    // unit vive también en products, pero con otro significado (precio/medida
+    // del producto, p.ej. "€/kg"). El filtro real se aplica sobre
+    // product_price_records.unit (p.ej. "kg", "ton"), así que el facet de
+    // unidades debe salir de esa tabla — y la lonja igual, desde que cada precio
+    // lleva la suya (034).
+    //
+    // Se hacía con un `select unit, lonja` sin límite sobre 73.340 filas, que
+    // PostgREST recortaba en 1.000: los desplegables ofrecían un subconjunto
+    // arbitrario de los valores que existen de verdad.
+    getPriceFacetValues(),
   ])
 
-  const rawProducts = (pr.data ?? []) as Array<{
-    id: string; name: string; unit: string; market_id: string
-    lonja: string | null; variedad: string | null; calibre: string | null; incoterm: string | null; tipo: string | null
-  }>
+  const rawProducts = productos.rows
 
   // Valores únicos, sin nulos/vacíos, ordenados (para los selects de filtro).
   const uniq = (vals: (string | null | undefined)[]): string[] =>
     Array.from(new Set(vals.map((v) => v?.trim()).filter((v): v is string => !!v)))
       .sort((a, b) => a.localeCompare(b, 'es'))
 
-  const registros = (ppr.data ?? []) as Array<{ unit: string | null; lonja: string | null }>
-
   const facets: PricingFacets = {
-    lonjas:     uniq(registros.map((r) => r.lonja)),
+    lonjas:     facetValues.lonjas,
     variedades: uniq(rawProducts.map((p) => p.variedad)),
     calibres:   uniq(rawProducts.map((p) => p.calibre)),
     incoterms:  uniq(rawProducts.map((p) => p.incoterm)),
     tipos:      uniq(rawProducts.map((p) => p.tipo)),
-    units:      uniq(registros.map((r) => r.unit)),
+    units:      facetValues.units,
   }
 
   return {
@@ -255,10 +277,30 @@ export interface PriceListRow {
   id: string
   price: number
   unit: string
-  currency: string
+  /** 037 — `null` en indicadores no monetarios (`%`, `Unidades`). */
+  currency: string | null
   country: string
   region: string | null
   recorded_at: string
+  /**
+   * 034 — lonja DEL REGISTRO, no la de la ficha del producto.
+   *
+   * La tabla enseñaba `product.lonja`, que es el valor por defecto de la
+   * referencia y no tiene por qué coincidir con la plaza de esta fila: desde
+   * que una referencia cotiza en varias, mirar la del producto significaba
+   * enseñar «España» en las 20 filas de un boletín europeo.
+   */
+  lonja: string | null
+  /**
+   * 037 — fuente del dato, tal y como se guardó al importar.
+   *
+   * Vive en `metadata->>'source'`. NO se deduce del nombre del fichero ni de
+   * `source_id`, que sigue siendo una columna huérfana sin FK y con 0 filas
+   * usándola. Las 73.340 filas actuales tienen la fuente informada («MAPA»,
+   * «Comisión Europea», «Lonja de Barcelona»…); una fila sin ella se enseña
+   * como «—», nunca rellenada con una suposición.
+   */
+  source: string | null
   min_price: number | null
   max_price: number | null
   avg_price: number | null
@@ -325,8 +367,12 @@ export async function listPriceRecordsFiltered(filters: PriceListFilters = {}): 
 
   let query = supabase
     .from('product_price_records')
+    // 037 — `lonja` y `metadata` entran en el select porque la tabla las
+    // enseña como columnas propias. Son dos campos más de las 50 filas de la
+    // página, no una consulta adicional: sigue habiendo un solo viaje, sin N+1.
     .select(`
-      id, price, unit, currency, country, region, recorded_at, min_price, max_price, avg_price, volume,
+      id, price, unit, currency, country, region, recorded_at, lonja, metadata,
+      min_price, max_price, avg_price, volume,
       ${PRODUCT_HIERARCHY_SELECT}
     `, { count: 'exact' })
     .order('recorded_at', { ascending: false })
@@ -342,14 +388,18 @@ export async function listPriceRecordsFiltered(filters: PriceListFilters = {}): 
     const market = product && (Array.isArray(product.market) ? product.market[0] : product.market)
     const category = market && (Array.isArray(market.category) ? market.category[0] : market.category)
     const strategic = category && (Array.isArray(category.strategic_market) ? category.strategic_market[0] : category.strategic_market)
+    const metadata = (r.metadata ?? null) as Record<string, unknown> | null
+    const source = typeof metadata?.source === 'string' ? metadata.source.trim() : ''
     return {
       id: r.id,
       price: parseFloat(r.price),
       unit: r.unit,
-      currency: r.currency,
+      currency: r.currency ?? null,
       country: r.country,
       region: r.region ?? null,
       recorded_at: r.recorded_at,
+      lonja: typeof r.lonja === 'string' && r.lonja.trim() ? r.lonja.trim() : null,
+      source: source || null,
       min_price: r.min_price != null ? parseFloat(r.min_price) : null,
       max_price: r.max_price != null ? parseFloat(r.max_price) : null,
       avg_price: r.avg_price != null ? parseFloat(r.avg_price) : null,
@@ -384,14 +434,27 @@ export interface PriceInsights {
   avg: number | null
   lastDate: string | null
   unit: string | null          // null → varias unidades distintas en la muestra
-  currency: string | null      // null → varias monedas distintas en la muestra
+  /**
+   * Moneda de la muestra, o `null`.
+   *
+   * 037 — `null` ya NO significa solo «hay varias». También significa «esta
+   * magnitud no lleva moneda» (un índice, un porcentaje). Para distinguirlo hay
+   * que mirar `mixedCurrency`: sin él, una serie del IPC se anunciaba como
+   * «varias monedas» y el gráfico se negaba a dibujarla.
+   */
+  currency: string | null
+  /** true → la muestra mezcla monedas distintas y no son comparables. */
+  mixedCurrency: boolean
+  /** true → la muestra mezcla unidades distintas y no son comparables. */
+  mixedUnit: boolean
   capped: boolean              // true si count > sampleSize (resumen sobre una muestra reciente, no el total)
   sampleSize: number
   series: PriceSeriesPoint[]   // agregado por fecha (promedio del día), orden ascendente
 }
 
 const EMPTY_INSIGHTS: Omit<PriceInsights, 'count' | 'capped'> = {
-  min: null, max: null, avg: null, lastDate: null, unit: null, currency: null, sampleSize: 0, series: [],
+  min: null, max: null, avg: null, lastDate: null, unit: null, currency: null,
+  mixedCurrency: false, mixedUnit: false, sampleSize: 0, series: [],
 }
 
 export async function getPriceInsights(filters: PriceListFilters = {}): Promise<PriceInsights> {
@@ -419,7 +482,7 @@ export async function getPriceInsights(filters: PriceListFilters = {}): Promise<
     price: parseFloat(r.price),
     recorded_at: r.recorded_at as string,
     unit: r.unit as string,
-    currency: r.currency as string,
+    currency: (r.currency as string | null) ?? null,
   }))
 
   const prices = rows.map((r) => r.price)
@@ -449,7 +512,11 @@ export async function getPriceInsights(filters: PriceListFilters = {}): Promise<
     avg: Math.round(avg * 10000) / 10000,
     lastDate: rows[0].recorded_at, // primer elemento: viene ordenado por recorded_at DESC
     unit: units.size === 1 ? rows[0].unit : null,
+    // Con una sola moneda se devuelve esa moneda, que puede ser `null` de forma
+    // legítima: toda la muestra es un índice o un porcentaje.
     currency: currencies.size === 1 ? rows[0].currency : null,
+    mixedCurrency: currencies.size > 1,
+    mixedUnit: units.size > 1,
     capped: total > rows.length,
     sampleSize: rows.length,
     series,
@@ -483,6 +550,28 @@ export async function createPriceManual(
   if (form.price < 0) return { error: 'El precio no puede ser negativo' }
   if (!form.unit?.trim()) return { error: 'La unidad es obligatoria' }
 
+  // ── Moneda (037) ─────────────────────────────────────────────────────────
+  //
+  // Antes se forzaba `form.currency || 'EUR'`. Con las 16 referencias de índice
+  // y porcentaje del catálogo eso guardaba «2,5 EUR» sobre el IPC, y desde esta
+  // fase la restricción de la base lo rechaza directamente con un error de
+  // PostgreSQL que no dice nada útil. Se decide aquí y se explica en castellano.
+  const unidad = form.unit.trim()
+  const monedaEscrita = form.currency?.trim() || ''
+  let currency: string | null
+
+  if (isNonMonetaryUnit(unidad)) {
+    if (monedaEscrita) {
+      return {
+        error: `La unidad «${unidad}» no lleva moneda: un índice o un porcentaje no está en ${monedaEscrita}. Deja el campo de moneda vacío.`,
+      }
+    }
+    currency = null
+  } else {
+    if (!monedaEscrita) return { error: `La moneda es obligatoria para la unidad «${unidad}»` }
+    currency = monedaEscrita
+  }
+
   const metadata: Record<string, unknown> = {}
   if (form.source_name?.trim()) metadata.source_name = form.source_name.trim()
   if (form.notes?.trim()) metadata.notes = form.notes.trim()
@@ -505,8 +594,8 @@ export async function createPriceManual(
     .insert({
       product_id:  productId,
       price:       form.price,
-      unit:        form.unit.trim(),
-      currency:    form.currency?.trim() || 'EUR',
+      unit:        unidad,
+      currency,
       country:     form.country?.trim() || 'ES',
       region:      form.region?.trim() || null,
       recorded_at: form.recorded_at,

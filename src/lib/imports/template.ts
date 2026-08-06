@@ -48,9 +48,43 @@ export const TEMPLATE_EXAMPLE_ROW: Record<string, string> = {
   notes: '',
 }
 
+/**
+ * Segunda fila de ejemplo: un INDICADOR SIN MONEDA (037).
+ *
+ * Existe porque la columna `currency` vacía parece un olvido y no lo es. Con
+ * `%` o `Unidades` —un IPC, un índice FAO— la moneda no se deja en blanco por
+ * comodidad: es que no hay ninguna. Verlo escrito en la plantilla evita la
+ * reacción natural de rellenar «EUR», que el validador rechaza.
+ *
+ * Los identificadores también son inventados, por la misma razón que la fila
+ * anterior: una plantilla que se pueda subir tal cual escribiría datos falsos
+ * sobre referencias reales.
+ */
+export const TEMPLATE_INDICATOR_ROW: Record<string, string> = {
+  market_slug: 'indice-de-precios-ejemplo',
+  product_slug: 'indice-general-ejemplo',
+  recorded_at: '2026-07-27',
+  price: '2,5',
+  // Vacía A PROPÓSITO: un porcentaje no está en euros.
+  currency: '',
+  unit: '%',
+  lonja: 'España',
+  country: 'ES',
+  region: '',
+  min_price: '',
+  max_price: '',
+  avg_price: '',
+  volume: '',
+  source: 'INE',
+  notes: 'Indicador sin moneda: deja «currency» vacía con unidad % o Unidades',
+}
+
 /** La plantilla oficial, lista para descargar. Lleva BOM: Excel lo necesita. */
 export function buildImportTemplateCsv(): string {
-  return buildCsv(TEMPLATE_COLUMNS, [TEMPLATE_COLUMNS.map((c) => TEMPLATE_EXAMPLE_ROW[c] ?? '')])
+  return buildCsv(TEMPLATE_COLUMNS, [
+    TEMPLATE_COLUMNS.map((c) => TEMPLATE_EXAMPLE_ROW[c] ?? ''),
+    TEMPLATE_COLUMNS.map((c) => TEMPLATE_INDICATOR_ROW[c] ?? ''),
+  ])
 }
 
 /**

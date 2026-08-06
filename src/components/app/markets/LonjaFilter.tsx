@@ -1,8 +1,15 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { Landmark } from 'lucide-react'
-import { ALL_LONJAS_LABEL, LONJA_PARAM, lonjaAriaLabel } from '@/lib/markets/lonja'
+import { Globe2, Landmark } from 'lucide-react'
+import {
+  ALL_COUNTRIES_LABEL,
+  ALL_LONJAS_LABEL,
+  COUNTRY_FILTER_LABEL,
+  LONJA_FILTER_LABEL,
+  LONJA_PARAM,
+  lonjaAriaLabel,
+} from '@/lib/markets/lonja'
 import { miraField } from '@/lib/miraButtons'
 
 interface Props {
@@ -21,6 +28,14 @@ interface Props {
    * ofrece.
    */
   requireSelection?: boolean
+  /**
+   * 037 — rótulo VISIBLE del selector.
+   *
+   * La portada lo presenta como «País» y la ficha de producto sigue diciendo
+   * «Lonja». Solo cambia el texto: mismo parámetro, misma consulta, mismos
+   * valores. Ver `lib/markets/lonja.ts` para el porqué de la distinción.
+   */
+  label?: string
 }
 
 /**
@@ -46,13 +61,26 @@ interface Props {
  * paginación anterior ya no significa lo mismo. `router.push` navega sin
  * recargar la página entera.
  */
-export function LonjaFilter({ available, active, basePath, searchParams, requireSelection = false }: Props) {
+export function LonjaFilter({
+  available,
+  active,
+  basePath,
+  searchParams,
+  requireSelection = false,
+  label = LONJA_FILTER_LABEL,
+}: Props) {
   const router = useRouter()
+
+  const esPais = label === COUNTRY_FILTER_LABEL
+  const Icono = esPais ? Globe2 : Landmark
+  const etiquetaTodas = esPais ? ALL_COUNTRIES_LABEL : ALL_LONJAS_LABEL
 
   if (available.length === 0) {
     return (
       <p className="text-xs text-slate-400">
-        No hay lonjas informadas para esta selección.
+        {esPais
+          ? 'No hay países informados para esta selección.'
+          : 'No hay lonjas informadas para esta selección.'}
       </p>
     )
   }
@@ -75,17 +103,36 @@ export function LonjaFilter({ available, active, basePath, searchParams, require
         htmlFor="mira-lonja-filter"
         className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400"
       >
-        <Landmark size={13} aria-hidden="true" />
-        Lonja
+        <Icono size={13} aria-hidden="true" />
+        {label}
+        {/* 037 — con veinte o treinta opciones conviene decir cuántas hay antes
+            de abrir el desplegable. «Canal Estándar» cotiza en 20 plazas y
+            «Leche Mundo» en 27; hasta ahora solo se veían 8 y nada indicaba que
+            faltaran las demás. */}
+        {available.length > 8 && (
+          <span className="rounded-md bg-mira-canvas px-1.5 py-0.5 text-[10px] font-bold text-slate-400">
+            {available.length}
+          </span>
+        )}
       </label>
+      {/*
+        Se mantiene un `<select>` nativo, y es una decisión:
+
+        · desplegable con scroll propio, sin romper el diseño con 27 opciones;
+        · teclado y lector de pantalla gratis, sin reimplementar el patrón
+          combobox de ARIA;
+        · en móvil abre el selector del sistema, que ya trae búsqueda.
+
+        La alternativa —un botón por lonja— era justo lo que había que evitar.
+      */}
       <select
         id="mira-lonja-filter"
         value={active}
         onChange={(e) => cambiar(e.target.value)}
-        aria-label={lonjaAriaLabel(active)}
+        aria-label={lonjaAriaLabel(active, label)}
         className={miraField}
       >
-        {!requireSelection && <option value="">{ALL_LONJAS_LABEL}</option>}
+        {!requireSelection && <option value="">{etiquetaTodas}</option>}
         {available.map((lonja) => (
           <option key={lonja} value={lonja}>
             {lonja}
