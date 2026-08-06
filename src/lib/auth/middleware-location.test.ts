@@ -49,7 +49,11 @@ describe('el layout de /admin comprueba el rol en servidor', () => {
 
   it('lo hace ANTES de renderizar AdminShell', () => {
     const posicionGuard = layout.indexOf('await requirePlatformAdmin')
-    const posicionRender = layout.indexOf('<AdminShell>')
+    // Se busca la APERTURA de la etiqueta, no `<AdminShell>` literal: desde
+    // 039 el shell recibe props (el recuento de tickets pendientes) y una
+    // comparación exacta rompería el test por un cambio que no afecta a lo que
+    // aquí se está fijando — que el guard corre antes de renderizar nada.
+    const posicionRender = layout.indexOf('<AdminShell')
     expect(posicionGuard).toBeGreaterThan(-1)
     expect(posicionRender).toBeGreaterThan(-1)
     expect(posicionGuard).toBeLessThan(posicionRender)

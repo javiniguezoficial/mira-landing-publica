@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ChevronLeft, Pencil, Building2, Mail, Phone, Globe, MapPin, Users } from 'lucide-react'
 import { getOrganizationById, getOrganizationOwner, getPlans } from '@/lib/actions/organizations'
+import { requirePlatformAdmin } from '@/lib/auth/guards'
 import { getOrganizationMembers, getProfiles } from '@/lib/actions/users'
 import { ClientLifecycleCard } from '@/components/admin/clients/ClientLifecycleCard'
 import { OrganizationModulesCard } from '@/components/admin/clients/OrganizationModulesCard'
@@ -27,6 +28,11 @@ function DetailRow({ label, value }: { label: string; value?: string | null }) {
 }
 
 export default async function ClienteDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  // 039 — se necesita saber QUIÉN mira para poder marcar su propia fila en el
+  // equipo: nadie modifica su propia pertenencia, ni siquiera un administrador
+  // de plataforma (trigger de 023).
+  const { userId: actorId } = await requirePlatformAdmin()
+
   const { id } = await params
   const [org, members, allUsers, owner, planes, mercados] = await Promise.all([
     getOrganizationById(id),
@@ -191,7 +197,12 @@ export default async function ClienteDetailPage({ params }: { params: Promise<{ 
             </div>
             <AddMemberModal orgId={org.id} existingMemberIds={existingMemberIds} allUsers={allUsers} />
           </div>
-          <MembersTable members={members} orgId={org.id} />
+          <MembersTable
+            members={members}
+            orgId={org.id}
+            commercialProfile={org.commercial_profile ?? null}
+            actorId={actorId}
+          />
         </section>
       </div>
     </div>

@@ -35,7 +35,20 @@ const nav: NavItem[] = [
   { href: '/admin/configuracion',    label: 'Configuración',    icon: Settings },
 ]
 
-export function AdminShell({ children }: { children: React.ReactNode }) {
+interface AdminShellProps {
+  children: React.ReactNode
+  /**
+   * 039 — tickets de soporte pendientes (`open` + `in_progress`).
+   *
+   * Lo calcula el LAYOUT, que es servidor, y baja como prop. Este componente no
+   * consulta nada ni refresca por su cuenta: el número se actualiza al navegar
+   * y cuando una acción revalida `/admin`, que es exactamente cuando puede
+   * haber cambiado.
+   */
+  pendingTickets?: number
+}
+
+export function AdminShell({ children, pendingTickets = 0 }: AdminShellProps) {
   const [user, setUser] = useState<MiraUser>({ name: 'Administrador', meta: '', initial: 'A' })
 
   useEffect(() => {
@@ -51,12 +64,19 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     })
   }, [])
 
+  // El aviso se inyecta sobre el elemento de Soporte sin tocar la lista base:
+  // así el menú sigue declarándose en un solo sitio y el badge es un dato, no
+  // una entrada distinta.
+  const navConAvisos = nav.map((item) =>
+    item.href === '/admin/soporte' ? { ...item, badgeCount: pendingTickets } : item,
+  )
+
   return (
     // 037 — el logo lleva al Dashboard de administración. Este shell solo lo
     // monta el layout de `/admin/*`, que ya ha pasado `requirePlatformAdmin`:
     // llegar aquí ES la prueba del rol, no hace falta volver a preguntarlo.
     <MiraPageShell
-      nav={nav}
+      nav={navConAvisos}
       user={user}
       badge="admin"
       homeHref="/admin/dashboard"

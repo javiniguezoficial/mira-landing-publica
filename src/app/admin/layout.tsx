@@ -1,4 +1,5 @@
 import { requirePlatformAdmin } from '@/lib/auth/guards'
+import { getPendingTicketCount } from '@/lib/queries/support'
 import { AdminShell } from '@/components/admin/AdminShell'
 
 // Server Component: la comprobación ocurre en el servidor ANTES de renderizar
@@ -17,5 +18,11 @@ import { AdminShell } from '@/components/admin/AdminShell'
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   await requirePlatformAdmin('redirect-dashboard')
 
-  return <AdminShell>{children}</AdminShell>
+  // 039 — aviso de soporte. Se resuelve AQUÍ, una sola vez por navegación, y
+  // baja como prop: la barra lateral no abre su propia consulta ni sondea en un
+  // intervalo. Se lee después del guard, así que solo lo ejecuta quien ya es
+  // administrador.
+  const pendingTickets = await getPendingTicketCount()
+
+  return <AdminShell pendingTickets={pendingTickets}>{children}</AdminShell>
 }

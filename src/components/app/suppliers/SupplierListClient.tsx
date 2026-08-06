@@ -210,13 +210,18 @@ export function SupplierListClient({
         </div>
       )}
 
-      {/* 3.1 y 3.4 — búsqueda en resultados, orden y exportación */}
+      {/* 3.1 — búsqueda en resultados y orden.
+          039 — SIN exportación: la descarga XLSX queda reservada a
+          `platform_admin`. Se pasa `canExport={false}` de forma explícita, en
+          lugar de omitir el prop, para que quede escrito que es una decisión y
+          no un olvido. Buscar y ver proveedores sigue disponible igual. */}
       <SupplierResultsToolbar
         basePath="/app/proveedores"
         params={filters as SupplierListParams}
         total={total}
         selectedIds={seleccion.selectedIds}
         onClearSelection={seleccion.clear}
+        canExport={false}
       />
 
       {/* Contador + toggle vista */}

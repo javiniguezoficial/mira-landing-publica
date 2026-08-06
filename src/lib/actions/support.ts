@@ -1,6 +1,21 @@
 'use server'
 
+import { revalidatePath } from 'next/cache'
 import { requirePlatformAdmin, requireSession, resolveMembership } from '@/lib/auth/guards'
+
+/**
+ * 039 — refresca las superficies afectadas por un cambio de ticket.
+ *
+ * `/admin` incluye el LAYOUT, que es donde se calcula el badge de pendientes.
+ * Sin esta revalidación, resolver un ticket dejaba el aviso con el número
+ * anterior hasta la siguiente recarga completa — y un aviso que no baja al
+ * atender deja de ser un aviso.
+ */
+function refrescarSoporte(ticketId?: string) {
+  revalidatePath('/admin', 'layout')
+  revalidatePath('/admin/soporte')
+  if (ticketId) revalidatePath(`/admin/soporte/${ticketId}`)
+}
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -102,6 +117,8 @@ export async function updateTicketStatus(
     .eq('id', ticketId)
 
   if (error) return { error: error.message }
+
+  refrescarSoporte(ticketId)
   return { success: 'Estado actualizado.' }
 }
 
@@ -128,5 +145,7 @@ export async function updateTicketResponse(
     .eq('id', ticketId)
 
   if (error) return { error: error.message }
+
+  refrescarSoporte(ticketId)
   return { success: 'Respuesta guardada correctamente.' }
 }

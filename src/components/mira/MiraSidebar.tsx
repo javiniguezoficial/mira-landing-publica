@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { type LucideIcon, ChevronDown, Lock, LogOut, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { MiraBrand } from './MiraBrand'
+import { badgeAriaLabel, formatBadgeCount } from '@/lib/support/badge'
 
 export interface NavItem {
   href: string
@@ -23,6 +24,17 @@ export interface NavItem {
    * el aspecto (atenuado + candado) para que se vea antes de pulsar.
    */
   moduleDisabled?: boolean
+  /**
+   * 039 — aviso numérico junto a la etiqueta.
+   *
+   * Se usa para los tickets de soporte pendientes. `0`, `null` o ausente NO
+   * pintan nada: un cero permanente comunica lo mismo que no poner el badge y
+   * además parece un aviso.
+   *
+   * El valor lo calcula el SERVIDOR y baja como prop; este componente no
+   * consulta nada ni refresca por su cuenta.
+   */
+  badgeCount?: number | null
 }
 
 export interface MiraUser {
@@ -105,6 +117,7 @@ export function MiraSidebar({
           // Si el usuario lo ha tocado, manda su decisión.
           const isOpen = hasChildren && (overrides[item.href] ?? isActive)
           const panelId = submenuId(item.href)
+          const avisoTexto = formatBadgeCount(item.badgeCount)
 
           return (
             <div key={item.href}>
@@ -123,6 +136,7 @@ export function MiraSidebar({
                   // Solo navegar cierra el menú móvil. Desplegar, no.
                   onClick={() => onClose?.()}
                   aria-current={isActive ? 'page' : undefined}
+                  aria-label={avisoTexto ? badgeAriaLabel(item.label, item.badgeCount) : undefined}
                   className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-3 py-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                 >
                   <Icon size={17} className={cn('shrink-0', item.moduleDisabled && 'opacity-50')} />
@@ -132,6 +146,20 @@ export function MiraSidebar({
                     {item.number && <span className="mr-1 opacity-80">{item.number}.</span>}
                     {item.label}
                   </span>
+                  {/* 039 — aviso de pendientes. `aria-hidden` porque el número
+                      suelto no dice de qué es: quien usa lector de pantalla lo
+                      oye en el `aria-label` del enlace, ya redactado. */}
+                  {avisoTexto && (
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        'ml-1 shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none',
+                        isActive ? 'bg-white/25 text-white' : 'bg-mira-magenta text-white',
+                      )}
+                    >
+                      {avisoTexto}
+                    </span>
+                  )}
                   {item.moduleDisabled && (
                     <Lock
                       size={12}

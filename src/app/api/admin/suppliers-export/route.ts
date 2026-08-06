@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { authorizePlatformAdminApi } from '@/lib/auth/guards'
+import { authorizationApiMessage, authorizationHttpStatus } from '@/lib/auth/errors'
 import { collectSuppliersForExport, sanitizeSupplierIds } from '@/lib/actions/supplier-bulk'
 import { buildSuppliersWorkbook } from '@/lib/suppliers/export'
 import {
@@ -18,19 +20,30 @@ import { toNum } from '@/lib/pagination'
  * Action tendría que serializar el buffer y reconstruirlo en el navegador, que
  * es justo lo que se quiere evitar: el XLSX se arma entero en servidor.
  *
- * ── Autorización ───────────────────────────────────────────────────────────
+ * ── Autorización (039) ─────────────────────────────────────────────────────
  *
- * NO lleva `authorizePlatformAdminApi`: esta ruta la usan las dos superficies,
- * y un cliente puede exportar lo que ya ve. Quién es y qué columnas le
- * corresponden lo decide `collectSuppliersForExport` reconstruyendo el contexto
- * en servidor —nunca a partir de un parámetro—, y RLS vuelve a acotarlo por su
- * cuenta. Sin sesión, esa función devuelve el error de sesión y aquí sale un
- * 401.
+ * SOLO `platform_admin`. Hasta esta fase la ruta la usaban las dos superficies
+ * y un cliente podía descargar el listado que veía en pantalla, con las
+ * columnas de su audiencia. El cliente ha decidido que la descarga quede
+ * reservada a la administración: ver y buscar proveedores sigue abierto para
+ * todos, EXPORTAR no.
  *
- * Está bajo `/api/admin/` solo por vecindad con el resto de rutas de descarga;
- * su control de acceso es el descrito, no el del prefijo.
+ * La comprobación va en la PRIMERA línea, antes de leer un solo parámetro. Que
+ * el botón esté oculto en la interfaz no es una protección: esta URL se puede
+ * escribir a mano, y hasta ahora devolvía un fichero.
+ *
+ * Se responde 403 con el mismo cuerpo JSON que el resto de errores de la ruta,
+ * y NO se genera ningún fichero: se sale antes de tocar la base de datos.
  */
 export async function GET(request: NextRequest) {
+  const auth = await authorizePlatformAdminApi()
+  if (!auth.ok) {
+    return NextResponse.json(
+      { error: authorizationApiMessage(auth.error.code) },
+      { status: authorizationHttpStatus(auth.error.code) },
+    )
+  }
+
   const params = request.nextUrl.searchParams
 
   // Los filtros llegan por URL, EXACTAMENTE con los mismos nombres que usa el

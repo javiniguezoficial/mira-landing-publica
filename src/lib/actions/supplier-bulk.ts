@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { requirePlatformAdmin, requireSession } from '@/lib/auth/guards'
-import { isAuthorizationError } from '@/lib/auth/errors'
+import { AuthorizationError, isAuthorizationError } from '@/lib/auth/errors'
 import { evaluatePlatformAdmin } from '@/lib/auth/policy'
 import {
   getSupplierNotes,
@@ -56,17 +56,31 @@ export interface ExportContext {
 }
 
 /**
- * Reconstruye en SERVIDOR quién está exportando.
+ * Reconstruye en SERVIDOR quién está exportando, y EXIGE que sea administrador.
  *
- * No se acepta la audiencia como parámetro. Si el navegador pudiera decir «soy
- * admin», la exportación de un cliente incluiría notas internas y estados. Aquí
- * se deduce del contexto de autorización real, y RLS vuelve a limitarlo por su
- * cuenta: `client_select_active_suppliers` solo devuelve los activos.
+ * ── 039: la exportación deja de estar abierta a los clientes ───────────────
+ *
+ * Antes esta función solo pedía sesión y deducía la audiencia: un cliente
+ * exportaba con columnas reducidas. El cliente ha decidido reservar la descarga
+ * a `platform_admin`. Ver y buscar proveedores sigue abierto; exportar, no.
+ *
+ * ── Por qué se comprueba AQUÍ además de en la ruta ─────────────────────────
+ *
+ * Porque `collectSuppliersForExport` está en un archivo `'use server'`, y en
+ * Next.js toda función exportada de un archivo así es un endpoint invocable
+ * directamente desde el navegador. Proteger solo el Route Handler dejaría la
+ * Server Action accesible por su propio identificador, sin pasar por la ruta.
+ *
+ * No se acepta la audiencia como parámetro: si el navegador pudiera decir «soy
+ * admin», la exportación incluiría notas internas. Se deduce del contexto real,
+ * y RLS vuelve a limitarlo por su cuenta.
  */
 async function resolveExportContext(): Promise<ExportContext> {
   const { context } = await requireSession()
-  const esAdmin = evaluatePlatformAdmin(context) === null
-  return { audience: esAdmin ? 'admin' : 'client', onlyActive: !esAdmin }
+  if (evaluatePlatformAdmin(context) !== null) {
+    throw new AuthorizationError('FORBIDDEN', MESSAGES.permiso)
+  }
+  return { audience: 'admin', onlyActive: false }
 }
 
 // ── Exportación ─────────────────────────────────────────────────────────────
@@ -108,7 +122,13 @@ export async function collectSuppliersForExport(
   try {
     contexto = await resolveExportContext()
   } catch (e) {
-    if (isAuthorizationError(e)) return { suppliers: [], audience: 'client', truncated: false, error: MESSAGES.sesion }
+    if (isAuthorizationError(e)) {
+      // 039 — se distingue «no hay sesión» de «no tienes permiso»: el primero
+      // se resuelve entrando, el segundo no se resuelve de ninguna manera y
+      // decir «inicia sesión» a quien ya la tiene solo confunde.
+      const mensaje = e.code === 'UNAUTHENTICATED' ? MESSAGES.sesion : MESSAGES.permiso
+      return { suppliers: [], audience: 'admin', truncated: false, error: mensaje }
+    }
     throw e
   }
 

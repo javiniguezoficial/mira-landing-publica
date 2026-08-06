@@ -24,6 +24,20 @@ interface Props {
   /** Identificadores marcados en la página actual. */
   selectedIds: string[]
   onClearSelection: () => void
+  /**
+   * 039 — ¿se ofrece la descarga XLSX?
+   *
+   * Solo `platform_admin`. Lo decide la PÁGINA, que es servidor; este
+   * componente se limita a pintar o no el botón.
+   *
+   * Es una comodidad, NO la protección: la ruta `/api/admin/suppliers-export`
+   * y la propia Server Action comprueban el rol por su cuenta y responden 403.
+   * Ocultar el botón evita ofrecer algo que va a fallar; no impide nada.
+   *
+   * Por defecto `false`: si alguien añade una superficie nueva y se olvida de
+   * pasarlo, no aparece un botón de descarga sin querer.
+   */
+  canExport?: boolean
 }
 
 /**
@@ -39,6 +53,7 @@ export function SupplierResultsToolbar({
   total,
   selectedIds,
   onClearSelection,
+  canExport = false,
 }: Props) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
@@ -196,21 +211,23 @@ export function SupplierResultsToolbar({
           </select>
         </div>
 
-        {/* Exportación */}
-        <div className="shrink-0">
-          <button
-            type="button"
-            onClick={() => exportar('filtered')}
-            disabled={exportando !== null || total === 0}
-            className={`${miraBtn.ghost} w-full disabled:opacity-40 lg:w-auto`}
-          >
-            {exportando === 'filtered' ? (
-              <><Loader2 size={14} className="animate-spin" /> Generando…</>
-            ) : (
-              <><Download size={14} /> Exportar {formatNumber(total, 0)}</>
-            )}
-          </button>
-        </div>
+        {/* Exportación — 039: solo administración. */}
+        {canExport && (
+          <div className="shrink-0">
+            <button
+              type="button"
+              onClick={() => exportar('filtered')}
+              disabled={exportando !== null || total === 0}
+              className={`${miraBtn.ghost} w-full disabled:opacity-40 lg:w-auto`}
+            >
+              {exportando === 'filtered' ? (
+                <><Loader2 size={14} className="animate-spin" /> Generando…</>
+              ) : (
+                <><Download size={14} /> Exportar {formatNumber(total, 0)}</>
+              )}
+            </button>
+          </div>
+        )}
       </div>
 
       {nota && sortActual !== DEFAULT_SUPPLIER_SORT && (
@@ -224,18 +241,20 @@ export function SupplierResultsToolbar({
             {selectedIds.length} seleccionado{selectedIds.length !== 1 ? 's' : ''}
           </span>
 
-          <button
-            type="button"
-            onClick={() => exportar('selected')}
-            disabled={exportando !== null}
-            className={`${miraBtn.ghost} disabled:opacity-40`}
-          >
-            {exportando === 'selected' ? (
-              <><Loader2 size={14} className="animate-spin" /> Generando…</>
-            ) : (
-              <><Download size={14} /> Exportar seleccionados</>
-            )}
-          </button>
+          {canExport && (
+            <button
+              type="button"
+              onClick={() => exportar('selected')}
+              disabled={exportando !== null}
+              className={`${miraBtn.ghost} disabled:opacity-40`}
+            >
+              {exportando === 'selected' ? (
+                <><Loader2 size={14} className="animate-spin" /> Generando…</>
+              ) : (
+                <><Download size={14} /> Exportar seleccionados</>
+              )}
+            </button>
+          )}
 
           <button type="button" onClick={onClearSelection} className={miraBtn.ghost}>
             <X size={14} /> Limpiar selección

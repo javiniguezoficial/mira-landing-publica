@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { PENDING_TICKET_STATUSES } from '@/lib/support/badge'
 import { redirect } from 'next/navigation'
 
 export interface SupportTicket {
@@ -96,4 +97,44 @@ export async function getMyTickets(): Promise<SupportTicket[]> {
 
   if (error) return []
   return data ?? []
+}
+
+// ─── Aviso de tickets pendientes (Fase 039) ───────────────────────────────────
+
+/**
+ * Cuántos tickets requieren atención ahora mismo.
+ *
+ * Alimenta el badge junto a «Soporte» en la barra lateral de administración.
+ *
+ * ── Por qué `head: true` ───────────────────────────────────────────────────
+ *
+ * Porque solo interesa el número: no se traen filas. Es una cuenta que se
+ * ejecuta en CADA navegación del panel, así que tiene que costar lo mínimo. Con
+ * `idx_support_tickets_status` (039) la resuelve el índice.
+ *
+ * ── Por qué no hay polling ─────────────────────────────────────────────────
+ *
+ * El dato se calcula en el layout del servidor y se refresca al navegar o al
+ * revalidar. Un intervalo constante haría una consulta cada pocos segundos por
+ * cada pestaña abierta para enterarse de algo que llega varias veces al día.
+ *
+ * ── Fail-safe ──────────────────────────────────────────────────────────────
+ *
+ * Ante cualquier error devuelve 0, y el badge no se pinta. Un contador roto no
+ * debe llenar la barra lateral de avisos falsos ni tumbar el panel entero.
+ */
+export async function getPendingTicketCount(): Promise<number> {
+  const supabase = await createClient()
+
+  const { count, error } = await supabase
+    .from('support_tickets')
+    .select('id', { count: 'exact', head: true })
+    .in('status', [...PENDING_TICKET_STATUSES])
+
+  if (error) {
+    console.error(`[support] recuento de tickets pendientes falló: ${error.code ?? '?'} ${error.message}`)
+    return 0
+  }
+
+  return count ?? 0
 }

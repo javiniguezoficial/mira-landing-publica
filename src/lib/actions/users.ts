@@ -2,15 +2,16 @@
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin'
 import { requirePlatformAdmin } from '@/lib/auth/guards'
+import { type ManageableOrgRole } from '@/lib/auth/member-write'
 import {
-  buildMembershipInsert,
-  buildMembershipRoleUpdate,
-  membershipErrorDetail,
-  normalizeManageableRole,
-  translateMembershipError,
-  type ManageableOrgRole,
-} from '@/lib/auth/member-write'
-import { normalizeOrganizationRole, type OrganizationRole } from '@/lib/identity'
+  normalizeOrganizationRole,
+  normalizePlatformRole,
+  normalizeProfileStatus,
+  type OrganizationRole,
+  type PlatformRole,
+  type ProfileStatus,
+} from '@/lib/identity'
+import { matchesUserFilters, type UserListFilters } from '@/lib/users/list-params'
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -164,123 +165,256 @@ export async function getUserOrganizations(userId: string) {
   return data ?? []
 }
 
-// ── Añadir miembro ────────────────────────────────────────────────────────────
+// ── Escrituras: viven en `actions/user-admin.ts` (039) ────────────────────────
+//
+// Aquí había tres acciones de escritura —`addOrganizationMember`,
+// `removeOrganizationMember` y `updateOrganizationMemberRole`— que se han
+// retirado, no simplemente dejado de usar.
+//
+// El motivo es de seguridad, no de orden: en Next.js toda función exportada de
+// un archivo `'use server'` es un ENDPOINT invocable desde el navegador. Una
+// acción de escritura que ya nadie llama sigue aceptando peticiones, deja de
+// revisarse porque «no se usa» y, sobre todo, se salta las reglas que se hayan
+// añadido después en su sustituta: aquellas tres no registraban auditoría, no
+// tocaban estado ni capacidades y aceptaban solo `admin` y `member`.
+//
+// Este archivo queda como LECTOR del panel. Todo lo que escribe sobre
+// autorización está en `lib/actions/user-admin.ts`, junto con sus guards y su
+// registro, para que una revisión de seguridad pueda leerlo de una sentada.
 
-export async function addOrganizationMember(
-  orgId: string,
-  userId: string,
-  role: ManageableOrgRole
-): Promise<void> {
-  const { userId: adminId, supabase } = await requirePlatformAdmin()
+// ═══════════════════════════════════════════════════════════════════════════
+// LECTORES DE LA ADMINISTRACIÓN DE USUARIOS (Fase 039)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// El listado y el detalle se resuelven ENTEROS en servidor: filtros incluidos.
+// Filtrar en el navegador exigiría mandarle la lista completa de usuarios con
+// sus organizaciones y capacidades, que es justo lo que no debe salir de
+// servidor sin necesidad.
 
-  // Nunca se confía en el valor que llega del formulario: se normaliza en
-  // servidor y solo sobreviven 'admin' y 'member'. `owner` y los valores legacy
-  // quedan fuera — la propiedad no se crea desde esta acción.
-  const rolCanonico = normalizeManageableRole(role)
-  if (!rolCanonico) throw new Error('El rol seleccionado no es válido.')
+/** Pertenencia de un usuario, ya resuelta con el nombre de su organización. */
+export interface AdminUserMembership {
+  id: string
+  organizationId: string
+  organizationName: string
+  organizationStatus: string | null
+  commercialProfile: string | null
+  orgRole: OrganizationRole | null
+  status: string | null
+  canBuy: boolean
+  canSell: boolean
+  joinedAt: string
+}
 
-  const { data: profile } = await supabase
+export interface AdminUserRow {
+  id: string
+  email: string
+  firstName: string | null
+  lastName: string | null
+  phone: string | null
+  status: ProfileStatus | null
+  platformRole: PlatformRole | null
+  createdAt: string
+  updatedAt: string
+  memberships: AdminUserMembership[]
+}
+
+const PROFILE_COLUMNS =
+  'id, first_name, last_name, phone, role, status, created_at, updated_at, ' +
+  'preferred_locale, preferred_currency, preferred_country'
+
+/**
+ * Carga TODOS los usuarios con sus pertenencias, en tres consultas fijas.
+ *
+ * No hay N+1: una para los perfiles, una para las pertenencias con el embed de
+ * la organización, y la lectura de correos de `auth.users`. El cruce se hace en
+ * memoria sobre unos cientos de filas.
+ */
+async function loadAdminUsers(): Promise<AdminUserRow[]> {
+  const { supabase } = await requirePlatformAdmin()
+
+  const [{ data: perfiles, error }, { data: memberships }, emails] = await Promise.all([
+    supabase.from('profiles').select(PROFILE_COLUMNS).order('created_at', { ascending: false }),
+    supabase
+      .from('organization_members')
+      .select(
+        'id, organization_id, user_id, org_role, role, status, can_buy, can_sell, joined_at, ' +
+          'organization:organizations(id, name, status, commercial_profile)',
+      )
+      .order('joined_at', { ascending: true }),
+    fetchEmailMap(),
+  ])
+
+  if (error) throw new Error(error.message)
+
+  const porUsuario = new Map<string, AdminUserMembership[]>()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const m of (memberships ?? []) as any[]) {
+    const org = Array.isArray(m.organization) ? m.organization[0] : m.organization
+    if (!org) continue
+    const fila: AdminUserMembership = {
+      id: m.id,
+      organizationId: org.id,
+      organizationName: org.name,
+      organizationStatus: org.status ?? null,
+      commercialProfile: org.commercial_profile ?? null,
+      orgRole: normalizeOrganizationRole(m.org_role ?? m.role),
+      status: m.status ?? null,
+      canBuy: m.can_buy === true,
+      canSell: m.can_sell === true,
+      joinedAt: m.joined_at,
+    }
+    const actual = porUsuario.get(m.user_id)
+    if (actual) actual.push(fila)
+    else porUsuario.set(m.user_id, [fila])
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return ((perfiles ?? []) as any[]).map((p) => ({
+    id: p.id,
+    email: emails[p.id] ?? '',
+    firstName: p.first_name ?? null,
+    lastName: p.last_name ?? null,
+    phone: p.phone ?? null,
+    status: normalizeProfileStatus(p.status),
+    platformRole: normalizePlatformRole(p.role),
+    createdAt: p.created_at,
+    updatedAt: p.updated_at,
+    memberships: porUsuario.get(p.id) ?? [],
+  }))
+}
+
+export interface AdminUserListPage {
+  users: AdminUserRow[]
+  total: number
+  filtered: number
+}
+
+/** Listado filtrado. Los filtros llegan ya normalizados desde la URL. */
+export async function listAdminUsers(filters: UserListFilters): Promise<AdminUserListPage> {
+  const todos = await loadAdminUsers()
+
+  const users = todos.filter((u) =>
+    matchesUserFilters(
+      {
+        firstName: u.firstName,
+        lastName: u.lastName,
+        email: u.email,
+        status: u.status,
+        platformRole: u.platformRole,
+        memberships: u.memberships.map((m) => ({
+          organizationId: m.organizationId,
+          canBuy: m.canBuy,
+          canSell: m.canSell,
+        })),
+      },
+      filters,
+    ),
+  )
+
+  return { users, total: todos.length, filtered: users.length }
+}
+
+/** Detalle completo de un usuario, con todas sus pertenencias. */
+export async function getAdminUserDetail(userId: string): Promise<AdminUserRow | null> {
+  const todos = await loadAdminUsers()
+  return todos.find((u) => u.id === userId) ?? null
+}
+
+export interface AssignableOrganization {
+  id: string
+  name: string
+  status: string | null
+  commercialProfile: string | null
+  hasOwner: boolean
+  memberCount: number
+}
+
+/**
+ * Organizaciones a las que se puede asignar a alguien, con los hechos que
+ * necesita el formulario para decidir qué ofrecer: si ya tienen propietario y
+ * qué capacidades comerciales admiten.
+ */
+export async function listAssignableOrganizations(): Promise<AssignableOrganization[]> {
+  const { supabase } = await requirePlatformAdmin()
+
+  const [{ data: orgs }, { data: members }] = await Promise.all([
+    supabase.from('organizations').select('id, name, status, commercial_profile').order('name'),
+    supabase.from('organization_members').select('organization_id, org_role, role'),
+  ])
+
+  const conOwner = new Set<string>()
+  const recuento = new Map<string, number>()
+  for (const m of members ?? []) {
+    recuento.set(m.organization_id, (recuento.get(m.organization_id) ?? 0) + 1)
+    if (normalizeOrganizationRole(m.org_role ?? m.role) === 'owner') conOwner.add(m.organization_id)
+  }
+
+  return (orgs ?? []).map((o) => ({
+    id: o.id,
+    name: o.name,
+    status: o.status ?? null,
+    commercialProfile: o.commercial_profile ?? null,
+    hasOwner: conOwner.has(o.id),
+    memberCount: recuento.get(o.id) ?? 0,
+  }))
+}
+
+/** Cuántos administradores de plataforma ACTIVOS hay. Para avisar en la interfaz. */
+export async function countActivePlatformAdmins(): Promise<number> {
+  const { supabase } = await requirePlatformAdmin()
+  const { count } = await supabase
     .from('profiles')
-    .select('id')
-    .eq('id', userId)
-    .single()
-  if (!profile) throw new Error('Usuario no encontrado.')
-
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id')
-    .eq('id', orgId)
-    .single()
-  if (!org) throw new Error('Organización no encontrada.')
-
-  // Escritura dual y explícita: ningún campo de autorización queda al azar de
-  // un default.
-  const { error } = await supabase
-    .from('organization_members')
-    .insert(
-      buildMembershipInsert({
-        organizationId: orgId,
-        userId,
-        role: rolCanonico,
-        invitedBy: adminId,
-      }),
-    )
-
-  if (error) {
-    console.error(membershipErrorDetail('alta de miembro', error))
-    throw new Error(translateMembershipError(error))
-  }
+    .select('id', { count: 'exact', head: true })
+    .eq('role', 'platform_admin')
+    .eq('status', 'active')
+  return count ?? 0
 }
 
-// ── Eliminar miembro ──────────────────────────────────────────────────────────
-
-export async function removeOrganizationMember(memberId: string): Promise<void> {
-  const { supabase, userId: adminId } = await requirePlatformAdmin()
-
-  // La base de datos lo impide igualmente tras la migración 023; esta
-  // comprobación previa existe para dar un mensaje claro en lugar de un error
-  // de restricción.
-  const { data: miembro } = await supabase
-    .from('organization_members')
-    .select('id, user_id, org_role, role')
-    .eq('id', memberId)
-    .single()
-
-  if (!miembro) throw new Error('Miembro no encontrado.')
-
-  if (normalizeOrganizationRole(miembro.org_role ?? miembro.role) === 'owner') {
-    throw new Error('El propietario no puede modificarse desde esta acción.')
-  }
-  if (miembro.user_id === adminId) {
-    throw new Error('No puedes modificar tu propia pertenencia desde esta acción.')
-  }
-
-  const { error } = await supabase
-    .from('organization_members')
-    .delete()
-    .eq('id', memberId)
-
-  if (error) {
-    console.error(membershipErrorDetail('baja de miembro', error))
-    throw new Error(translateMembershipError(error))
-  }
+/** Histórico de auditoría de un usuario. Las 20 últimas operaciones. */
+export interface AuditEntryRow {
+  id: string
+  action: string
+  actorId: string
+  actorName: string
+  targetOrganizationId: string | null
+  before: Record<string, unknown> | null
+  after: Record<string, unknown> | null
+  isQa: boolean
+  createdAt: string
 }
 
-// ── Actualizar rol de miembro ─────────────────────────────────────────────────
+export async function getUserAuditTrail(userId: string): Promise<AuditEntryRow[]> {
+  const { supabase } = await requirePlatformAdmin()
 
-export async function updateOrganizationMemberRole(
-  memberId: string,
-  newRole: ManageableOrgRole
-): Promise<void> {
-  const { supabase, userId: adminId } = await requirePlatformAdmin()
+  const { data } = await supabase
+    .from('admin_audit_log')
+    .select('id, action, actor_id, target_organization_id, before_state, after_state, is_qa, created_at')
+    .eq('target_user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(20)
 
-  const rolCanonico = normalizeManageableRole(newRole)
-  if (!rolCanonico) throw new Error('El rol seleccionado no es válido.')
+  if (!data || data.length === 0) return []
 
-  const { data: miembro } = await supabase
-    .from('organization_members')
-    .select('id, user_id, org_role, role')
-    .eq('id', memberId)
-    .single()
+  const actorIds = [...new Set(data.map((e) => e.actor_id))]
+  const { data: actores } = await supabase
+    .from('profiles')
+    .select('id, first_name, last_name')
+    .in('id', actorIds)
 
-  if (!miembro) throw new Error('Miembro no encontrado.')
-
-  if (normalizeOrganizationRole(miembro.org_role ?? miembro.role) === 'owner') {
-    throw new Error('El propietario no puede modificarse desde esta acción.')
-  }
-  if (miembro.user_id === adminId) {
-    throw new Error('No puedes modificar tu propia pertenencia desde esta acción.')
+  const nombres = new Map<string, string>()
+  for (const a of actores ?? []) {
+    nombres.set(a.id, [a.first_name, a.last_name].filter(Boolean).join(' ') || 'Administrador')
   }
 
-  // `org_role` y `role` se actualizan SIEMPRE juntos: dejarlos desalineados
-  // produce una fila que el trigger de 023 rechaza.
-  const { error } = await supabase
-    .from('organization_members')
-    .update(buildMembershipRoleUpdate(rolCanonico))
-    .eq('id', memberId)
-
-  if (error) {
-    console.error(membershipErrorDetail('cambio de rol', error))
-    throw new Error(translateMembershipError(error))
-  }
+  return data.map((e) => ({
+    id: e.id,
+    action: e.action,
+    actorId: e.actor_id,
+    actorName: nombres.get(e.actor_id) ?? 'Administrador',
+    targetOrganizationId: e.target_organization_id,
+    before: e.before_state as Record<string, unknown> | null,
+    after: e.after_state as Record<string, unknown> | null,
+    isQa: e.is_qa === true,
+    createdAt: e.created_at,
+  }))
 }

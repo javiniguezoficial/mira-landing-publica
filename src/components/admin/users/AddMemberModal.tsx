@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { X, UserPlus } from 'lucide-react'
-import { addOrganizationMember } from '@/lib/actions/users'
+import { assignUserToOrganization } from '@/lib/actions/user-admin'
 import type { UserProfile } from '@/lib/actions/users'
 import { MANAGEABLE_ROLE_LABELS, type ManageableOrgRole } from '@/lib/auth/member-write'
 import { miraBtn, miraField, miraLabel } from '@/lib/miraButtons'
@@ -43,12 +43,23 @@ export function AddMemberModal({ orgId, existingMemberIds, allUsers }: Props) {
     if (!userId) { setError('Selecciona un usuario.'); return }
 
     startTransition(async () => {
-      try {
-        await addOrganizationMember(orgId, userId, role)
+      // 039 — misma acción que usa la ficha de usuario. Una sola ruta de
+      // escritura para «asignar a alguien a una empresa», con su validación y
+      // su registro de auditoría, en lugar de dos que puedan divergir.
+      const r = await assignUserToOrganization({
+        userId,
+        organizationId: orgId,
+        role,
+        // Las capacidades arrancan apagadas y se conceden después, de forma
+        // deliberada, desde la tabla del equipo.
+        canBuy: false,
+        canSell: false,
+      })
+      if (r.ok) {
         router.refresh()
         handleClose()
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Error inesperado.')
+      } else {
+        setError(r.error)
       }
     })
   }

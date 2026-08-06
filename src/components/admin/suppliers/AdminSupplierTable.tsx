@@ -57,6 +57,10 @@ export function AdminSupplierTable({ suppliers, total, params }: Props) {
         total={total}
         selectedIds={seleccion.selectedIds}
         onClearSelection={seleccion.clear}
+        // 039 — la exportación XLSX queda reservada a la administración. Esta
+        // tabla solo se monta bajo `/admin/*`, cuyo layout ya ha exigido
+        // `platform_admin`: llegar aquí ES la prueba del rol.
+        canExport
       />
 
       {/* Acciones destructivas: solo administración, solo con selección. */}
