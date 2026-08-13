@@ -8,6 +8,7 @@ import { Button } from './Button'
 import { DataAnchor } from './DataAnchor'
 import { createClient } from '@/lib/supabase/client'
 import { completeOrganizationSignup } from '@/lib/actions/onboarding'
+import { buildSignupRedirectUrl } from '@/lib/auth/redirect-urls'
 
 export const SignupPage = ({ planSlug = 'starter' }: { planSlug?: string }) => {
   const router = useRouter()
@@ -53,10 +54,21 @@ export const SignupPage = ({ planSlug = 'starter' }: { planSlug?: string }) => {
     // también cuando Supabase exige confirmar el email antes de dar sesión. El
     // servidor NO se fía de ninguno: valida el plan contra el catálogo activo y
     // decide el estado por su cuenta.
+    // El enlace del correo de confirmación debe volver a ESTE despliegue y
+    // pasar por `/auth/callback`, que es donde se canjea el código y se completa
+    // el alta de la empresa. Sin `emailRedirectTo`, Supabase usa su «Site URL»
+    // global y en desarrollo el enlace lleva a producción.
+    //
+    // Si la base no está configurada se omite el parámetro en lugar de inventar
+    // un dominio: Supabase cae entonces a su Site URL, que es el comportamiento
+    // que había hasta ahora.
+    const emailRedirectTo = buildSignupRedirectUrl(process.env.NEXT_PUBLIC_APP_URL)
+
     const { data, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
       options: {
+        ...(emailRedirectTo ? { emailRedirectTo } : {}),
         data: {
           first_name,
           last_name,

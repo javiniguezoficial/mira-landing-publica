@@ -1,8 +1,13 @@
-import { HelpCircle, Mail, MessageSquarePlus, ChevronDown, Clock, AlertCircle } from 'lucide-react'
+import { HelpCircle, Mail, MessageSquarePlus, ChevronDown, Clock, AlertCircle, MessageSquare } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { SupportForm } from '@/components/app/support/SupportForm'
 import { getMyTickets } from '@/lib/queries/support'
+import {
+  hasAdminResponse,
+  ticketListHint,
+  TICKET_RESPONSE_LABELS,
+} from '@/lib/support/ticket-view'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 import { MiraSectionCard } from '@/components/mira/MiraSectionCard'
 import { MiraStatusBadge } from '@/components/mira/MiraStatusBadge'
@@ -77,7 +82,15 @@ export default async function AyudaPage() {
         </div>
       </MiraSectionCard>
 
-      {/* Mis solicitudes */}
+      {/*
+        Mis solicitudes.
+
+        Hasta el Bloque 2 esta lista pintaba asunto, badges y fecha — y NADA
+        más. `admin_response` se guardaba correctamente y `getMyTickets` ya lo
+        traía, pero nunca llegaba a la pantalla: la respuesta de MIRA viajaba
+        hasta el componente y se descartaba. Ese era el fallo que el cliente
+        describía como «las respuestas no llegan al usuario».
+      */}
       <MiraSectionCard title="Mis solicitudes recientes" icon={Clock}>
         {myTickets.length === 0 ? (
           <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
@@ -87,22 +100,70 @@ export default async function AyudaPage() {
           </div>
         ) : (
           <div className="divide-y divide-mira-line">
-            {myTickets.map(ticket => (
-              <div key={ticket.id} className="flex items-start gap-4 px-6 py-4">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold text-mira-ink">{ticket.subject}</p>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                    <MiraStatusBadge status={ticket.status} kind="ticket" />
-                    <MiraStatusBadge status={ticket.priority} kind="priority" />
-                    <span className="text-xs text-slate-400">{CATEGORY_LABELS[ticket.category] ?? ticket.category}</span>
+            {myTickets.map(ticket => {
+              const respondido = hasAdminResponse(ticket)
+              return (
+                <article key={ticket.id} className="px-6 py-5">
+                  <div className="flex items-start gap-4">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-mira-ink">{ticket.subject}</p>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                        <MiraStatusBadge status={ticket.status} kind="ticket" />
+                        <MiraStatusBadge status={ticket.priority} kind="priority" />
+                        <span className="text-xs text-slate-400">{CATEGORY_LABELS[ticket.category] ?? ticket.category}</span>
+                        {/* Señal visual de respuesta. Se apoya solo en
+                            `admin_response`, que es el único campo que el modelo
+                            actual sostiene de forma fiable. */}
+                        {respondido && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-mira-magenta-soft px-2 py-0.5 text-[11px] font-bold text-mira-magenta">
+                            <MessageSquare size={10} aria-hidden="true" />
+                            {TICKET_RESPONSE_LABELS.answered}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <p className="mt-0.5 shrink-0 text-xs text-slate-400">
+                      {new Date(ticket.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </p>
                   </div>
-                </div>
-                <p className="mt-0.5 shrink-0 text-xs text-slate-400">
-                  {new Date(ticket.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
-                </p>
-              </div>
-            ))}
+
+                  {/* Mensaje original */}
+                  <div className="mt-3 rounded-xl bg-mira-canvas px-4 py-3">
+                    <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-slate-400">Tu mensaje</p>
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-600">{ticket.message}</p>
+                  </div>
+
+                  {/* Respuesta de MIRA — deliberadamente MUY distinta del bloque
+                      anterior: borde magenta, fondo propio y rótulo con la marca,
+                      para que no haya duda de quién ha escrito qué. */}
+                  {respondido && (
+                    <div className="mt-2 rounded-xl border border-mira-magenta/25 bg-mira-magenta-soft/40 px-4 py-3">
+                      <p className="mb-1 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-mira-magenta">
+                        <MessageSquare size={11} aria-hidden="true" /> Respuesta de MIRA
+                      </p>
+                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-mira-ink">{ticket.admin_response}</p>
+                      {/* `updated_at` es la fecha de la ÚLTIMA modificación, no
+                          la de la respuesta: el trigger la refresca también al
+                          cambiar el estado. Se rotula por lo que de verdad es.
+                          Ver el análisis en `lib/support/ticket-view.ts`. */}
+                      <p className="mt-2 text-[11px] text-slate-400">
+                        Última actualización:{' '}
+                        {new Date(ticket.updated_at).toLocaleDateString('es-ES', {
+                          day: '2-digit', month: 'short', year: 'numeric',
+                        })}
+                      </p>
+                    </div>
+                  )}
+                </article>
+              )
+            })}
           </div>
+        )}
+
+        {myTickets.length > 0 && (
+          <p className="border-t border-mira-line px-6 py-3 text-xs text-slate-400">
+            {ticketListHint(myTickets)}
+          </p>
         )}
       </MiraSectionCard>
     </div>

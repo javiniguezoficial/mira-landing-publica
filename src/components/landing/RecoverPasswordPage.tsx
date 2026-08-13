@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { MiraLogo } from './MiraLogo'
 import { Button } from './Button'
 import { createClient } from '@/lib/supabase/client'
+import { buildRecoveryRedirectUrl } from '@/lib/auth/redirect-urls'
 
 export const RecoverPasswordPage = () => {
   const [email, setEmail] = useState('')
@@ -17,9 +18,16 @@ export const RecoverPasswordPage = () => {
     setLoading(true)
 
     const supabase = createClient()
-    const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=/actualizar-password`
+    // Antes se interpolaba la variable en crudo: sin ella configurada, el
+    // enlace salía como `undefined/auth/callback?...`. El helper valida la base
+    // y devuelve `null` si no sirve, y entonces se omite el parámetro para que
+    // Supabase caiga a su Site URL en vez de enviar un enlace roto.
+    const redirectTo = buildRecoveryRedirectUrl(process.env.NEXT_PUBLIC_APP_URL)
 
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, { redirectTo })
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(
+      email,
+      redirectTo ? { redirectTo } : undefined,
+    )
 
     setLoading(false)
 
