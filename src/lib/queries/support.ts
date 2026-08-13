@@ -138,3 +138,67 @@ export async function getPendingTicketCount(): Promise<number> {
 
   return count ?? 0
 }
+
+// ─── Aviso de respuestas para el CLIENTE ──────────────────────────────────────
+
+/**
+ * Cuántas solicitudes PROPIAS tienen respuesta de MIRA.
+ *
+ * ── Qué significa exactamente este número ──────────────────────────────────
+ *
+ * «Tickets que tienen respuesta», NO «respuestas nuevas sin leer». Con el
+ * esquema actual la segunda pregunta no se puede responder: no hay columna de
+ * lectura, `updated_at` lo refresca cualquier escritura —incluido un cambio de
+ * estado— y `resolved_at` significa otra cosa. El análisis completo está en
+ * `lib/support/ticket-view.ts`. Inventar un «no leído» aquí sería mostrar un
+ * dato que la base no sostiene.
+ *
+ * Consecuencia asumida: el número NO baja al leer. Baja cuando el ticket deja
+ * de tener respuesta, que no ocurre, o cuando se retira. Es un recordatorio
+ * permanente de «hay respuestas que puedes consultar», no una bandeja de
+ * entrada.
+ *
+ * ── Por qué se filtra por `user_id` y no se deja solo a RLS ────────────────
+ *
+ * La policy `client_select_own_tickets` admite además los tickets de la MISMA
+ * ORGANIZACIÓN. Sin este filtro, el badge contaría solicitudes de compañeros
+ * que la pantalla de Ayuda —que filtra por `user_id`, igual que aquí— no llega
+ * a mostrar: el usuario vería «3» y encontraría una. El badge y la pantalla
+ * tienen que contar lo mismo.
+ *
+ * RLS sigue siendo la barrera real: aunque este filtro se cayera, PostgREST no
+ * devolvería tickets de otra organización.
+ *
+ * ── Por qué `head: true` ───────────────────────────────────────────────────
+ *
+ * Porque solo interesa el número. Se ejecuta en CADA navegación del portal, así
+ * que no se traen filas ni contenido de tickets. Mismo criterio que
+ * `getPendingTicketCount`.
+ *
+ * Fail-safe: ante cualquier error devuelve 0 y el badge no se pinta. Un
+ * contador roto no debe llenar la barra lateral de avisos falsos.
+ */
+export async function getMyAnsweredTicketCount(): Promise<number> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return 0
+
+  const { count, error } = await supabase
+    .from('support_tickets')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .not('admin_response', 'is', null)
+    // Defensa de más: hoy la acción guarda `null` cuando el texto queda vacío,
+    // así que una respuesta en blanco no llega a persistir. Si esa acción
+    // cambiara, el badge no debe encenderse por una cadena vacía.
+    .neq('admin_response', '')
+
+  if (error) {
+    console.error(
+      `[support] recuento de respuestas del usuario falló: ${error.code ?? '?'} ${error.message}`,
+    )
+    return 0
+  }
+
+  return count ?? 0
+}

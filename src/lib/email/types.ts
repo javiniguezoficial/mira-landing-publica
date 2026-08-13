@@ -6,11 +6,11 @@
 //
 // ── Por qué una capa y no llamar al proveedor desde Soporte ────────────────
 //
-// Porque el proveedor va a cambiar. Hoy no hay ninguno configurado; mañana
-// puede ser Resend, un SMTP propio o el que traiga la empresa externa que ya
-// aparece anotada en `.env.example`. Si `actions/support.ts` llamara a una API
-// concreta, cambiar de proveedor obligaría a tocar la lógica de tickets — y a
-// volver a probarla entera.
+// Porque el proveedor cambia. Ya ha pasado una vez: la primera implementación
+// usaba la API HTTP de Resend y se sustituyó por el SMTP corporativo de
+// mirapricing.com sin tocar una sola línea de `actions/support.ts` ni de las
+// plantillas — solo el archivo del proveedor y el resolutor de configuración.
+// Esa es exactamente la propiedad que justifica la capa.
 
 /** Una dirección con nombre opcional. `MIRA <soporte@ejemplo.com>` */
 export interface EmailAddress {

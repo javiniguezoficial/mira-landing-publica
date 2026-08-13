@@ -24,7 +24,10 @@ vi.mock('./send', async () => {
     loadEmailConfig: vi.fn(() => ({
       ok: true as const,
       config: {
-        apiKey: 're_clave_de_prueba',
+        smtp: {
+          host: 'smtp.ejemplo.com', port: 465, secure: true,
+          user: 'soporte@ejemplo.com', password: 'contrasena-de-prueba',
+        },
         from: { email: 'soporte@ejemplo.com', name: 'MIRA' },
         supportInbox: null,
         logoUrl: null,
@@ -39,11 +42,14 @@ const { notifyTicketAnswered, notifyTicketCreated, categoryLabel, ticketStatusLa
 )
 const { loadEmailConfig } = await import('./send')
 
-const SIN_CONFIG = { ok: false as const, missing: ['RESEND_API_KEY'] }
+const SIN_CONFIG = { ok: false as const, missing: ['SMTP_HOST', 'SMTP_PASSWORD'] }
 const CON_CONFIG = {
   ok: true as const,
   config: {
-    apiKey: 're_clave_de_prueba',
+    smtp: {
+      host: 'smtp.ejemplo.com', port: 465, secure: true,
+      user: 'soporte@ejemplo.com', password: 'contrasena-de-prueba',
+    },
     from: { email: 'soporte@ejemplo.com', name: 'MIRA' },
     supportInbox: null as string | null,
     logoUrl: null as string | null,

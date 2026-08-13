@@ -61,6 +61,25 @@ function navConModulos(modules: OrganizationModules): NavItem[] {
   )
 }
 
+/**
+ * Marca «Ayuda» con el número de solicitudes que tienen respuesta de MIRA.
+ *
+ * Mismo mecanismo que el badge de Soporte en /admin: `badgeCount` lo pinta
+ * `MiraSidebar`, y con `0` o `null` no pinta nada. No hace falta condicionar
+ * aquí: `formatBadgeCount` ya trata el cero como «sin aviso».
+ *
+ * ── Qué NO significa este número ──────────────────────────────────────────
+ *
+ * No es «respuestas nuevas». Es «solicitudes con respuesta». La diferencia
+ * importa porque el número no baja al leer: con el esquema actual no hay forma
+ * de saber que alguien ha visto una respuesta (ver `lib/queries/support.ts`).
+ */
+function navConAvisos(items: NavItem[], answeredTickets: number): NavItem[] {
+  return items.map((item) =>
+    item.href === '/app/ayuda' ? { ...item, badgeCount: answeredTickets } : item,
+  )
+}
+
 interface AppShellProps {
   children: React.ReactNode
   /**
@@ -69,9 +88,18 @@ interface AppShellProps {
    * el mismo que aplican los guards de cada página.
    */
   modules?: OrganizationModules
+  /**
+   * Solicitudes propias con respuesta de MIRA. Lo calcula el layout en
+   * servidor; este componente no consulta nada.
+   */
+  answeredTickets?: number
 }
 
-export function AppShell({ children, modules = DEFAULT_ORGANIZATION_MODULES }: AppShellProps) {
+export function AppShell({
+  children,
+  modules = DEFAULT_ORGANIZATION_MODULES,
+  answeredTickets = 0,
+}: AppShellProps) {
   const [user, setUser] = useState<MiraUser>({ name: 'Usuario', meta: '', initial: 'U' })
 
   useEffect(() => {
@@ -93,7 +121,7 @@ export function AppShell({ children, modules = DEFAULT_ORGANIZATION_MODULES }: A
     // Este shell solo lo monta el layout de `/app/*`, así que el destino está
     // decidido en servidor: no se consulta el rol en el navegador.
     <MiraPageShell
-      nav={navConModulos(modules)}
+      nav={navConAvisos(navConModulos(modules), answeredTickets)}
       user={user}
       homeHref="/app/dashboard"
       homeLabel="MIRA — ir al Dashboard"

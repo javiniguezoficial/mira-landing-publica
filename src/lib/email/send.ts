@@ -13,7 +13,7 @@
 // falle sin llevarse por delante el ticket que la originó.
 
 import { resolveEmailConfig, type EmailConfig } from './config'
-import { createResendProvider } from './resend'
+import { createSmtpProvider } from './smtp'
 import type { EmailDeliveryResult, EmailMessage, EmailProvider } from './types'
 
 /**
@@ -75,7 +75,7 @@ export async function deliver(
       config = resuelta.config
     }
 
-    const provider = options.provider ?? createResendProvider(config.apiKey)
+    const provider = options.provider ?? createSmtpProvider(config.smtp)
     const resultado = await provider.send(message, config.from)
     registrar(resultado, message.to)
     return resultado

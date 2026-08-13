@@ -17,7 +17,13 @@ import type {
 import type { EmailConfig } from './config'
 
 const CONFIG: EmailConfig = {
-  apiKey: 're_clave_de_prueba',
+  smtp: {
+    host: 'smtp.ejemplo.com',
+    port: 465,
+    secure: true,
+    user: 'soporte@ejemplo.com',
+    password: 'contrasena-de-prueba',
+  },
   from: { email: 'soporte@ejemplo.com', name: 'MIRA' },
   supportInbox: 'interno@ejemplo.com',
   logoUrl: null,
@@ -74,7 +80,8 @@ describe('deliver — sin configuración se OMITE, no falla', () => {
     const r = await deliver(MENSAJE, { provider })
 
     expect(r.status).toBe('skipped')
-    expect(r.missing).toContain('RESEND_API_KEY')
+    expect(r.missing).toContain('SMTP_HOST')
+    expect(r.missing).toContain('SMTP_PASSWORD')
     // Lo importante: NO se ha llamado al proveedor.
     expect(recibido).toHaveLength(0)
 
@@ -92,12 +99,12 @@ describe('deliver — sin configuración se OMITE, no falla', () => {
 describe('deliver — el fallo del proveedor NO se propaga', () => {
   it('un proveedor que devuelve `failed` produce `failed`, sin lanzar', async () => {
     const espia = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const { provider } = proveedorFalso({ status: 'failed', detail: 'resend respondió 500' })
+    const { provider } = proveedorFalso({ status: 'failed', detail: 'smtp: autenticación rechazada (EAUTH)' })
 
     const r = await deliver(MENSAJE, { provider, config: CONFIG })
 
     expect(r.status).toBe('failed')
-    expect(r.detail).toContain('500')
+    expect(r.detail).toContain('EAUTH')
     espia.mockRestore()
   })
 
@@ -123,13 +130,13 @@ describe('deliver — el fallo del proveedor NO se propaga', () => {
     const provider: EmailProvider = {
       name: 'explosivo',
       async send() {
-        throw new Error('clave re_secreta_1234 inválida')
+        throw new Error('535 auth failed for contrasena-de-prueba')
       },
     }
 
     const r = await deliver(MENSAJE, { provider, config: CONFIG })
 
-    expect(r.detail).not.toContain('re_secreta_1234')
+    expect(r.detail).not.toContain('contrasena-de-prueba')
     espia.mockRestore()
   })
 })
@@ -156,7 +163,7 @@ describe('deliver — los registros no filtran contenido del cliente', () => {
     espia.mockRestore()
   })
 
-  it('nunca se registra la clave de API', async () => {
+  it('nunca se registra la contraseña SMTP', async () => {
     const lineas: string[] = []
     const espia = vi.spyOn(console, 'info').mockImplementation((...args) => {
       lineas.push(args.join(' '))
@@ -165,7 +172,7 @@ describe('deliver — los registros no filtran contenido del cliente', () => {
 
     await deliver(MENSAJE, { provider, config: CONFIG })
 
-    expect(lineas.join('\n')).not.toContain(CONFIG.apiKey)
+    expect(lineas.join('\n')).not.toContain(CONFIG.smtp.password)
     espia.mockRestore()
   })
 })

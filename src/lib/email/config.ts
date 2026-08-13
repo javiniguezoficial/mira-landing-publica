@@ -15,9 +15,17 @@ import type { EmailAddress } from './types'
 
 /** Nombres reales de las variables. Se exportan para poder documentarlas. */
 export const EMAIL_ENV_VARS = {
-  /** Clave del proveedor. SECRETO: nunca se registra ni se devuelve. */
-  apiKey: 'RESEND_API_KEY',
-  /** Remitente verificado en el proveedor. `MIRA <soporte@dominio>` o solo la dirección. */
+  /** Servidor SMTP del correo corporativo. */
+  smtpHost: 'SMTP_HOST',
+  /** Puerto. Opcional: por defecto 465 (TLS implícito). */
+  smtpPort: 'SMTP_PORT',
+  /** TLS implícito. Opcional: se deduce del puerto si no se indica. */
+  smtpSecure: 'SMTP_SECURE',
+  /** Cuenta con la que autenticarse. Puede no coincidir con `EMAIL_FROM`. */
+  smtpUser: 'SMTP_USER',
+  /** SECRETO: nunca se registra, ni se devuelve, ni aparece en ningún error. */
+  smtpPassword: 'SMTP_PASSWORD',
+  /** Remitente. `MIRA <soporte@dominio>` o solo la dirección. */
   from: 'EMAIL_FROM',
   /** Buzón interno que recibe el aviso de ticket nuevo. */
   supportInbox: 'SUPPORT_NOTIFICATION_EMAIL',
@@ -27,8 +35,21 @@ export const EMAIL_ENV_VARS = {
   appUrl: 'NEXT_PUBLIC_APP_URL',
 } as const
 
+/** Puerto por omisión: TLS implícito, que es lo que ofrece cPanel. */
+export const DEFAULT_SMTP_PORT = 465
+
+export interface SmtpConfig {
+  host: string
+  port: number
+  /** `true` = TLS implícito (465). `false` = STARTTLS (587). */
+  secure: boolean
+  user: string
+  /** SECRETO. No se registra ni se serializa en ningún sitio. */
+  password: string
+}
+
 export interface EmailConfig {
-  apiKey: string
+  smtp: SmtpConfig
   from: EmailAddress
   /** `null` si no se ha configurado: el aviso interno se omite, el del usuario no. */
   supportInbox: string | null
@@ -116,13 +137,52 @@ export function normalizeAppUrl(raw: string | null | undefined): string | null {
 }
 
 /**
+ * Puerto SMTP. Devuelve `null` si el valor existe pero no sirve, para poder
+ * distinguir «no configurado» (se usa el defecto) de «mal configurado».
+ */
+export function parseSmtpPort(raw: string | null | undefined): number | null {
+  if (raw === undefined || raw === null) return DEFAULT_SMTP_PORT
+  const v = String(raw).trim()
+  if (v === '') return DEFAULT_SMTP_PORT
+  if (!/^\d+$/.test(v)) return null
+  const n = Number(v)
+  return n >= 1 && n <= 65535 ? n : null
+}
+
+/**
+ * TLS implícito. Si no se indica, se deduce del puerto.
+ *
+ * 465 es TLS desde el primer byte; 587 empieza en claro y sube con STARTTLS.
+ * Deducirlo evita la combinación que más falla en cPanel: puerto 465 con
+ * `secure=false`, que se queda esperando y acaba en tiempo de espera agotado.
+ */
+export function parseSmtpSecure(
+  raw: string | null | undefined,
+  port: number,
+): boolean {
+  if (raw === undefined || raw === null || String(raw).trim() === '') {
+    return port === 465
+  }
+  const v = String(raw).trim().toLowerCase()
+  if (['true', '1', 'yes', 'si', 'sí'].includes(v)) return true
+  if (['false', '0', 'no'].includes(v)) return false
+  // Valor no reconocido: se deduce igualmente del puerto en lugar de asumir
+  // `false`, que es la opción insegura.
+  return port === 465
+}
+
+/**
  * Resuelve la configuración a partir del entorno.
  *
  * ── Qué es obligatorio y qué no ────────────────────────────────────────────
  *
- * OBLIGATORIO   `RESEND_API_KEY`, `EMAIL_FROM`, `NEXT_PUBLIC_APP_URL`.
- *               Sin los tres no hay envío posible: falta con qué autenticarse,
- *               desde qué dirección, o a dónde apuntan los enlaces.
+ * OBLIGATORIO   `SMTP_HOST`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAIL_FROM` y
+ *               `NEXT_PUBLIC_APP_URL`. Sin ellos no hay envío posible: falta
+ *               a qué servidor conectarse, con qué credenciales, desde qué
+ *               dirección, o a dónde apuntan los enlaces.
+ *
+ * OPCIONAL      `SMTP_PORT` — por defecto 465.
+ * OPCIONAL      `SMTP_SECURE` — se deduce del puerto.
  *
  * OPCIONAL      `SUPPORT_NOTIFICATION_EMAIL` — sin ella se omite SOLO el aviso
  *               interno; la confirmación al usuario se envía igual. Puede
@@ -133,13 +193,24 @@ export function normalizeAppUrl(raw: string | null | undefined): string | null {
  *               texto. Un correo sin logotipo se lee perfectamente; uno con un
  *               enlace roto, no.
  *
- * `missing` lleva los nombres de las variables, NUNCA sus valores.
+ * `missing` lleva los nombres de las variables, NUNCA sus valores. Es
+ * especialmente importante para `SMTP_PASSWORD`.
  */
 export function resolveEmailConfig(env: Record<string, string | undefined>): EmailConfigResult {
   const missing: string[] = []
 
-  const apiKey = env[EMAIL_ENV_VARS.apiKey]?.trim()
-  if (!apiKey) missing.push(EMAIL_ENV_VARS.apiKey)
+  const host = env[EMAIL_ENV_VARS.smtpHost]?.trim()
+  if (!host) missing.push(EMAIL_ENV_VARS.smtpHost)
+
+  const user = env[EMAIL_ENV_VARS.smtpUser]?.trim()
+  if (!user) missing.push(EMAIL_ENV_VARS.smtpUser)
+
+  // NO se recorta: una contraseña puede empezar o acabar con espacio.
+  const password = env[EMAIL_ENV_VARS.smtpPassword]
+  if (!password) missing.push(EMAIL_ENV_VARS.smtpPassword)
+
+  const port = parseSmtpPort(env[EMAIL_ENV_VARS.smtpPort])
+  if (port === null) missing.push(EMAIL_ENV_VARS.smtpPort)
 
   const from = parseFromAddress(env[EMAIL_ENV_VARS.from])
   if (!from) missing.push(EMAIL_ENV_VARS.from)
@@ -154,7 +225,13 @@ export function resolveEmailConfig(env: Record<string, string | undefined>): Ema
   return {
     ok: true,
     config: {
-      apiKey: apiKey!,
+      smtp: {
+        host: host!,
+        port: port!,
+        secure: parseSmtpSecure(env[EMAIL_ENV_VARS.smtpSecure], port!),
+        user: user!,
+        password: password!,
+      },
       from: from!,
       supportInbox: isPlausibleEmail(inbox) ? inbox!.trim() : null,
       logoUrl: normalizeLogoUrl(env[EMAIL_ENV_VARS.logoUrl]),
