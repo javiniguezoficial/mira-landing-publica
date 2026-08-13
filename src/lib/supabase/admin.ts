@@ -29,10 +29,22 @@
 //   · se crea DESPUÉS de autorizar, dentro de la función que lo necesita;
 //   · se limita a lo que el cliente normal no puede hacer por diseño.
 //
-// Usos vigentes, ambos tras `requirePlatformAdmin`:
+// Usos vigentes:
 //
-//   1. leer los correos de `auth.users` para el listado de usuarios (6B.1);
-//   2. dar de alta en Auth a la persona propietaria de un cliente nuevo (6C).
+//   1. leer los correos de `auth.users` para el listado de usuarios (6B.1)
+//      — tras `requirePlatformAdmin`;
+//   2. dar de alta en Auth a la persona propietaria de un cliente nuevo (6C)
+//      — tras `requirePlatformAdmin`;
+//   3. resolver los correos del EQUIPO PROPIO en el portal de cliente
+//      (`queries/team.ts`, Bloque 1) — tras comprobar pertenencia activa y
+//      `canManageTeam`.
+//
+// El tercero es el único que NO exige `platform_admin`, y por eso lleva una
+// condición extra: los identificadores que se consultan no vienen de la
+// petición, sino de una consulta previa hecha con el cliente NORMAL y por tanto
+// ya filtrada por RLS a la organización de quien pregunta. El cliente
+// privilegiado se limita a traducir esos identificadores a correos; no amplía en
+// ningún caso el conjunto de personas visibles.
 
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'

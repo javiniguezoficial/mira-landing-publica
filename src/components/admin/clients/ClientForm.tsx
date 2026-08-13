@@ -6,7 +6,8 @@ import { createOrganization, updateOrganization } from '@/lib/actions/organizati
 import type { Organization, OrgFormData, SubscriptionStatus, OrgType } from '@/lib/actions/organizations'
 import { MiraFormCard } from '@/components/mira/MiraFormCard'
 import { miraBtn, miraField, miraLabel } from '@/lib/miraButtons'
-import { Building2, MapPin, CreditCard } from 'lucide-react'
+import { normalizeCommercialProfile, type CommercialProfile } from '@/lib/identity'
+import { Building2, MapPin, CreditCard, Handshake } from 'lucide-react'
 
 interface Plan { id: string; name: string; slug: string }
 
@@ -38,6 +39,19 @@ const STATUS_OPTIONS: { value: SubscriptionStatus; label: string }[] = [
   { value: 'past_due',  label: 'Vencido' },
   { value: 'cancelled', label: 'Cancelado' },
   { value: 'expired',   label: 'Expirado' },
+]
+
+/**
+ * Perfil comercial: el TECHO de las capacidades de cada miembro.
+ *
+ * Los valores almacenados siguen siendo los de la columna (`buyer` · `seller` ·
+ * `buyer_seller`). No se inventa una segunda representación del mismo concepto:
+ * lo que cambia aquí es solo la etiqueta que lee una persona.
+ */
+const COMMERCIAL_PROFILE_OPTIONS: { value: CommercialProfile; label: string; hint: string }[] = [
+  { value: 'buyer',        label: 'Comprador',            hint: 'Sus miembros podrán comprar. Nadie podrá vender.' },
+  { value: 'seller',       label: 'Vendedor',             hint: 'Sus miembros podrán vender. Nadie podrá comprar.' },
+  { value: 'buyer_seller', label: 'Comprador y vendedor', hint: 'Cada miembro puede tener una capacidad, la otra o ambas.' },
 ]
 
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
@@ -72,11 +86,23 @@ export function ClientForm({ org, plans, mode }: Props) {
     website:              org?.website ?? '',
     plan_id:              org?.plan_id ?? '',
     subscription_status:  org?.subscription_status ?? 'trial',
+    // Una organización existente conserva su perfil; una nueva nace `buyer`,
+    // el más restrictivo de los tres.
+    commercial_profile:   normalizeCommercialProfile(org?.commercial_profile) ?? 'buyer',
   })
 
   function set(key: keyof OrgFormData, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }))
   }
+
+  const perfilActual = normalizeCommercialProfile(form.commercial_profile) ?? 'buyer'
+  const perfilOriginal = normalizeCommercialProfile(org?.commercial_profile)
+  // Al reducir el perfil, la acción retira las capacidades que dejan de caber.
+  // Se avisa ANTES de guardar: es un efecto sobre personas, no sobre la ficha.
+  const reduceCapacidades =
+    mode === 'edit' &&
+    perfilOriginal === 'buyer_seller' &&
+    perfilActual !== 'buyer_seller'
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -181,6 +207,56 @@ export function ClientForm({ org, plans, mode }: Props) {
           <Field label="País">
             <input type="text" value={form.country} onChange={(e) => set('country', e.target.value)} className={inputCls} placeholder="ES" maxLength={2} />
           </Field>
+        </div>
+      </MiraFormCard>
+
+      {/* Perfil comercial — techo de las capacidades de los miembros */}
+      <MiraFormCard title="Perfil comercial" icon={Handshake}>
+        <div className="space-y-4">
+          <p className="text-sm text-slate-500">
+            Decide qué puede hacer esta organización en MIRA. Es el <strong>límite</strong> de las
+            capacidades de sus miembros: dentro de él, cada persona se configura por separado en
+            «Miembros».
+          </p>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {COMMERCIAL_PROFILE_OPTIONS.map((opt) => {
+              const activo = perfilActual === opt.value
+              return (
+                <label
+                  key={opt.value}
+                  className={`cursor-pointer rounded-xl border p-4 transition-all ${
+                    activo
+                      ? 'border-mira-magenta bg-mira-magenta-soft/40 ring-1 ring-mira-magenta/30'
+                      : 'border-mira-line hover:border-mira-magenta/40'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="commercial_profile"
+                      value={opt.value}
+                      checked={activo}
+                      onChange={(e) => set('commercial_profile', e.target.value)}
+                      className="h-4 w-4 border-mira-line text-mira-magenta focus:ring-mira-magenta/30"
+                    />
+                    <span className={`text-sm font-bold ${activo ? 'text-mira-magenta' : 'text-slate-700'}`}>
+                      {opt.label}
+                    </span>
+                  </div>
+                  <p className="mt-1.5 pl-6 text-xs leading-relaxed text-slate-500">{opt.hint}</p>
+                </label>
+              )
+            })}
+          </div>
+
+          {reduceCapacidades && (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Al reducir el perfil comercial se retirarán automáticamente las capacidades que dejen
+              de estar permitidas. Volver a ampliarlo <strong>no</strong> las devuelve: habrá que
+              concederlas de nuevo miembro a miembro.
+            </p>
+          )}
         </div>
       </MiraFormCard>
 

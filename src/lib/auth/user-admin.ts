@@ -247,6 +247,45 @@ export function organizationAllows(
     : commercialProfile === 'seller' || commercialProfile === 'buyer_seller'
 }
 
+/**
+ * Recorta unas capacidades al techo de un perfil comercial.
+ *
+ * ── El hueco que cierra ────────────────────────────────────────────────────
+ *
+ * `enforce_membership_rules` solo se dispara al escribir en
+ * `organization_members`. Cambiar `organizations.commercial_profile` de
+ * `buyer_seller` a `buyer` NO recorre las pertenencias, así que dejaba filas con
+ * `can_sell = true` bajo una empresa que ya no vende.
+ *
+ * Eso NO era una escalada —`can_sell_in_org()` mira también
+ * `o.commercial_profile`, así que la capacidad huérfana no concedía nada—, pero
+ * sí una mentira: la interfaz enseñaba «Vende» a quien no podía vender, y al
+ * volver a ampliar el perfil la capacidad reaparecía sin que nadie la hubiera
+ * concedido.
+ *
+ * Esta función SOLO RETIRA. Nunca concede: pasar de `buyer` a `buyer_seller` no
+ * activa `can_sell` a nadie, porque conceder una capacidad es una decisión
+ * deliberada de una persona, no un efecto secundario de cambiar un desplegable.
+ */
+export function clampCapabilitiesToProfile(
+  commercialProfile: CommercialProfile | null,
+  capabilities: { canBuy: boolean; canSell: boolean },
+): { canBuy: boolean; canSell: boolean } {
+  return {
+    canBuy: capabilities.canBuy && organizationAllows(commercialProfile, 'buy'),
+    canSell: capabilities.canSell && organizationAllows(commercialProfile, 'sell'),
+  }
+}
+
+/** ¿Hay algo que retirar? Evita un UPDATE por cada miembro que ya está bien. */
+export function capabilitiesExceedProfile(
+  commercialProfile: CommercialProfile | null,
+  capabilities: { canBuy: boolean; canSell: boolean },
+): boolean {
+  const recortado = clampCapabilitiesToProfile(commercialProfile, capabilities)
+  return recortado.canBuy !== capabilities.canBuy || recortado.canSell !== capabilities.canSell
+}
+
 // ── Rol de plataforma ───────────────────────────────────────────────────────
 
 export const PLATFORM_ROLES: PlatformRole[] = ['platform_admin', 'user']

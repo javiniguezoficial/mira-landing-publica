@@ -3,14 +3,20 @@ import { ORGANIZATION_ACCESS_MESSAGES } from '@/lib/auth/access'
 import Link from 'next/link'
 import {
   Building2, Users, Pencil, Globe, Mail, Phone,
-  MapPin, CreditCard, Briefcase, BadgeCheck,
+  MapPin, CreditCard, Briefcase, BadgeCheck, Settings2, Handshake,
 } from 'lucide-react'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 import { MiraStatusBadge } from '@/components/mira/MiraStatusBadge'
 import { MiraTable, MiraTr, MiraTd } from '@/components/mira/MiraTable'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { miraBtn } from '@/lib/miraButtons'
-import { organizationRoleLabel, isOwner as isOwnerRole } from '@/lib/identity'
+import {
+  organizationRoleLabel,
+  isOwner as isOwnerRole,
+  capabilitiesLabel,
+  commercialProfileLabel,
+  statusLabel,
+} from '@/lib/identity'
 
 function Field({ label, value }: { label: string; value?: string | null }) {
   return (
@@ -63,7 +69,7 @@ export default async function MiOrganizacionPage() {
     )
   }
 
-  const { org, members, userRole } = result
+  const { org, members, userRole, commercialProfile, canManageTeam } = result
   const isOwner = isOwnerRole(userRole)
 
   return (
@@ -78,6 +84,19 @@ export default async function MiOrganizacionPage() {
           </Link>
         )}
       />
+
+      {/* Perfil comercial: el techo de lo que puede hacer todo el equipo. */}
+      <SectionCard icon={Handshake} title="Perfil comercial">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="rounded-xl bg-mira-magenta-soft px-3 py-1.5 text-sm font-bold text-mira-magenta">
+            {commercialProfileLabel(commercialProfile)}
+          </span>
+          <p className="text-xs text-slate-500">
+            Define el máximo que puede hacer tu organización. Dentro de ese límite, cada persona
+            tiene sus propias capacidades. Solo MIRA puede cambiarlo.
+          </p>
+        </div>
+      </SectionCard>
 
       {/* Plan y suscripción */}
       <SectionCard icon={CreditCard} title="Plan y suscripción">
@@ -148,15 +167,31 @@ export default async function MiOrganizacionPage() {
         </div>
       </SectionCard>
 
-      {/* Miembros */}
+      {/* Miembros — SOLO LECTURA para todo el mundo.
+          Gestionarlos vive en `/app/mi-organizacion/equipo`, que tiene su propia
+          puerta en servidor. El enlace se pinta con el mismo `canManageTeam` que
+          usa esa puerta, así que enlace y permiso no pueden divergir. */}
       <div>
-        <h2 className="mb-3 flex items-center gap-2 text-sm font-black uppercase tracking-wide text-slate-500">
-          <Users size={15} /> Miembros <span className="font-normal text-slate-300">({members.length})</span>
-        </h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide text-slate-500">
+            <Users size={15} /> Miembros <span className="font-normal text-slate-300">({members.length})</span>
+          </h2>
+          {canManageTeam && (
+            <Link
+              href="/app/mi-organizacion/equipo"
+              className="flex items-center gap-1.5 text-xs font-bold text-mira-magenta hover:underline"
+            >
+              <Settings2 size={13} /> Gestionar equipo
+            </Link>
+          )}
+        </div>
         {members.length === 0 ? (
           <div className="mira-card rounded-2xl p-8 text-center text-sm text-slate-400">Sin miembros registrados.</div>
         ) : (
-          <MiraTable headers={['Nombre', 'Rol', 'Miembro desde']}>
+          // Rol y Capacidades en columnas SEPARADAS: son dos ejes distintos, y
+          // mezclarlos es lo que hacía que «administrador» y «miembro»
+          // parecieran lo mismo.
+          <MiraTable headers={['Nombre', 'Rol', 'Capacidades', 'Estado', 'Miembro desde']}>
             {members.map((m) => {
               const name = [m.profile?.first_name, m.profile?.last_name].filter(Boolean).join(' ') || '—'
               const memberIsOwner = m.orgRole === 'owner'
@@ -176,6 +211,10 @@ export default async function MiOrganizacionPage() {
                       {organizationRoleLabel(m.orgRole)}
                     </span>
                   </MiraTd>
+                  <MiraTd className="text-xs text-slate-600">
+                    {capabilitiesLabel({ can_buy: m.can_buy, can_sell: m.can_sell })}
+                  </MiraTd>
+                  <MiraTd className="text-xs text-slate-500">{statusLabel(m.status)}</MiraTd>
                   <MiraTd className="text-slate-500">
                     {new Date(m.joined_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
                   </MiraTd>

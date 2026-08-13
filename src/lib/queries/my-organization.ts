@@ -4,7 +4,14 @@ import {
   resolveOrganizationAccessFromContext,
   type OrganizationAccess,
 } from '@/lib/auth/access'
-import { resolveMemberRoles, type OrganizationRole } from '@/lib/identity'
+import { canManageTeam } from '@/lib/auth/team'
+import {
+  normalizeMembershipStatus,
+  resolveMemberRoles,
+  type CommercialProfile,
+  type MembershipStatus,
+  type OrganizationRole,
+} from '@/lib/identity'
 
 export interface OrgMember {
   id: string
@@ -13,6 +20,16 @@ export interface OrgMember {
   role: string
   /** Rol canónico ya normalizado. Es el que debe usar la interfaz. */
   orgRole: OrganizationRole | null
+  /** Estado de la pertenencia. `invited` y `suspended` no dan acceso. */
+  status: MembershipStatus | null
+  /**
+   * Capacidades comerciales. Se leen aquí —y no solo en la pantalla de equipo—
+   * porque la ficha las MUESTRA a todo el mundo: son un dato del equipo, igual
+   * que el rol, y ocultarlas a un `member` no protege nada que sus compañeros no
+   * puedan ver ya.
+   */
+  can_buy: boolean
+  can_sell: boolean
   joined_at: string
   profile: {
     first_name: string | null
@@ -46,7 +63,20 @@ export type MyOrgResult =
   | { status: 'no_org' }
   /** Pertenece, pero su acceso no está activo. `access` explica por qué. */
   | { status: 'inactive'; access: OrganizationAccess }
-  | { status: 'ok'; org: OrgDetail; members: OrgMember[]; userRole: OrganizationRole | null }
+  | {
+      status: 'ok'
+      org: OrgDetail
+      members: OrgMember[]
+      userRole: OrganizationRole | null
+      /** Techo comercial de la organización. Explica las capacidades del equipo. */
+      commercialProfile: CommercialProfile | null
+      /**
+       * ¿Alcanza esta persona la gestión de equipo? Se resuelve aquí, con el
+       * MISMO `canManageTeam` que usa el guard de `/app/mi-organizacion/equipo`,
+       * para que el enlace y la puerta no puedan divergir.
+       */
+      canManageTeam: boolean
+    }
 
 /**
  * 6B.5.1: el acceso se clasifica ANTES de consultar.
@@ -115,7 +145,7 @@ export async function getMyOrganization(): Promise<MyOrgResult> {
   const { data: membersRaw, error: membersErr } = await supabase
     .from('organization_members')
     .select(`
-      id, user_id, role, org_role, joined_at,
+      id, user_id, role, org_role, status, can_buy, can_sell, joined_at,
       profile:profiles!organization_members_user_id_fkey(first_name, last_name, phone)
     `)
     .eq('organization_id', orgId)
@@ -132,6 +162,9 @@ export async function getMyOrganization(): Promise<MyOrgResult> {
     user_id: m.user_id,
     role: m.role,
     orgRole: m.orgRole,
+    status: normalizeMembershipStatus(m.status),
+    can_buy: m.can_buy === true,
+    can_sell: m.can_sell === true,
     joined_at: m.joined_at,
     profile: Array.isArray(m.profile) ? (m.profile[0] ?? null) : (m.profile as OrgMember['profile']),
   }))
@@ -145,5 +178,12 @@ export async function getMyOrganization(): Promise<MyOrgResult> {
     members,
     // Rol canónico ya normalizado por el contexto de autorización.
     userRole: membership.orgRole,
+    commercialProfile: membership.commercialProfile,
+    canManageTeam: canManageTeam({
+      userId: context!.user.id,
+      orgRole: membership.orgRole,
+      // Superficie de cliente: el rol de plataforma no concede nada aquí.
+      isPlatformAdmin: false,
+    }),
   }
 }

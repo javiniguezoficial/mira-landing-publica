@@ -18,6 +18,12 @@ import {
   validateNewOwner,
   validateOrganizationSignup,
 } from '@/lib/auth/signup'
+import {
+  capabilitiesExceedProfile,
+  clampCapabilitiesToProfile,
+} from '@/lib/auth/user-admin'
+import { normalizeCommercialProfile, type CommercialProfile } from '@/lib/identity'
+import { writeAuditEntry } from '@/lib/audit/write'
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -75,6 +81,27 @@ export interface OrgFormData {
   website?: string
   plan_id?: string
   subscription_status?: SubscriptionStatus
+  /**
+   * Perfil comercial: `buyer` · `seller` · `buyer_seller`.
+   *
+   * Es el TECHO de `can_buy` / `can_sell` de cada miembro. Faltaba aquí, y esa
+   * ausencia era la causa real de «no se puede activar el perfil de vendedor»:
+   * la columna existía y los triggers la respetaban, pero ningún formulario la
+   * escribía, así que toda organización nacía con el default `buyer` y la
+   * casilla «Vender» salía deshabilitada para siempre.
+   */
+  commercial_profile?: CommercialProfile
+}
+
+/**
+ * Perfil comercial validado contra la allowlist, o `null` si no se reconoce.
+ *
+ * Se normaliza SIEMPRE en servidor: el valor llega de un `<select>` del
+ * navegador y ahí no se puede confiar en nada. El CHECK
+ * `organizations_commercial_profile_check` lo vuelve a exigir en SQL.
+ */
+function perfilComercialValido(raw: unknown): CommercialProfile | null {
+  return normalizeCommercialProfile(typeof raw === 'string' ? raw : null)
 }
 
 
@@ -143,10 +170,16 @@ export async function createOrganization(formData: OrgFormData): Promise<{ id: s
     planId = starter?.id ?? null
   }
 
+  // Sin perfil explícito se mantiene el default histórico de la columna
+  // (`buyer`), que es el más restrictivo de los tres: una empresa nueva no
+  // vende hasta que alguien lo decide a conciencia.
+  const perfil = perfilComercialValido(formData.commercial_profile) ?? 'buyer'
+
   const { data, error } = await supabase
     .from('organizations')
     .insert({
       name: formData.name.trim(),
+      commercial_profile: perfil,
       type: formData.type ?? null,
       cif_nif: formData.cif_nif?.trim() || null,
       sector: formData.sector?.trim() || null,
@@ -170,7 +203,13 @@ export async function createOrganization(formData: OrgFormData): Promise<{ id: s
 // ── Editar organización ───────────────────────────────────────────────────────
 
 export async function updateOrganization(id: string, formData: OrgFormData): Promise<void> {
-  const { supabase } = await requirePlatformAdmin()
+  const { supabase, userId: actorId } = await requirePlatformAdmin()
+
+  // El perfil comercial solo se toca si el formulario lo trae. Un `undefined`
+  // NO se convierte en `buyer`: eso degradaría en silencio a una empresa
+  // vendedora cada vez que se guardara el formulario desde una pantalla que no
+  // incluyera el campo.
+  const perfil = perfilComercialValido(formData.commercial_profile)
 
   const { error } = await supabase
     .from('organizations')
@@ -188,11 +227,80 @@ export async function updateOrganization(id: string, formData: OrgFormData): Pro
       website: formData.website?.trim() || null,
       plan_id: formData.plan_id || null,
       subscription_status: formData.subscription_status ?? 'trial',
+      ...(perfil ? { commercial_profile: perfil } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)
 
   if (error) throw new Error(error.message)
+
+  if (perfil) await retirarCapacidadesFueraDeTecho(supabase, id, perfil, actorId)
+}
+
+/**
+ * Retira de cada miembro las capacidades que el nuevo perfil comercial ya no
+ * contempla.
+ *
+ * ── Por qué hace falta ─────────────────────────────────────────────────────
+ *
+ * El trigger `enforce_membership_rules` vigila el techo comercial, pero solo se
+ * dispara al escribir en `organization_members`. Bajar el perfil de la EMPRESA
+ * no recorre a sus miembros, así que sin esto quedaban filas con `can_sell` bajo
+ * una organización `buyer`.
+ *
+ * ── Por qué no es un riesgo de seguridad, y aun así se corrige ─────────────
+ *
+ * `can_sell_in_org()` exige LAS DOS cosas —la marca del miembro y el perfil de
+ * la empresa—, así que una capacidad huérfana nunca concedió nada. Lo que
+ * producía era una interfaz que mentía: enseñaba «Vende» a quien no podía
+ * vender, y al volver a ampliar el perfil la capacidad reaparecía sin que nadie
+ * la hubiera concedido de nuevo.
+ *
+ * SOLO RETIRA. Ampliar el perfil no activa capacidades a nadie.
+ */
+async function retirarCapacidadesFueraDeTecho(
+  supabase: Awaited<ReturnType<typeof requirePlatformAdmin>>['supabase'],
+  organizationId: string,
+  perfil: CommercialProfile,
+  actorId: string,
+): Promise<void> {
+  const { data: miembros, error } = await supabase
+    .from('organization_members')
+    .select('id, user_id, can_buy, can_sell')
+    .eq('organization_id', organizationId)
+
+  if (error) {
+    console.error(signupErrorDetail('lectura de miembros tras cambio de perfil', error))
+    return
+  }
+
+  for (const m of miembros ?? []) {
+    const actuales = { canBuy: m.can_buy === true, canSell: m.can_sell === true }
+    if (!capabilitiesExceedProfile(perfil, actuales)) continue
+
+    const recortadas = clampCapabilitiesToProfile(perfil, actuales)
+
+    const { error: updErr } = await supabase
+      .from('organization_members')
+      .update({ can_buy: recortadas.canBuy, can_sell: recortadas.canSell })
+      .eq('id', m.id)
+
+    if (updErr) {
+      // No se aborta el bucle: cada miembro es independiente y dejar a los
+      // demás sin recortar por un fallo puntual sería peor.
+      console.error(signupErrorDetail(`recorte de capacidades de ${m.id}`, updErr))
+      continue
+    }
+
+    await writeAuditEntry(supabase, {
+      actorId,
+      action: 'membership.capabilities_changed',
+      targetUserId: m.user_id as string,
+      targetOrganizationId: organizationId,
+      before: { can_buy: actuales.canBuy, can_sell: actuales.canSell },
+      after: { can_buy: recortadas.canBuy, can_sell: recortadas.canSell },
+    })
+  }
 }
 
 // ── 6C · Alta y gestión básica de clientes ───────────────────────────────────

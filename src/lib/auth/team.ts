@@ -14,12 +14,15 @@
 // llame a PostgREST directamente. Sirven para que la interfaz anticipe una
 // denegación en vez de mostrar un error de base de datos.
 
-import type { OrganizationRole } from '@/lib/identity'
+import type { CommercialProfile, OrganizationRole } from '@/lib/identity'
 import type { AuthorizationCode } from './errors'
 import type { AuthMembership } from './types'
 
 /** Rol asignable desde la gestión de equipo por un cliente. */
 export type AssignableRole = 'admin' | 'member'
+
+/** Estados que la gestión de equipo de un cliente puede fijar a mano. */
+export type AssignableTeamStatus = 'active' | 'suspended'
 
 export interface TeamActor {
   /** Rol del actor en la organización sobre la que actúa. */
@@ -34,8 +37,23 @@ export interface TeamTarget {
   userId: string
 }
 
-function puedeGestionar(actor: TeamActor): boolean {
+/**
+ * ¿Alcanza el actor la gestión de equipo?
+ *
+ * Es la puerta de ENTRADA a la pantalla y a todas las acciones de este módulo.
+ * Se exporta —antes era privada— porque la diferencia real entre `admin` y
+ * `member` que pedía el cliente se apoya justo aquí: sin esto, la interfaz solo
+ * podía esconder botones, y esconder un botón no es autorizar.
+ *
+ * Espeja `is_org_admin(uuid)`, que admite `owner` y `admin`. Un `member` no
+ * gestiona a nadie.
+ */
+export function canManageTeam(actor: TeamActor): boolean {
   return actor.isPlatformAdmin === true || actor.orgRole === 'owner' || actor.orgRole === 'admin'
+}
+
+function puedeGestionar(actor: TeamActor): boolean {
+  return canManageTeam(actor)
 }
 
 // ── Capa 1: AUTORIZACIÓN ────────────────────────────────────────────────────
@@ -98,6 +116,55 @@ export function evaluateMemberRemoval(
 
   if (target.orgRole === 'admin' && actor.orgRole !== 'owner') return 'FORBIDDEN'
   return null
+}
+
+/**
+ * ¿Puede el actor activar o desactivar esta pertenencia?
+ *
+ * Compone las dos capas en lugar de reescribirlas: la autorización ordinaria de
+ * `evaluateMemberUpdate` —que ya bloquea la propia fila y la del propietario— y
+ * después la protección explícita del propietario, que es la que explica POR QUÉ
+ * (`evaluateMemberUpdate` diría solo «no puedes»).
+ *
+ * Desactivar al propietario dejaría la organización sin ninguno activo, que es
+ * exactamente lo que rechaza el trigger de 023 con `23514`.
+ */
+export function evaluateMemberStatusChange(
+  actor: TeamActor,
+  target: TeamTarget,
+  nuevoStatus: AssignableTeamStatus,
+): AuthorizationCode | null {
+  const fallo = evaluateMemberUpdate(actor, target)
+  if (fallo) return fallo
+  return evaluateOwnerProtection(target, { nuevoStatus })
+}
+
+/**
+ * ¿Puede el actor cambiar las capacidades comerciales de esta pertenencia?
+ *
+ * Dos condiciones acumulativas:
+ *
+ *   1. autorización ordinaria sobre la fila (`evaluateMemberUpdate`);
+ *   2. techo comercial de la empresa (`evaluateCapabilityAssignment`).
+ *
+ * ── Por qué el propietario queda fuera, a diferencia del panel de MIRA ──────
+ *
+ * `lib/auth/user-admin.ts` SÍ permite a un `platform_admin` tocar las
+ * capacidades del propietario. Aquí no, y es deliberado: en el portal de cliente
+ * el actor es un compañero de empresa. Dejar que un `admin` retire `can_buy` al
+ * propietario le permitiría bloquear a quien manda sin poder degradarlo —una
+ * escalada lateral—. Quien necesite cambiar las capacidades del propietario pasa
+ * por MIRA, que es donde esa operación queda auditada.
+ */
+export function evaluateMemberCapabilityChange(
+  actor: TeamActor,
+  target: TeamTarget,
+  organization: Pick<AuthMembership, 'commercialProfile'>,
+  capacidades: { canBuy?: boolean; canSell?: boolean },
+): AuthorizationCode | null {
+  const fallo = evaluateMemberUpdate(actor, target)
+  if (fallo) return fallo
+  return evaluateCapabilityAssignment(organization, capacidades)
 }
 
 // ── Capa 2: INVARIANTES ESTRUCTURALES ───────────────────────────────────────
@@ -221,4 +288,73 @@ export const PLATFORM_ONLY_ORG_COLUMNS = [
 
 export function isOwnerEditableOrgColumn(columna: string): boolean {
   return (OWNER_EDITABLE_ORG_COLUMNS as readonly string[]).includes(columna)
+}
+
+// ── Textos de la gestión de equipo del portal cliente ───────────────────────
+//
+// Ninguno menciona columnas, policies, triggers ni SQLSTATE: quien los lee es
+// una persona de la empresa cliente, no quien mantiene la base de datos.
+
+export const TEAM_MESSAGES = {
+  sinPermiso: 'No tienes permiso para gestionar el equipo de tu organización.',
+  soloOwnerAdmin: 'Solo el propietario o un administrador pueden gestionar el equipo.',
+  propiaFila: 'No puedes modificar tu propia pertenencia. Pídeselo a otra persona con permisos.',
+  propietarioIntocable:
+    'La pertenencia del propietario no se modifica desde aquí: la organización se quedaría sin propietario activo.',
+  soloOwnerSobreAdmin: 'Solo el propietario puede gestionar a un administrador.',
+  soloOwnerConcedeAdmin: 'Solo el propietario puede conceder el rol de administrador.',
+  sinMiembro: 'Esa persona ya no pertenece a tu organización.',
+  rolNoValido: 'El rol seleccionado no es válido.',
+  estadoNoValido: 'El estado seleccionado no es válido.',
+  generico: 'No se ha podido completar la operación.',
+} as const
+
+/**
+ * Motivo legible de una denegación de la gestión de equipo.
+ *
+ * Recibe además el contexto —quién es el actor y a quién apunta— porque el
+ * mismo `FORBIDDEN` significa cosas distintas y cada una lleva a una acción
+ * distinta: esperar, pedírselo al propietario, o escribir a MIRA.
+ */
+export function teamDenialMessage(
+  code: AuthorizationCode,
+  contexto?: { actor?: TeamActor; target?: TeamTarget },
+): string {
+  if (code === 'NO_ORGANIZATION') return TEAM_MESSAGES.sinMiembro
+  if (code === 'INVALID_ROLE') return TEAM_MESSAGES.rolNoValido
+
+  const { actor, target } = contexto ?? {}
+  if (actor && target) {
+    if (actor.userId === target.userId) return TEAM_MESSAGES.propiaFila
+    if (target.orgRole === 'owner') return TEAM_MESSAGES.propietarioIntocable
+    if (target.orgRole === 'admin' && actor.orgRole !== 'owner') {
+      return TEAM_MESSAGES.soloOwnerSobreAdmin
+    }
+    if (!canManageTeam(actor)) return TEAM_MESSAGES.soloOwnerAdmin
+  }
+
+  return TEAM_MESSAGES.sinPermiso
+}
+
+/**
+ * Por qué una capacidad no se puede conceder, para el texto de ayuda bajo la
+ * casilla deshabilitada. Devuelve `null` cuando sí se puede.
+ *
+ * El cliente pedía expresamente que la interfaz EXPLIQUE la casilla apagada. Sin
+ * esto, «Vender» aparecía gris sin motivo y parecía un fallo.
+ */
+export function capabilityCeilingReason(
+  commercialProfile: CommercialProfile | null,
+  capability: 'buy' | 'sell',
+): string | null {
+  const admite =
+    capability === 'buy'
+      ? commercialProfile === 'buyer' || commercialProfile === 'buyer_seller'
+      : commercialProfile === 'seller' || commercialProfile === 'buyer_seller'
+
+  if (admite) return null
+
+  return capability === 'buy'
+    ? 'Tu organización no tiene perfil comprador. Contacta con MIRA para ampliarlo.'
+    : 'Tu organización no tiene perfil vendedor. Contacta con MIRA para ampliarlo.'
 }
