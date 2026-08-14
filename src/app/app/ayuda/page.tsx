@@ -4,10 +4,13 @@ import { redirect } from 'next/navigation'
 import { SupportForm } from '@/components/app/support/SupportForm'
 import { getMyTickets } from '@/lib/queries/support'
 import {
+  countUnread,
   hasAdminResponse,
+  isUnreadResponse,
   ticketListHint,
   TICKET_RESPONSE_LABELS,
 } from '@/lib/support/ticket-view'
+import { MarkResponsesSeen } from '@/components/app/support/MarkResponsesSeen'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
 import { MiraSectionCard } from '@/components/mira/MiraSectionCard'
 import { MiraStatusBadge } from '@/components/mira/MiraStatusBadge'
@@ -41,9 +44,19 @@ export default async function AyudaPage() {
   const supportEmail = settings?.support_email ?? null
   const myTickets = await getMyTickets()
 
+  // Se calcula sobre la lista YA renderizada: no hace falta una consulta
+  // aparte, y el número coincide exactamente con lo que la persona tiene
+  // delante. Es lo que decide si hay algo que marcar como leído.
+  const sinLeer = countUnread(myTickets)
+
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6 p-4 md:p-6 xl:p-8">
       <MiraPageHeader icon={HelpCircle} title="Ayuda y soporte" subtitle="Encuentra respuestas o envíanos una solicitud." />
+
+      {/* Marca como vistas las respuestas propias. No pinta nada y con 0 sin
+          leer no hace ni una llamada. Ver el componente para por qué esto no
+          genera un ciclo render → acción → revalidate. */}
+      <MarkResponsesSeen unreadCount={sinLeer} />
 
       {/* FAQ */}
       <MiraSectionCard title="Preguntas frecuentes" icon={HelpCircle}>
@@ -102,6 +115,7 @@ export default async function AyudaPage() {
           <div className="divide-y divide-mira-line">
             {myTickets.map(ticket => {
               const respondido = hasAdminResponse(ticket)
+              const nueva = isUnreadResponse(ticket)
               return (
                 <article key={ticket.id} className="px-6 py-5">
                   <div className="flex items-start gap-4">
@@ -118,6 +132,14 @@ export default async function AyudaPage() {
                           <span className="inline-flex items-center gap-1 rounded-full bg-mira-magenta-soft px-2 py-0.5 text-[11px] font-bold text-mira-magenta">
                             <MessageSquare size={10} aria-hidden="true" />
                             {TICKET_RESPONSE_LABELS.answered}
+                          </span>
+                        )}
+                        {/* «Nueva» solo mientras esté sin leer. Se marca en
+                            segundo plano al entrar, así que desaparecerá en la
+                            siguiente visita — no delante de quien la lee. */}
+                        {nueva && (
+                          <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
+                            Nueva
                           </span>
                         )}
                       </div>

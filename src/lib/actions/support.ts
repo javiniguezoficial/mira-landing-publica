@@ -184,6 +184,56 @@ export async function submitSupportTicket(
   return { success: '¡Solicitud enviada! Nos pondremos en contacto contigo pronto.' }
 }
 
+// ─── markMySupportResponsesSeen (cliente) ─────────────────────────────────────
+
+/**
+ * Marca como vistas las respuestas de los tickets de quien llama.
+ *
+ * ── Por qué una RPC y no un UPDATE desde aquí ─────────────────────────────
+ *
+ * Porque el cliente NO tiene —ni debe tener— ninguna policy UPDATE sobre
+ * `support_tickets`. RLS actúa sobre la FILA, no sobre la columna: una policy
+ * que permitiera «actualizar mi propio ticket» dejaría reescribir también
+ * `admin_response`, `status` o `priority`.
+ *
+ * `mark_my_support_responses_seen()` (041/042) es `security definer`, toca UNA
+ * columna y no acepta parámetros: el conjunto de filas lo decide `auth.uid()`
+ * dentro de la función, así que no hay ningún identificador que manipular desde
+ * el navegador. Después de esta acción, la superficie de escritura del cliente
+ * sobre la tabla sigue siendo cero columnas elegibles por él.
+ *
+ * ── Por qué no revalida ────────────────────────────────────────────────────
+ *
+ * A propósito. El badge se recalcula en el layout en la SIGUIENTE navegación,
+ * que es justo el comportamiento pedido. Revalidar aquí volvería a renderizar
+ * la pantalla que se está mirando y haría desaparecer los marcadores «Nueva»
+ * delante de la persona, además de abrir la puerta a un ciclo
+ * render → acción → revalidate → render.
+ *
+ * Nunca lanza: si el marcado falla, la persona ya está viendo su respuesta y lo
+ * único que ocurre es que el aviso sigue ahí un rato más.
+ */
+export async function markMySupportResponsesSeen(): Promise<{ marked: number }> {
+  try {
+    const { supabase } = await requireSession()
+
+    const { data, error } = await supabase.rpc('mark_my_support_responses_seen')
+
+    if (error) {
+      console.error(
+        `[soporte] no se pudieron marcar las respuestas como vistas: ${error.code ?? 'sin código'} ${error.message}`,
+      )
+      return { marked: 0 }
+    }
+
+    return { marked: typeof data === 'number' ? data : 0 }
+  } catch {
+    // `requireSession` redirige si no hay sesión; cualquier otro fallo aquí no
+    // debe romper la pantalla que la persona está mirando.
+    return { marked: 0 }
+  }
+}
+
 // ─── updateTicketStatus (admin) ───────────────────────────────────────────────
 
 export async function updateTicketStatus(

@@ -10,6 +10,10 @@ export interface SupportTicket {
   message: string
   status: string
   admin_response: string | null
+  /** Cuándo se escribió o cambió la respuesta. La sella un trigger (041). */
+  admin_responded_at: string | null
+  /** Cuándo la vio su propietario. Solo la escribe la RPC de lectura (041). */
+  response_seen_at: string | null
   resolved_at: string | null
   created_at: string
   updated_at: string
@@ -90,7 +94,7 @@ export async function getMyTickets(): Promise<SupportTicket[]> {
 
   const { data, error } = await supabase
     .from('support_tickets')
-    .select('id, subject, category, priority, status, created_at, updated_at, organization_id, user_id, admin_response, resolved_at, message')
+    .select('id, subject, category, priority, status, created_at, updated_at, organization_id, user_id, admin_response, admin_responded_at, response_seen_at, resolved_at, message')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
     .limit(10)
@@ -139,32 +143,40 @@ export async function getPendingTicketCount(): Promise<number> {
   return count ?? 0
 }
 
-// ─── Aviso de respuestas para el CLIENTE ──────────────────────────────────────
+// ─── Aviso de respuestas SIN LEER para el CLIENTE ─────────────────────────────
 
 /**
- * Cuántas solicitudes PROPIAS tienen respuesta de MIRA.
+ * Cuántas respuestas de MIRA no ha visto todavía quien pregunta.
  *
- * ── Qué significa exactamente este número ──────────────────────────────────
+ * ── Qué cambia respecto a la primera versión ───────────────────────────────
  *
- * «Tickets que tienen respuesta», NO «respuestas nuevas sin leer». Con el
- * esquema actual la segunda pregunta no se puede responder: no hay columna de
- * lectura, `updated_at` lo refresca cualquier escritura —incluido un cambio de
- * estado— y `resolved_at` significa otra cosa. El análisis completo está en
- * `lib/support/ticket-view.ts`. Inventar un «no leído» aquí sería mostrar un
- * dato que la base no sostiene.
+ * Antes se contaban los tickets CON respuesta, porque el esquema no sabía
+ * distinguir leído de no leído. Ese número no bajaba nunca: una respuesta no
+ * deja de existir cuando alguien la lee, así que el aviso era permanente y por
+ * tanto inútil como notificación.
  *
- * Consecuencia asumida: el número NO baja al leer. Baja cuando el ticket deja
- * de tener respuesta, que no ocurre, o cuando se retira. Es un recordatorio
- * permanente de «hay respuestas que puedes consultar», no una bandeja de
- * entrada.
+ * La migración 041 añadió las dos marcas que faltaban, y ahora la pregunta se
+ * responde de verdad:
+ *
+ *   sin leer  ⇔  admin_responded_at IS NOT NULL  AND  response_seen_at IS NULL
+ *
+ * `admin_responded_at` la sella un trigger cuando la respuesta CAMBIA de
+ * verdad, y en ese mismo momento vuelve a poner `response_seen_at` a NULL.
+ * Rellenarla solo puede hacerlo `mark_my_support_responses_seen()`. Guardar la
+ * misma respuesta otra vez no vuelve a marcarla como nueva.
+ *
+ * La condición usa UNA sola columna a propósito (042): PostgREST interpreta el
+ * lado derecho de un filtro como literal, no como otra columna, así que
+ * comparar `response_seen_at < admin_responded_at` devuelve `400 22007`. Está
+ * comprobado contra la API real.
  *
  * ── Por qué se filtra por `user_id` y no se deja solo a RLS ────────────────
  *
  * La policy `client_select_own_tickets` admite además los tickets de la MISMA
  * ORGANIZACIÓN. Sin este filtro, el badge contaría solicitudes de compañeros
  * que la pantalla de Ayuda —que filtra por `user_id`, igual que aquí— no llega
- * a mostrar: el usuario vería «3» y encontraría una. El badge y la pantalla
- * tienen que contar lo mismo.
+ * a mostrar: el usuario vería «3» y encontraría una. Y, sobre todo, marcaría
+ * como leído algo que no es suyo.
  *
  * RLS sigue siendo la barrera real: aunque este filtro se cayera, PostgREST no
  * devolvería tickets de otra organización.
@@ -172,13 +184,14 @@ export async function getPendingTicketCount(): Promise<number> {
  * ── Por qué `head: true` ───────────────────────────────────────────────────
  *
  * Porque solo interesa el número. Se ejecuta en CADA navegación del portal, así
- * que no se traen filas ni contenido de tickets. Mismo criterio que
- * `getPendingTicketCount`.
+ * que no se traen filas ni contenido de tickets. El índice parcial
+ * `idx_support_tickets_unread` (041) lo resuelve sin tocar los tickets sin
+ * responder. Mismo criterio que `getPendingTicketCount`.
  *
  * Fail-safe: ante cualquier error devuelve 0 y el badge no se pinta. Un
  * contador roto no debe llenar la barra lateral de avisos falsos.
  */
-export async function getMyAnsweredTicketCount(): Promise<number> {
+export async function getMyUnreadResponseCount(): Promise<number> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return 0
@@ -187,15 +200,12 @@ export async function getMyAnsweredTicketCount(): Promise<number> {
     .from('support_tickets')
     .select('id', { count: 'exact', head: true })
     .eq('user_id', user.id)
-    .not('admin_response', 'is', null)
-    // Defensa de más: hoy la acción guarda `null` cuando el texto queda vacío,
-    // así que una respuesta en blanco no llega a persistir. Si esa acción
-    // cambiara, el badge no debe encenderse por una cadena vacía.
-    .neq('admin_response', '')
+    .not('admin_responded_at', 'is', null)
+    .is('response_seen_at', null)
 
   if (error) {
     console.error(
-      `[support] recuento de respuestas del usuario falló: ${error.code ?? '?'} ${error.message}`,
+      `[support] recuento de respuestas sin leer falló: ${error.code ?? '?'} ${error.message}`,
     )
     return 0
   }

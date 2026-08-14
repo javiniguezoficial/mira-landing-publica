@@ -68,15 +68,16 @@ function navConModulos(modules: OrganizationModules): NavItem[] {
  * `MiraSidebar`, y con `0` o `null` no pinta nada. No hace falta condicionar
  * aquí: `formatBadgeCount` ya trata el cero como «sin aviso».
  *
- * ── Qué NO significa este número ──────────────────────────────────────────
+ * ── Qué significa ahora este número ───────────────────────────────────────
  *
- * No es «respuestas nuevas». Es «solicitudes con respuesta». La diferencia
- * importa porque el número no baja al leer: con el esquema actual no hay forma
- * de saber que alguien ha visto una respuesta (ver `lib/queries/support.ts`).
+ * Respuestas de MIRA que esta persona todavía NO ha visto. Desde 041/042 el
+ * esquema sí sabe distinguirlo, así que el aviso BAJA al leer: entrar en Ayuda
+ * marca las propias como vistas y el badge desaparece en la siguiente
+ * navegación (ver `MarkResponsesSeen`).
  */
-function navConAvisos(items: NavItem[], answeredTickets: number): NavItem[] {
+function navConAvisos(items: NavItem[], unreadResponses: number): NavItem[] {
   return items.map((item) =>
-    item.href === '/app/ayuda' ? { ...item, badgeCount: answeredTickets } : item,
+    item.href === '/app/ayuda' ? { ...item, badgeCount: unreadResponses } : item,
   )
 }
 
@@ -89,16 +90,16 @@ interface AppShellProps {
    */
   modules?: OrganizationModules
   /**
-   * Solicitudes propias con respuesta de MIRA. Lo calcula el layout en
-   * servidor; este componente no consulta nada.
+   * Respuestas propias SIN LEER. Lo calcula el layout en servidor; este
+   * componente no consulta nada.
    */
-  answeredTickets?: number
+  unreadResponses?: number
 }
 
 export function AppShell({
   children,
   modules = DEFAULT_ORGANIZATION_MODULES,
-  answeredTickets = 0,
+  unreadResponses = 0,
 }: AppShellProps) {
   const [user, setUser] = useState<MiraUser>({ name: 'Usuario', meta: '', initial: 'U' })
 
@@ -121,7 +122,7 @@ export function AppShell({
     // Este shell solo lo monta el layout de `/app/*`, así que el destino está
     // decidido en servidor: no se consulta el rol en el navegador.
     <MiraPageShell
-      nav={navConAvisos(navConModulos(modules), answeredTickets)}
+      nav={navConAvisos(navConModulos(modules), unreadResponses)}
       user={user}
       homeHref="/app/dashboard"
       homeLabel="MIRA — ir al Dashboard"

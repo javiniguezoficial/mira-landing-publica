@@ -54,6 +54,28 @@
 export interface TicketResponseFacts {
   admin_response: string | null
   status: string
+  /** 041 — cuándo se selló la respuesta. `null` = no hay respuesta. */
+  admin_responded_at?: string | null
+  /** 042 — `null` = sin leer. Lo rellena solo la RPC de lectura. */
+  response_seen_at?: string | null
+}
+
+/**
+ * ¿Es una respuesta que esta persona todavía NO ha visto?
+ *
+ * Una sola comparación sobre una sola columna, por diseño (042): PostgREST no
+ * compara columna con columna, así que el modelo se ajustó para que «sin leer»
+ * fuera `response_seen_at IS NULL`. Aquí se replica el mismo criterio para que
+ * la interfaz y la consulta no puedan divergir.
+ */
+export function isUnreadResponse(ticket: TicketResponseFacts | null | undefined): boolean {
+  if (!ticket) return false
+  return Boolean(ticket.admin_responded_at) && !ticket.response_seen_at
+}
+
+/** Cuántas respuestas sin leer hay en una lista ya cargada. */
+export function countUnread(tickets: TicketResponseFacts[]): number {
+  return tickets.filter(isUnreadResponse).length
 }
 
 /** ¿Hay una respuesta con contenido real? Un texto en blanco no cuenta. */
@@ -83,8 +105,14 @@ export const TICKET_RESPONSE_LABELS: Record<TicketResponseState, string> = {
  * delante para no prometer un aviso que no existe.
  */
 export function ticketListHint(tickets: TicketResponseFacts[]): string {
-  const conRespuesta = tickets.filter(hasAdminResponse).length
   if (tickets.length === 0) return ''
+
+  // Lo primero que se dice es lo que requiere atención AHORA.
+  const sinLeer = countUnread(tickets)
+  if (sinLeer === 1) return 'Tienes 1 respuesta nueva de MIRA.'
+  if (sinLeer > 1) return `Tienes ${sinLeer} respuestas nuevas de MIRA.`
+
+  const conRespuesta = tickets.filter(hasAdminResponse).length
   if (conRespuesta === 0) return 'Te avisaremos por correo en cuanto respondamos.'
   if (conRespuesta === 1) return '1 de tus solicitudes tiene respuesta de MIRA.'
   return `${conRespuesta} de tus solicitudes tienen respuesta de MIRA.`

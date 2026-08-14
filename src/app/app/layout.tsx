@@ -1,6 +1,6 @@
 import { AppShell } from '@/components/app/AppShell'
 import { getOrganizationModules } from '@/lib/queries/organization-modules'
-import { getMyAnsweredTicketCount } from '@/lib/queries/support'
+import { getMyUnreadResponseCount } from '@/lib/queries/support'
 
 /**
  * Los módulos se resuelven AQUÍ, una sola vez por navegación, y bajan como prop
@@ -16,13 +16,13 @@ import { getMyAnsweredTicketCount } from '@/lib/queries/support'
  * suma. Ninguna depende de la otra.
  */
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const [modules, answeredTickets] = await Promise.all([
+  const [modules, unreadResponses] = await Promise.all([
     getOrganizationModules(),
-    getMyAnsweredTicketCount(),
+    getMyUnreadResponseCount(),
   ])
 
   return (
-    <AppShell modules={modules} answeredTickets={answeredTickets}>
+    <AppShell modules={modules} unreadResponses={unreadResponses}>
       {children}
     </AppShell>
   )
