@@ -16,7 +16,8 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:watch": "vitest watch",
-    "ci:install-check": "npx --yes npm@10.8.2 ci --dry-run"
+    "ci:install-check": "npx --yes npm@10.8.2 ci --dry-run",
+    "email:auth-templates": "UPDATE_EMAIL_TEMPLATES=1 vitest run src/lib/email/auth-templates.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.6.1",
