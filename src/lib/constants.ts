@@ -1,4 +1,12 @@
-export const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+// `APP_URL` se retiró en el hotfix de Auth. Era código muerto —cero usos en
+// todo el proyecto— y caía por defecto en el host local cuando la variable de
+// entorno no estaba: exactamente la clase de valor por defecto que acaba
+// metiendo una dirección inalcanzable en un enlace público, que es el fallo
+// que se estaba corrigiendo.
+//
+// Quien necesite la base pública usa `normalizeBaseUrl()` de
+// `lib/auth/redirect-urls.ts`, que valida el host y devuelve `null` antes que
+// inventarse un dominio.
 
 export const ROUTES = {
   home: '/',

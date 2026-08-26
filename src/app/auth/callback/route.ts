@@ -1,6 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
 import { completeOrganizationSignup } from '@/lib/actions/onboarding'
-import { NextResponse } from 'next/server'
 
 /**
  * `next` viene de la URL, así que puede apuntar a cualquier sitio. Solo se
@@ -15,8 +14,60 @@ function destinoSeguro(next: string | null): string {
   return next
 }
 
+/**
+ * Redirección a una ruta INTERNA, sin construir ninguna URL absoluta.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * AQUÍ ESTABA EL `https://0.0.0.0:3000` (hotfix)
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * La versión anterior hacía:
+ *
+ *   const { searchParams, origin } = new URL(request.url)
+ *   ...
+ *   return NextResponse.redirect(`${origin}/login?error=auth`)
+ *
+ * Ese `origin` NO es el dominio público. Este handler recibe un `Request` web
+ * corriente, y en el servidor `standalone` de Next.js —el que se despliega en
+ * el contenedor— `request.url` se reconstruye a partir de la dirección en la
+ * que el proceso ESCUCHA. El Dockerfile fija
+ *
+ *   ENV HOSTNAME="0.0.0.0"
+ *   ENV PORT=3000
+ *
+ * así que el origen sale `0.0.0.0:3000`. El esquema `https:` sí llegaba bien
+ * —de `x-forwarded-proto`, que el proxy de Coolify sí envía—, y de ahí el
+ * híbrido exacto que vio el cliente: `https://0.0.0.0:3000`.
+ *
+ * Es también la razón de que el resto de la aplicación NO tuviera este
+ * problema: el middleware redirige con `request.nextUrl`, que es un
+ * `NextRequest` y sí resuelve las cabeceras `x-forwarded-*`. Si `nextUrl`
+ * estuviera mal, nadie podría ni entrar al login.
+ *
+ * ── La corrección: no derivar el origen, no necesitarlo ───────────────────
+ *
+ * Los tres destinos de este handler son SIEMPRE rutas internas — `next` está
+ * validado por `destinoSeguro`, y el de error es fijo—. Nunca hizo falta un
+ * dominio, solo lo parecía porque `NextResponse.redirect()` exige una URL
+ * absoluta.
+ *
+ * Una cabecera `Location` RELATIVA está permitida desde el RFC 7231 §7.1.2 y
+ * la resuelve el NAVEGADOR contra la dirección que él pidió — que es, por
+ * definición, la pública y correcta. Así el contenedor deja de tener voz en
+ * esto: no puede equivocarse sobre un dominio que ya no llega a nombrar.
+ *
+ * No se usa `NEXT_PUBLIC_APP_URL` a propósito. Sería otra cosa más que puede
+ * estar mal configurada, y aquí no aporta nada: el destino está en el mismo
+ * origen que la petición.
+ */
+function redirigirA(ruta: string): Response {
+  return new Response(null, { status: 303, headers: { Location: ruta } })
+}
+
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url)
+  // Solo se leen los PARÁMETROS. El origen de esta URL no es de fiar y ya no se
+  // usa para nada; ver `redirigirA`.
+  const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
   const next = destinoSeguro(searchParams.get('next'))
 
@@ -35,10 +86,21 @@ export async function GET(request: Request) {
         console.error('[auth] no se pudo completar el alta tras confirmar el email:', e)
       }
 
-      return NextResponse.redirect(`${origin}${next}`)
+      return redirigirA(next)
     }
+
+    // El detalle se queda en el servidor: a la interfaz solo le llega
+    // `?error=auth`. Sin esto no había forma de distinguir un enlace caducado
+    // de una Site URL mal configurada en Supabase.
+    console.error(
+      `[auth] no se pudo canjear el código del enlace: ${error.name} ${error.status ?? ''} ${error.message}`,
+    )
+  } else {
+    // Llegar aquí SIN `code` significa casi siempre que el enlace del correo no
+    // apuntaba a esta ruta: Supabase mandó al usuario a su «Site URL» en lugar
+    // de al `redirectTo` que pide la aplicación.
+    console.error('[auth] se ha llamado a /auth/callback sin parámetro `code`.')
   }
 
-  // Error — redirigir al login con mensaje
-  return NextResponse.redirect(`${origin}/login?error=auth`)
+  return redirigirA('/login?error=auth')
 }

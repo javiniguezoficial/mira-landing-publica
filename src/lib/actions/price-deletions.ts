@@ -26,6 +26,7 @@ import {
   type DeletionPreviewRow,
   type PriceDeletionFilters,
 } from '@/lib/prices/deletion'
+import { mensajeDeConfirmacion } from '@/lib/prices/deletion-errors'
 
 const MESSAGES = {
   permiso: 'No tienes permiso para realizar esta acción.',
@@ -374,7 +375,7 @@ export async function applyDeletion(batchId: string): Promise<ApplyDeletionResul
 
   if (error) {
     console.error(`[price-deletion] confirmación falló: ${error.code ?? '?'} ${error.message}`)
-    return { error: error.message || MESSAGES.generico }
+    return { error: mensajeDeConfirmacion(error.code, error.message) }
   }
 
   const r = data as Record<string, number | string> | null

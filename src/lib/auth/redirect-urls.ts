@@ -33,21 +33,86 @@ export const SIGNUP_NEXT_PATH = '/app/dashboard'
 /** Destino tras pulsar el enlace de recuperación de contraseña. */
 export const RECOVERY_NEXT_PATH = '/actualizar-password'
 
+// ═══════════════════════════════════════════════════════════════════════════
+// HOSTS QUE NUNCA PUEDEN VIAJAR EN UN ENLACE (044 · hotfix)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ── El fallo que se corrige ───────────────────────────────────────────────
+//
+// El cliente recibió un enlace que terminaba en
+//
+//   https://0.0.0.0:3000/login?error=auth      → ERR_ADDRESS_INVALID
+//
+// `0.0.0.0` es la dirección de ESCUCHA del contenedor (`ENV HOSTNAME="0.0.0.0"`
+// en el Dockerfile, con `PORT=3000`). Es una dirección comodín: significa
+// «acepta conexiones por cualquier interfaz». NO es una dirección a la que
+// nadie pueda conectarse, y por eso el navegador ni siquiera lo intenta.
+//
+// ── Por qué se rechazan unas siempre y otras solo en producción ───────────
+//
+//   0.0.0.0 · :: · 0        SIEMPRE. No son alcanzables desde ningún sitio,
+//                           tampoco desde la propia máquina. Un enlace a
+//                           `0.0.0.0` está roto en desarrollo igual que en
+//                           producción, así que no hay ningún motivo para
+//                           admitirlo nunca.
+//
+//   localhost · 127.0.0.1   SOLO en producción. En desarrollo son la base
+//   · ::1                   correcta y necesaria (`http://localhost:3000`).
+//                           En producción significan «este contenedor», y un
+//                           correo con ese enlace lleva al usuario a su propio
+//                           ordenador.
+//
+// La lista se compara sobre `hostname`, no sobre la cadena entera: así da igual
+// el puerto, el esquema o la barra final.
+
+const HOSTS_NUNCA_PUBLICOS = new Set(['0.0.0.0', '::', '[::]', '0'])
+const HOSTS_SOLO_EN_DESARROLLO = new Set(['localhost', '127.0.0.1', '::1', '[::1]'])
+
 /**
- * Normaliza la base: sin barra final y solo `http:`/`https:`.
+ * ¿Se puede meter este host en un enlace que va a abrir otra persona?
+ *
+ * `enProduccion` se pasa como parámetro en lugar de leer `process.env` aquí
+ * dentro, para que el módulo siga siendo puro y los dos casos se puedan probar
+ * sin tocar variables globales.
+ */
+export function isPubliclyReachableHost(hostname: string, enProduccion: boolean): boolean {
+  const h = hostname.trim().toLowerCase()
+  if (h.length === 0) return false
+  if (HOSTS_NUNCA_PUBLICOS.has(h)) return false
+  if (enProduccion && HOSTS_SOLO_EN_DESARROLLO.has(h)) return false
+  return true
+}
+
+function esProduccion(): boolean {
+  return process.env.NODE_ENV === 'production'
+}
+
+/**
+ * Normaliza la base: sin barra final, solo `http:`/`https:`, y con un host al
+ * que de verdad se pueda llegar.
  *
  * Devuelve `null` ante cualquier cosa que no sea una URL absoluta utilizable.
  * Un valor inválido NO se sustituye por un dominio inventado: quien llama
  * decide qué hacer, y lo correcto es omitir `emailRedirectTo` y dejar que
  * Supabase use su Site URL antes que mandar a la gente a un dominio erróneo.
+ *
+ * Desde el hotfix, «inservible» incluye además una base cuyo host no sea
+ * alcanzable — `0.0.0.0` el primero. Antes se aceptaba: es una URL
+ * sintácticamente válida, y `new URL()` no tiene por qué saber que nadie puede
+ * abrirla.
  */
-export function normalizeBaseUrl(raw: string | null | undefined): string | null {
+export function normalizeBaseUrl(
+  raw: string | null | undefined,
+  enProduccion: boolean = esProduccion(),
+): string | null {
   if (typeof raw !== 'string') return null
   const v = raw.trim().replace(/\/+$/, '')
   if (v.length === 0) return null
   try {
     const url = new URL(v)
-    return url.protocol === 'http:' || url.protocol === 'https:' ? v : null
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null
+    if (!isPubliclyReachableHost(url.hostname, enProduccion)) return null
+    return v
   } catch {
     return null
   }
