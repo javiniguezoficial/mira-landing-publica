@@ -24,6 +24,7 @@ import {
   type ImportPeriodType,
 } from '@/lib/imports/period'
 import { MAX_IMPORT_FILE_BYTES, MAX_IMPORT_ROWS } from '@/lib/imports/types'
+import { toSafeImportError, type SafeImportError } from '@/lib/imports/errors'
 import { miraBtn, miraField, miraLabel } from '@/lib/miraButtons'
 import { cn } from '@/lib/utils'
 
@@ -71,7 +72,9 @@ export function PriceImportWizard({ currentYear, currentWeek, currentMonth }: Pr
   const [month, setMonth] = useState(currentMonth)
   const [file, setFile] = useState<File | null>(null)
 
-  const [error, setError] = useState<string | null>(null)
+  // El error lleva referencia opcional: el digest de Next permite cruzar lo
+  // que ve quien importa con la línea exacta del log del servidor.
+  const [error, setError] = useState<SafeImportError | null>(null)
   const [headerIssues, setHeaderIssues] = useState<{ missing: string[]; unknown: string[] } | null>(null)
   const [duplicateWarning, setDuplicateWarning] = useState<{ importedAt: string | null } | null>(null)
 
@@ -88,20 +91,49 @@ export function PriceImportWizard({ currentYear, currentWeek, currentMonth }: Pr
     const res = await fetch(
       `/api/admin/import-rows?batchId=${encodeURIComponent(batchId)}&status=${nuevoFiltro}&page=${nuevaPagina}`,
     )
-    if (!res.ok) return
+    if (!res.ok) {
+      // Fallar la vista previa NO invalida el batch: sigue validado y se puede
+      // confirmar. Por eso se avisa y no se reinicia nada.
+      setError({
+        message: 'No se ha podido cargar la previsualización. El archivo sigue validado.',
+        reference: null,
+      })
+      return
+    }
     const data = (await res.json()) as { rows: ImportRowView[]; total: number }
     setRows(data.rows)
     setTotalRows(data.total)
   }
 
+  /**
+   * Envuelve una llamada al servidor.
+   *
+   * Sin esto, una promesa rechazada dentro de `startTransition` no la recoge
+   * nadie: escala al error boundary y se lleva por delante la pantalla entera,
+   * con el formulario y el batch ya validado dentro. Aquí el fallo se queda en
+   * un aviso y quien importa puede corregir y reintentar sin perder el sitio.
+   */
+  async function conAviso(fn: () => Promise<void>) {
+    try {
+      await fn()
+    } catch (e) {
+      setError(toSafeImportError(e))
+    }
+  }
+
   function validar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!file) {
-      setError('Selecciona un archivo CSV.')
+      setError({ message: 'Selecciona un archivo CSV.', reference: null })
       return
     }
     if (file.size > MAX_IMPORT_FILE_BYTES) {
-      setError(`El archivo supera el límite de ${MAX_IMPORT_FILE_BYTES / 1024 / 1024} MB.`)
+      // Límite FUNCIONAL de MIRA, no el del transporte. Aquí sí sabemos con
+      // certeza qué pasa, así que el mensaje es concreto.
+      setError({
+        message: `El archivo supera el límite de ${MAX_IMPORT_FILE_BYTES / 1024 / 1024} MB.`,
+        reference: null,
+      })
       return
     }
 
@@ -117,12 +149,15 @@ export function PriceImportWizard({ currentYear, currentWeek, currentMonth }: Pr
     if (periodType === 'week') formData.set('week', String(week))
     if (periodType === 'month') formData.set('month', String(month))
 
-    startTransition(async () => {
+    startTransition(() => conAviso(async () => {
       const res = await validateImportFile(formData)
 
-      if (res.error) { setError(res.error); return }
+      if (res.error) { setError({ message: res.error, reference: null }); return }
       if (res.headerIssues) { setHeaderIssues(res.headerIssues); return }
-      if (!res.batchId) { setError('No se ha podido validar el archivo.'); return }
+      if (!res.batchId) {
+        setError({ message: 'No se ha podido validar el archivo.', reference: null })
+        return
+      }
 
       if (res.duplicateFileWarning) {
         setDuplicateWarning({ importedAt: res.duplicateFileWarning.importedAt })
@@ -134,29 +169,31 @@ export function PriceImportWizard({ currentYear, currentWeek, currentMonth }: Pr
       setFilter('all')
       setPage(1)
       await cargarFilas(res.batchId, 'all', 1)
-    })
+    }))
   }
 
   function confirmar() {
     if (!batch) return
     setError(null)
-    startTransition(async () => {
+    startTransition(() => conAviso(async () => {
       const res = await commitImportBatch(batch.id)
-      if (res.error) { setError(res.error); return }
+      // El mensaje ya viene saneado del servidor: o es uno de los tres de
+      // `commit_market_import`, o el genérico. Nunca texto de PostgreSQL.
+      if (res.error) { setError({ message: res.error, reference: null }); return }
       setResultado({ importedRows: res.importedRows ?? 0, status: res.status })
       setBatch({ ...batch, status: (res.status as ImportBatchSummary['status']) ?? 'completed' })
       router.refresh()
-    })
+    }))
   }
 
   function cancelar() {
     if (!batch) return
-    startTransition(async () => {
+    startTransition(() => conAviso(async () => {
       const res = await cancelImportBatch(batch.id)
-      if (res.error) { setError(res.error); return }
+      if (res.error) { setError({ message: res.error, reference: null }); return }
       reiniciar()
       router.refresh()
-    })
+    }))
   }
 
   function reiniciar() {
@@ -287,7 +324,20 @@ export function PriceImportWizard({ currentYear, currentWeek, currentMonth }: Pr
       )}
 
       {error && (
-        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
+        <div
+          role="alert"
+          className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+        >
+          <p className="flex items-start gap-2">
+            <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+            <span>{error.message}</span>
+          </p>
+          {error.reference && (
+            <p className="mt-1.5 pl-[23px] text-[11px] text-red-600/70">
+              Referencia técnica: <span className="font-mono">{error.reference}</span>
+            </p>
+          )}
+        </div>
       )}
 
       {/* ── PASO 2 · Resumen y previsualización ────────────────────────────── */}
@@ -396,7 +446,20 @@ export function PriceImportWizard({ currentYear, currentWeek, currentMonth }: Pr
           {/* Previsualización paginada — nunca se cargan miles de filas de golpe */}
           <div className="mira-card overflow-hidden rounded-2xl">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-mira-line px-5 py-3.5">
-              <h3 className="text-sm font-black text-mira-ink">Previsualización</h3>
+              <div className="min-w-0">
+                <h3 className="text-sm font-black text-mira-ink">Previsualización</h3>
+                {yaImportado && (
+                  // 049 — «Importada» se deriva de que la fila haya generado un
+                  // precio; los filtros siguen siendo el resultado de la
+                  // VALIDACIÓN. Sin esta línea, ver una fila con la etiqueta
+                  // «Importada» dentro del filtro «Válidas» parece una
+                  // contradicción y no lo es.
+                  <p className="mt-0.5 text-[11px] text-slate-400">
+                    Los filtros muestran el resultado de la validación.
+                    «Importada» señala las filas que llegaron a crear un precio.
+                  </p>
+                )}
+              </div>
               <div className="flex flex-wrap gap-1.5">
                 {([
                   ['all', 'Todas'], ['valid', 'Válidas'],
@@ -407,7 +470,7 @@ export function PriceImportWizard({ currentYear, currentWeek, currentMonth }: Pr
                     type="button"
                     onClick={() => {
                       setFilter(value); setPage(1)
-                      startTransition(async () => { await cargarFilas(batch.id, value, 1) })
+                      startTransition(() => conAviso(() => cargarFilas(batch.id, value, 1)))
                     }}
                     aria-pressed={filter === value}
                     className={cn(
@@ -492,7 +555,7 @@ export function PriceImportWizard({ currentYear, currentWeek, currentMonth }: Pr
                     type="button" disabled={page <= 1 || pending}
                     onClick={() => {
                       const p = page - 1; setPage(p)
-                      startTransition(async () => { await cargarFilas(batch.id, filter, p) })
+                      startTransition(() => conAviso(() => cargarFilas(batch.id, filter, p)))
                     }}
                     className={`${miraBtn.ghost} disabled:opacity-40`}
                   >
@@ -502,7 +565,7 @@ export function PriceImportWizard({ currentYear, currentWeek, currentMonth }: Pr
                     type="button" disabled={page >= totalPaginas || pending}
                     onClick={() => {
                       const p = page + 1; setPage(p)
-                      startTransition(async () => { await cargarFilas(batch.id, filter, p) })
+                      startTransition(() => conAviso(() => cargarFilas(batch.id, filter, p)))
                     }}
                     className={`${miraBtn.ghost} disabled:opacity-40`}
                   >

@@ -10,12 +10,21 @@ import type { ImportPeriodType } from './period'
 // verifica después de cargar 200 MB en memoria no protege de nada.
 
 export const MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024 // 10 MB
-export const MAX_IMPORT_ROWS = 20_000
+/**
+ * Filas por importación.
+ *
+ * 15.000 y no 20.000 porque es lo que la base sostiene con margen. Medido
+ * contra el remoto con fixtures sintéticos y rollback, `commit_market_import`
+ * tarda en el peor de cinco intentos 4,7 s con 15.000 filas y 8,4 s con
+ * 20.000 — por encima del `statement_timeout` de 8 s del rol `authenticated`.
+ * Prometer 20.000 era prometer una importación que a veces se cancela.
+ */
+export const MAX_IMPORT_ROWS = 15_000
 
 /**
  * Cuántas filas se envían al navegador de una vez en la previsualización.
  *
- * 20.000 filas serían varios megabytes de JSON y un DOM inmanejable. La tabla
+ * 15.000 filas serían varios megabytes de JSON y un DOM inmanejable. La tabla
  * pagina contra el servidor.
  */
 export const IMPORT_PREVIEW_PAGE_SIZE = 50

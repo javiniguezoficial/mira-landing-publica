@@ -1,0 +1,79 @@
+-- ═════════════════════════════════════════════════════════════════════════════
+-- 048 · Poda de dos índices redundantes en el camino de la importación
+-- ═════════════════════════════════════════════════════════════════════════════
+--
+-- Contexto: `commit_market_import` roza el `statement_timeout` de 8 s del rol
+-- `authenticated` con ficheros grandes. Medido en remoto, sobre fixtures
+-- sintéticos y con rollback, para 15.000 filas:
+--
+--   lock del batch        25 ms   ·  0,4 %
+--   selección de válidas  15 ms   ·  0,2 %
+--   INSERT en precios  4.525 ms   ·   70 %
+--   UPDATE de las filas 1.855 ms  ·   29 %
+--   cierre del batch       9 ms   ·  0,1 %
+--
+-- Los dos bloques que cuestan son escrituras, y lo que pagan es mantenimiento
+-- de índices: el INSERT toca 12 índices de `product_price_records` y el UPDATE
+-- toca 5 de `market_import_rows` —no puede ser HOT, porque cambia `status` y
+-- `imported_record_id`, y las dos columnas están indexadas—.
+--
+-- Esta migración quita DOS índices, y solo dos. No toca ninguna función, ni
+-- ninguna policy, ni el `statement_timeout`.
+--
+-- ── Lo que NO se toca, y por qué ────────────────────────────────────────────
+--
+-- `idx_ppr_product_id (product_id)` es, sobre el papel, un prefijo estricto de
+-- `idx_ppr_product_recorded (product_id, recorded_at desc)` y por tanto
+-- redundante. Se queda igualmente: lleva 77.090 escaneos en 97 días y es el
+-- índice que el planificador ELIGE para las búsquedas por producto, porque con
+-- 840 kB frente a 3.224 kB recorre muchas menos páginas. Quitarlo no rompería
+-- nada, pero encarecería la lectura más frecuente de Pricing para ahorrar un
+-- doceavo de una escritura que ocurre a ratos. Mal cambio.
+--
+-- `idx_ppr_import_batch` y `idx_ppr_import_row` tampoco se tocan aunque tengan
+-- 84 y 0 escaneos. Son los índices que respaldan las FK `on delete set null`
+-- hacia `market_import_batches` y `market_import_rows`: sin ellos, borrar un
+-- batch o una fila de importación haría un Seq Scan por cada fila. Es
+-- exactamente la patología que corrigió la 044, y 0 escaneos aquí solo
+-- significa que todavía no se ha borrado ninguna.
+
+-- ═════════════════════════════════════════════════════════════════════════════
+-- 1. `idx_mir_batch_line` — duplicado exacto de un índice de restricción
+-- ═════════════════════════════════════════════════════════════════════════════
+--
+--   idx_mir_batch_line             btree (batch_id, row_number)          25 MB
+--   market_import_rows_unique_line btree (batch_id, row_number) UNIQUE   25 MB
+--
+-- Misma tabla, mismas columnas, mismo orden. El segundo respalda una
+-- restricción UNIQUE y por tanto no se puede retirar; el primero no aporta
+-- ningún plan que el otro no pueda servir. Las estadísticas lo confirman: el
+-- único que recibe escaneos es el no-único (969), simplemente porque ante dos
+-- índices de coste idéntico el planificador se queda con uno. Al desaparecer,
+-- esos 969 escaneos pasan al índice único sin cambio de coste.
+--
+-- Son 25 MB que se mantenían dos veces en CADA alta de fila de importación
+-- (validación) y en CADA actualización posterior (confirmación). Con 15.000
+-- filas eso son 15.000 entradas de índice escritas dos veces, para nada.
+
+drop index if exists public.idx_mir_batch_line;
+
+-- ═════════════════════════════════════════════════════════════════════════════
+-- 2. `idx_ppr_product_country_recorded` — sin un solo uso en 97 días
+-- ═════════════════════════════════════════════════════════════════════════════
+--
+--   idx_ppr_product_country_recorded btree (product_id, country, recorded_at desc)
+--
+-- 0 escaneos desde el 22 de mayo de 2026 —la ventana entera de estadísticas—,
+-- con 4.272 kB que se mantienen en cada inserción de precio. No respalda
+-- ninguna restricción ni ninguna FK.
+--
+-- Y no es que le falte tráfico: es que no lo va a tener. `country` es
+-- prácticamente constante en los datos ('ES'), así que colarla entre
+-- `product_id` y `recorded_at` no separa nada que `idx_ppr_product_recorded` no
+-- separe ya, y ese sí se usa (7.010 escaneos). El planificador lleva tres meses
+-- diciendo lo mismo.
+--
+-- Si algún día apareciera una consulta real por producto + país, el índice se
+-- vuelve a crear. Un índice que nadie lee solo cobra.
+
+drop index if exists public.idx_ppr_product_country_recorded;

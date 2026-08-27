@@ -22,6 +22,8 @@ import {
   type ImportBatchSummary,
   type ImportRowStatus,
 } from '@/lib/imports/types'
+import { safeCommitErrorMessage } from '@/lib/imports/errors'
+import { deriveImportRowStatus, hasImportedPrice } from '@/lib/imports/row-state'
 import {
   naturalKey,
   flagConflictingDuplicates,
@@ -39,7 +41,7 @@ const MESSAGES = {
   extension: `Formato no admitido. Sube un archivo ${ACCEPTED_IMPORT_EXTENSIONS.join(' o ')}.`,
   tipo: 'El contenido del archivo no parece un CSV.',
   tamano: `El archivo supera el límite de ${MAX_IMPORT_FILE_BYTES / 1024 / 1024} MB.`,
-  filas: `El archivo supera el límite de ${MAX_IMPORT_ROWS.toLocaleString('es-ES')} filas.`,
+  filas: `El archivo supera el límite de ${MAX_IMPORT_ROWS.toLocaleString('es-ES')} filas por importación.`,
   periodo: 'El periodo seleccionado no es válido.',
   vacio: 'El archivo no contiene ninguna fila de datos.',
   generico: 'No se ha podido procesar el archivo. Inténtalo de nuevo.',
@@ -133,7 +135,7 @@ export async function validateImportFile(formData: FormData): Promise<ValidateIm
 
   // ── Catálogo, en consultas fijas ──────────────────────────────────────────
   //
-  // DOS consultas para TODO el fichero, no una por fila. Con 20.000 filas la
+  // DOS consultas para TODO el fichero, no una por fila. Con 15.000 filas la
   // diferencia entre esto y un N+1 es entre segundos y horas.
   //
   // 034 — desaparece la tercera consulta, la que sacaba las monedas y unidades
@@ -281,7 +283,7 @@ export async function validateImportFile(formData: FormData): Promise<ValidateIm
     return { error: MESSAGES.generico }
   }
 
-  // Inserción por lotes: un solo INSERT de 20.000 filas puede superar los
+  // Inserción por lotes: un solo INSERT de 15.000 filas puede superar los
   // límites de tamaño de petición de PostgREST.
   const LOTE = 500
   for (let i = 0; i < revisadas.length; i += LOTE) {
@@ -398,7 +400,7 @@ export interface ImportRowsPage {
 /**
  * Filas del batch, PAGINADAS en servidor.
  *
- * Nunca se mandan 20.000 filas al navegador: sería un JSON de varios megabytes
+ * Nunca se mandan 15.000 filas al navegador: sería un JSON de varios megabytes
  * y un DOM que ningún portátil mueve. El filtro por estado también se resuelve
  * en la consulta, apoyado en `idx_mir_batch_status`.
  */
@@ -414,13 +416,18 @@ export async function getImportRows(
   // Los embeds se desambiguan por el NOMBRE de la clave foránea: la tabla tiene
   // dos columnas que apuntan a catálogo (`resolved_market_id`,
   // `resolved_product_id`) y PostgREST no puede adivinar cuál usar.
+  // 049 — el estado «importada» ya no se guarda en la fila: se deriva de que
+  // exista un precio que la referencie. El embed inverso va por el NOMBRE de la
+  // FK porque entre estas dos tablas hay dos relaciones (`import_row_id` hacia
+  // aquí, `imported_record_id` hacia allá) y PostgREST no puede elegir sola.
   let query = supabase
     .from('market_import_rows')
     .select(
       `row_number, status, resolved_recorded_at, resolved_price, resolved_currency,
        resolved_unit, resolved_lonja, validation_errors,
        market:markets!market_import_rows_resolved_market_id_fkey(name),
-       product:products!market_import_rows_resolved_product_id_fkey(name)`,
+       product:products!market_import_rows_resolved_product_id_fkey(name),
+       precios:product_price_records!product_price_records_import_row_id_fkey(id)`,
       { count: 'exact' },
     )
     .eq('batch_id', batchId)
@@ -436,7 +443,7 @@ export async function getImportRows(
 
     return {
       line: r.row_number as number,
-      status: r.status as ImportRowStatus,
+      status: deriveImportRowStatus(r.status as ImportRowStatus, hasImportedPrice(r.precios)),
       marketName: market?.name ?? null,
       productName: product?.name ?? null,
       // 034 — la lonja que se va a ESCRIBIR, no la del producto. Son cosas
@@ -479,8 +486,11 @@ export async function commitImportBatch(batchId: string): Promise<CommitImportRe
 
   if (error) {
     console.error(`[import] confirmación falló: ${error.code ?? '?'} ${error.message}`)
-    // Los mensajes de la función ya son legibles y no filtran nada interno.
-    return { error: error.message || MESSAGES.generico }
+    // El mensaje se elige por SQLSTATE, no por el texto. Los tres códigos que
+    // lanza `commit_market_import` traen mensajes escritos para leerse; el
+    // resto —un timeout de sentencia, una violación de restricción— trae texto
+    // de PostgreSQL que nombra tablas y columnas y no sale a pantalla.
+    return { error: safeCommitErrorMessage(error.code, error.message) }
   }
 
   const resultado = data as { imported_rows?: number; status?: string } | null

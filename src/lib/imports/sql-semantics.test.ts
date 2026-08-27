@@ -228,9 +228,9 @@ describe('trazabilidad', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe('límites del MVP', () => {
-  it('10 MB y 20.000 filas, declarados explícitamente', () => {
+  it('10 MB y 15.000 filas, declarados explícitamente', () => {
     expect(MAX_IMPORT_FILE_BYTES).toBe(10 * 1024 * 1024)
-    expect(MAX_IMPORT_ROWS).toBe(20_000)
+    expect(MAX_IMPORT_ROWS).toBe(15_000)
   })
 })
 
