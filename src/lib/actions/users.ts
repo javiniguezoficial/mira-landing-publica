@@ -12,6 +12,12 @@ import {
   type ProfileStatus,
 } from '@/lib/identity'
 import { matchesUserFilters, type UserListFilters } from '@/lib/users/list-params'
+import {
+  DELETION_MESSAGES,
+  deletionBlockMessages,
+  evaluateUserDeletion,
+  type UserDeletionFacts,
+} from '@/lib/auth/user-deletion'
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -417,4 +423,71 @@ export async function getUserAuditTrail(userId: string): Promise<AuditEntryRow[]
     isQa: e.is_qa === true,
     createdAt: e.created_at,
   }))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ¿Se puede eliminar esta cuenta?  (lectura para la ficha)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface UserDeletionCheck {
+  deletable: boolean
+  blocks: string[]
+  warnings: string[]
+}
+
+/**
+ * Reúne las dependencias de una cuenta y devuelve el veredicto ya traducido.
+ *
+ * Es SOLO LECTURA y existe para que la ficha pueda explicar por qué una cuenta
+ * no se puede eliminar ANTES de que nadie pulse nada. La decisión de verdad la
+ * vuelve a tomar `deleteUserAccount` con los mismos hechos releídos: esto es
+ * para informar, no para autorizar.
+ */
+export async function checkUserDeletable(userId: string): Promise<UserDeletionCheck> {
+  const { supabase, userId: actorId } = await requirePlatformAdmin()
+
+  const { data: perfil } = await supabase
+    .from('profiles')
+    .select('id, role')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (!perfil) return { deletable: false, blocks: [DELETION_MESSAGES.noExiste], warnings: [] }
+
+  const [
+    { data: owned }, { count: rfqs }, { count: tickets },
+    { count: noticias }, { count: importaciones }, { count: borrados },
+    { count: proveedores }, { count: admins },
+  ] = await Promise.all([
+    supabase.from('organization_members').select('organizations ( name )').eq('user_id', userId).eq('org_role', 'owner'),
+    supabase.from('rfqs').select('id', { count: 'exact', head: true }).eq('created_by', userId),
+    supabase.from('support_tickets').select('id', { count: 'exact', head: true }).eq('user_id', userId),
+    supabase.from('news').select('id', { count: 'exact', head: true }).eq('created_by', userId),
+    supabase.from('market_import_batches').select('id', { count: 'exact', head: true }).eq('created_by', userId),
+    supabase.from('market_price_deletion_batches').select('id', { count: 'exact', head: true }).eq('created_by', userId),
+    supabase.from('supplier_update_batches').select('id', { count: 'exact', head: true }).eq('created_by', userId),
+    supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'platform_admin').eq('status', 'active'),
+  ])
+
+  const hechos: UserDeletionFacts = {
+    actorId,
+    targetUserId: userId,
+    targetIsPlatformAdmin: normalizePlatformRole(perfil.role) === 'platform_admin',
+    activeAdminCount: admins ?? 0,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ownedOrganizations: (owned ?? []).map((m: any) => m.organizations?.name ?? 'una organización'),
+    rfqCount: rfqs ?? 0,
+    supportTicketCount: tickets ?? 0,
+    authoredNewsCount: noticias ?? 0,
+    importBatchCount: importaciones ?? 0,
+    deletionBatchCount: borrados ?? 0,
+    supplierBatchCount: proveedores ?? 0,
+  }
+
+  const veredicto = evaluateUserDeletion(hechos)
+  return {
+    deletable: veredicto.deletable,
+    blocks: deletionBlockMessages(veredicto, hechos),
+    warnings: veredicto.warnings,
+  }
 }

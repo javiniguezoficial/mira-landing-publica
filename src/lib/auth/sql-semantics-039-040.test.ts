@@ -73,7 +73,9 @@ describe('registro de auditoría', () => {
   it('la lista de acciones es cerrada y coincide con la del código', () => {
     expect(SQL).toContain('check (action in (')
 
-    const vigente = ejecutable(migracion('_046_'))
+    // La restricción la recrea la ÚLTIMA migración que la tocó: 039 la creó,
+    // 046 añadió `user.invited` y 047 `user.deleted`.
+    const vigente = ejecutable(migracion('_047_'))
     expect(vigente).toContain('check (action in (')
 
     for (const accion of ADMIN_AUDIT_ACTIONS) {
@@ -81,8 +83,8 @@ describe('registro de auditoría', () => {
     }
   })
 
-  it('la 046 solo AÑADE: no retira ninguna acción que existiera en la 039', () => {
-    const vigente = ejecutable(migracion('_046_'))
+  it('cada ampliación solo AÑADE: no retira ninguna acción anterior', () => {
+    const vigente = ejecutable(migracion('_047_'))
     const original = [...SQL.matchAll(/'([a-z]+\.[a-z_]+)'/g)].map((m) => m[1])
     for (const accion of new Set(original)) {
       expect(vigente, accion).toContain(`'${accion}'`)

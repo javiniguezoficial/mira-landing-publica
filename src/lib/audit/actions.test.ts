@@ -54,10 +54,12 @@ const ACCIONES_ESPERADAS = [
   'setUserProfileStatus',
   // 046 — alta administrativa: crea la cuenta y envía la invitación.
   'createAndInviteUser',
+  // 047 — eliminación definitiva de una cuenta.
+  'deleteUserAccount',
 ] as const
 
 describe('todas las acciones exigen platform_admin', () => {
-  it('están las nueve', () => {
+  it('están las diez', () => {
     for (const a of ACCIONES_ESPERADAS) {
       expect(ACCIONES, a).toContain(`export async function ${a}(`)
     }
@@ -99,13 +101,21 @@ describe('todas las acciones exigen platform_admin', () => {
   it('el service_role solo se usa para dar de alta en Auth, nunca para escribir en tablas', () => {
     const codigo = sinComentarios(ACCIONES)
 
-    // Un único punto de uso: el alta administrativa.
+    // Dos puntos de uso, y solo dos: dar de alta en Auth y eliminar de Auth.
+    // Ninguna de las dos se puede hacer sin la clave de servicio.
     const usos = (codigo.match(/createSupabaseAdminClient/g) ?? []).length
-    expect(usos, 'import + una sola llamada').toBe(2)
+    expect(usos, 'import + dos llamadas').toBe(3)
 
-    const alta = codigo.slice(codigo.indexOf('export async function createAndInviteUser'))
+    const alta = codigo.slice(
+      codigo.indexOf('export async function createAndInviteUser'),
+      codigo.indexOf('export async function deleteUserAccount'),
+    )
     expect(alta).toContain('createSupabaseAdminClient()')
     expect(alta).toContain('admin.auth.admin.inviteUserByEmail')
+
+    const borrado = codigo.slice(codigo.indexOf('export async function deleteUserAccount'))
+    expect(borrado).toContain('createSupabaseAdminClient()')
+    expect(borrado).toMatch(/admin\.auth\.admin\.(getUserById|deleteUser)/)
 
     // Y NUNCA para leer o escribir tablas: eso se salta RLS. El perfil y la
     // pertenencia se escriben con el cliente de la sesión.
@@ -115,10 +125,13 @@ describe('todas las acciones exigen platform_admin', () => {
     expect(codigo).not.toContain('listUsers')
   })
 
-  it('el cliente privilegiado se crea DESPUÉS de autorizar', () => {
+  it('el cliente privilegiado se crea DESPUÉS de autorizar, en las DOS', () => {
     const codigo = sinComentarios(ACCIONES)
-    const alta = codigo.slice(codigo.indexOf('export async function createAndInviteUser'))
-    expect(alta.indexOf('requirePlatformAdmin')).toBeLessThan(alta.indexOf('createSupabaseAdminClient()'))
+    for (const accion of ['createAndInviteUser', 'deleteUserAccount']) {
+      const cuerpo = codigo.slice(codigo.indexOf(`export async function ${accion}`))
+      expect(cuerpo.indexOf('requirePlatformAdmin'), accion)
+        .toBeLessThan(cuerpo.indexOf('createSupabaseAdminClient()'))
+    }
   })
 
   it('el service_role solo se usa para leer correos, en el módulo de lectura', () => {

@@ -234,9 +234,18 @@ describe('la invitación usa el mecanismo oficial, una sola vez', () => {
     expect(ACCIONES).not.toContain("from '@/lib/email/")
   })
 
-  it('el destino sale del helper seguro corregido en el hotfix', () => {
-    expect(CUERPO).toContain('buildRecoveryRedirectUrl(process.env.NEXT_PUBLIC_APP_URL)')
+  // Antes apuntaba a `/auth/callback?next=/actualizar-password`, el mismo
+  // destino que la recuperación. Ese era el fallo del hotfix de invitaciones:
+  // el callback es código de SERVIDOR y la sesión de una invitación llega en el
+  // FRAGMENTO de la URL, que nunca se envía al servidor.
+  it('el destino sale del helper seguro, y es el de INVITACIÓN', () => {
+    expect(CUERPO).toContain('buildInviteRedirectUrl(process.env.NEXT_PUBLIC_APP_URL)')
     expect(ACCIONES).toContain("from '@/lib/auth/redirect-urls'")
+  })
+
+  it('la invitación NO reutiliza el destino de recuperación', () => {
+    expect(CUERPO).not.toContain('buildRecoveryRedirectUrl')
+    expect(CUERPO).not.toContain('/auth/callback')
   })
 
   it('nunca se construye una URL a mano', () => {

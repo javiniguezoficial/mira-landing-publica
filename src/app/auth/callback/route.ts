@@ -64,6 +64,36 @@ function redirigirA(ruta: string): Response {
   return new Response(null, { status: 303, headers: { Location: ruta } })
 }
 
+/**
+ * Salida de error, con el fragmento CORTADO.
+ *
+ * ── Por qué `#` al final, y por qué no es un adorno ──────────────────────
+ *
+ * En QA se vio esta URL en la barra de direcciones:
+ *
+ *   /login?error=auth#access_token=…
+ *
+ * El fragmento no lo puso este handler —no puede: el fragmento nunca llega al
+ * servidor—. Lo arrastró el NAVEGADOR. Según el RFC 7231 §7.1.2, cuando el
+ * destino de una redirección no trae fragmento propio, el agente hereda el de
+ * la petición original. Como el enlace venía con `#access_token=…`, ese token
+ * acabó pegado a una pantalla de error.
+ *
+ * Dar al `Location` un fragmento propio —aunque sea vacío— corta la herencia.
+ * Un `access_token` en la barra de direcciones es una sesión completa: queda en
+ * el historial, viaja si alguien comparte el enlace y sale en cualquier
+ * captura de pantalla. Que ocurra sobre una página de error no lo hace menos
+ * grave; lo hace más probable, porque es justo cuando la gente copia la URL
+ * para preguntar qué ha pasado.
+ *
+ * La causa de fondo —las invitaciones no debían pasar por aquí— está corregida
+ * aparte. Esto es el cierre para cualquier otro enlace que llegue con sesión en
+ * el fragmento.
+ */
+function redirigirAErrorSinFragmento(ruta: string): Response {
+  return new Response(null, { status: 303, headers: { Location: `${ruta}#` } })
+}
+
 export async function GET(request: Request) {
   // Solo se leen los PARÁMETROS. El origen de esta URL no es de fiar y ya no se
   // usa para nada; ver `redirigirA`.
@@ -102,5 +132,5 @@ export async function GET(request: Request) {
     console.error('[auth] se ha llamado a /auth/callback sin parámetro `code`.')
   }
 
-  return redirigirA('/login?error=auth')
+  return redirigirAErrorSinFragmento('/login?error=auth')
 }

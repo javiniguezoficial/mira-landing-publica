@@ -5,8 +5,22 @@ import { motion } from 'framer-motion'
 import { MiraLogo } from './MiraLogo'
 import { Button } from './Button'
 import { createClient } from '@/lib/supabase/client'
+import { PASSWORD_COPY, type PasswordReason } from '@/lib/auth/invite-session'
 
-export const UpdatePasswordPage = () => {
+interface Props {
+  /**
+   * Por qué se pide la contraseña. Ya viene NORMALIZADO contra una lista
+   * cerrada desde la página, así que aquí solo elige el texto.
+   *
+   * No es una comprobación de seguridad y no debe usarse como tal: quien decide
+   * si la contraseña puede cambiarse es la SESIÓN, no este valor. Un `motivo`
+   * manipulado como mucho enseña el rótulo equivocado.
+   */
+  reason?: PasswordReason
+}
+
+export const UpdatePasswordPage = ({ reason = 'recuperacion' }: Props) => {
+  const copy = PASSWORD_COPY[reason]
   const router = useRouter()
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -35,7 +49,11 @@ export const UpdatePasswordPage = () => {
     setLoading(false)
 
     if (updateError) {
-      setError('No se pudo actualizar la contraseña. El enlace puede haber expirado. Solicita uno nuevo.')
+      setError(
+        reason === 'invitacion'
+          ? 'No se pudo crear la contraseña. El enlace de invitación puede haber caducado. Pide uno nuevo a tu contacto en MIRA.'
+          : 'No se pudo actualizar la contraseña. El enlace puede haber expirado. Solicita uno nuevo.',
+      )
       return
     }
 
@@ -77,17 +95,17 @@ export const UpdatePasswordPage = () => {
                 Contraseña actualizada
               </h2>
               <p className="text-sm text-slate-500">
-                Redirigiendo a tu panel…
+                {copy.done}
               </p>
             </div>
           ) : (
             <>
               <div className="mb-8 text-center">
                 <h1 className="text-3xl font-heading font-bold text-slate-900 mb-3">
-                  Nueva contraseña
+                  {copy.title}
                 </h1>
                 <p className="text-sm text-slate-500 font-body">
-                  Elige una contraseña segura para tu cuenta.
+                  {copy.intro}
                 </p>
               </div>
 
@@ -126,7 +144,7 @@ export const UpdatePasswordPage = () => {
                 )}
 
                 <Button type="submit" className="w-full mt-2" size="lg" disabled={loading}>
-                  {loading ? 'Guardando…' : 'Guardar nueva contraseña'}
+                  {loading ? 'Guardando…' : copy.cta}
                 </Button>
               </form>
             </>

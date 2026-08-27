@@ -24,6 +24,7 @@ import { getMembershipForOrganization, resolveFallbackMembership } from './membe
 import {
   adminDenialTarget,
   evaluateCommercialAction,
+  evaluateActiveProfile,
   evaluateOrganizationAccess,
   evaluateOrganizationModule,
   evaluatePlatformAdmin,
@@ -193,7 +194,19 @@ export async function requireMembership(
   const sesion = await requireSession()
   const membership = resolveMembership(sesion.context, organizationId)
 
+  // El ESTADO DEL PERFIL se comprueba aquí y no en `requireSession`, y esa
+  // distinción es deliberada:
+  //
+  //   · `requireMembership` gobierna las superficies de producto —equipo,
+  //     cotizaciones— y una cuenta suspendida no debe operar en ninguna;
+  //   · `requireSession` lo usa ADEMÁS el canal de soporte, que tiene que
+  //     seguir abierto a una cuenta suspendida para que pueda reclamar. Ver
+  //     `lib/auth/suspension.ts` y el comentario de `submitSupportTicket`.
+  //
+  // Hasta ahora aquí solo se miraba el estado de la pertenencia y el de la
+  // organización, así que suspender a un usuario NORMAL no le impedía nada.
   const fallo =
+    evaluateActiveProfile(sesion.context) ??
     evaluateOrganizationAccess(membership) ??
     (options?.module ? evaluateOrganizationModule(membership, options.module) : null)
 

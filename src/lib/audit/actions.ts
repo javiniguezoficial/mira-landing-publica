@@ -16,6 +16,14 @@ export const ADMIN_AUDIT_ACTIONS = [
   'profile.status_changed',
   /** 046 — cuenta creada e invitada desde el panel de administración. */
   'user.invited',
+  /**
+   * 047 — cuenta eliminada definitivamente.
+   *
+   * Suspender y reactivar NO tienen acción propia: los cubre
+   * `profile.status_changed`, que ya guarda el estado anterior y el nuevo.
+   * Partirlo en tres nombres fragmentaría el rastro de una misma cosa.
+   */
+  'user.deleted',
 ] as const
 
 export type AdminAuditAction = (typeof ADMIN_AUDIT_ACTIONS)[number]
@@ -28,6 +36,7 @@ export function isAdminAuditAction(raw: unknown): raw is AdminAuditAction {
 export const ADMIN_AUDIT_ACTION_LABELS: Record<AdminAuditAction, string> = {
   'membership.created': 'Asignado a una organización',
   'user.invited': 'Cuenta creada e invitada',
+  'user.deleted': 'Cuenta eliminada definitivamente',
   'membership.role_changed': 'Cambio de rol en la organización',
   'membership.status_changed': 'Cambio de estado de la pertenencia',
   'membership.capabilities_changed': 'Cambio de capacidades comerciales',

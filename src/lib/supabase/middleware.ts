@@ -2,6 +2,7 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { normalizePlatformRole } from '@/lib/identity'
 import { evaluatePlatformRole } from '@/lib/auth/policy'
+import { SUSPENDED_REDIRECT_PATH, shouldBlockSuspended } from '@/lib/auth/suspension'
 
 /**
  * Rol global del usuario, resuelto FAIL-CLOSED.
@@ -15,13 +16,23 @@ import { evaluatePlatformRole } from '@/lib/auth/policy'
  * pero delega la DECISIÓN en `evaluatePlatformRole`, la misma que usan los
  * guards de servidor.
  */
-async function resolvePlatformRole(
+/**
+ * Rol y estado del perfil, en UNA sola consulta.
+ *
+ * Antes solo se leía el rol. El estado hace falta porque suspender a alguien
+ * tiene que impedirle NAVEGAR, no solo ejecutar acciones: sin esto, una cuenta
+ * suspendida seguía abriendo `/app` con normalidad y solo fallaba al intentar
+ * escribir algo.
+ *
+ * Ante un error de consulta se deniega: fail-closed, igual que el resto.
+ */
+async function resolveProfile(
   supabase: ReturnType<typeof createServerClient>,
   userId: string,
-) {
+): Promise<{ role: ReturnType<typeof normalizePlatformRole>; status: string | null } | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('role')
+    .select('role, status')
     .eq('id', userId)
     .maybeSingle()
 
@@ -30,7 +41,7 @@ async function resolvePlatformRole(
     return null
   }
 
-  return normalizePlatformRole(data?.role)
+  return { role: normalizePlatformRole(data?.role), status: (data?.status as string) ?? null }
 }
 
 export async function updateSession(request: NextRequest) {
@@ -88,11 +99,33 @@ export async function updateSession(request: NextRequest) {
   // cruzar este filtro y es el layout quien lo devuelve al área de cliente:
   // defensa en profundidad, no un hueco.
   if (isAdminRoute && user) {
-    const platformRole = await resolvePlatformRole(supabase, user.id)
+    const perfil = await resolveProfile(supabase, user.id)
+    const platformRole = perfil?.role ?? null
 
     if (evaluatePlatformRole(platformRole) !== null) {
       const redirectUrl = request.nextUrl.clone()
       redirectUrl.pathname = '/app/dashboard'
+      redirectUrl.search = ''
+      return NextResponse.redirect(redirectUrl)
+    }
+  }
+
+  // ── Cuenta SUSPENDIDA en el área de cliente ──────────────────────────────
+  //
+  // Suspender tiene que impedir el acceso de verdad, no solo pintar una
+  // etiqueta en el panel. Se comprueba en la NAVEGACIÓN porque las páginas de
+  // `/app` no llevan guard propio: sin esto, una cuenta suspendida seguía
+  // paseándose por el área de cliente y solo chocaba al intentar escribir.
+  //
+  // La excepción de `/app/ayuda` es DELIBERADA y viene de antes: es la vía por
+  // la que una persona suspendida puede preguntar por qué lo está. Ver
+  // `lib/auth/suspension.ts`, donde está la explicación entera.
+  if (isAppRoute && user) {
+    const perfil = await resolveProfile(supabase, user.id)
+
+    if (shouldBlockSuspended(perfil?.status, pathname)) {
+      const redirectUrl = request.nextUrl.clone()
+      redirectUrl.pathname = SUSPENDED_REDIRECT_PATH
       redirectUrl.search = ''
       return NextResponse.redirect(redirectUrl)
     }
@@ -103,7 +136,8 @@ export async function updateSession(request: NextRequest) {
   // seguro es el área de cliente.
   const isAuthRoute = pathname === '/login' || pathname === '/registro'
   if (isAuthRoute && user) {
-    const platformRole = await resolvePlatformRole(supabase, user.id)
+    const perfil = await resolveProfile(supabase, user.id)
+    const platformRole = perfil?.role ?? null
 
     const destination =
       platformRole === 'platform_admin' ? '/admin/dashboard' : '/app/dashboard'

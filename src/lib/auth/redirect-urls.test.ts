@@ -216,13 +216,26 @@ describe('/auth/callback — redirige con rutas relativas', () => {
 
   it('la cabecera Location lleva una ruta interna, sin esquema ni host', () => {
     expect(codigo).toContain('Location: ruta')
-    const destinos = [...codigo.matchAll(/redirigirA\(\s*'([^']+)'\s*\)/g)].map((m) => m[1])
+    // Dos salidas desde el hotfix de invitaciones: la normal y la de error, que
+    // además corta el fragmento heredado. Se comprueban las dos.
+    const destinos = [
+      ...codigo.matchAll(/redirigirA(?:ErrorSinFragmento)?\(\s*'([^']+)'\s*\)/g),
+    ].map((m) => m[1])
     expect(destinos.length).toBeGreaterThan(0)
     for (const d of destinos) {
       expect(d.startsWith('/'), d).toBe(true)
       expect(d.startsWith('//'), d).toBe(false)
       expect(d).not.toContain('://')
     }
+  })
+
+  // Un `access_token` que se hereda en la URL de una pantalla de error es una
+  // sesión completa en la barra de direcciones. Ver la explicación larga en el
+  // propio handler.
+  it('la salida de error corta el fragmento heredado', () => {
+    expect(codigo).toContain('redirigirAErrorSinFragmento')
+    expect(codigo).toMatch(/Location: `\$\{ruta\}#`/)
+    expect(codigo).not.toMatch(/return redirigirA\('\/login/)
   })
 
   it('sigue validando `next` para que nadie salte a un dominio ajeno', () => {

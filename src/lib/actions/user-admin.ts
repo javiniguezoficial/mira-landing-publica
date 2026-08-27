@@ -61,7 +61,14 @@ import {
 } from '@/lib/identity'
 import { translateMembershipError, membershipErrorDetail } from '@/lib/auth/member-write'
 import { createSupabaseAdminClient } from '@/lib/supabase/admin'
-import { buildRecoveryRedirectUrl } from '@/lib/auth/redirect-urls'
+import { buildInviteRedirectUrl } from '@/lib/auth/redirect-urls'
+import {
+  DELETION_MESSAGES,
+  deletionBlockMessages,
+  evaluateUserDeletion,
+  isDeletionConfirmed,
+  type UserDeletionFacts,
+} from '@/lib/auth/user-deletion'
 import {
   NEW_USER_MESSAGES,
   capabilitiesExceedOrganization,
@@ -927,10 +934,12 @@ export async function createAndInviteUser(
     // omite y Supabase usa su Site URL. Nunca puede colarse `0.0.0.0` ni
     // `localhost` en producción.
     //
-    // El destino es el mismo que el de recuperación de contraseña
-    // (`/auth/callback?next=/actualizar-password`): la persona invitada tiene
-    // que ESTABLECER su contraseña, que es exactamente lo que hace esa página.
-    const redirectTo = buildRecoveryRedirectUrl(process.env.NEXT_PUBLIC_APP_URL)
+    // El destino NO es `/auth/callback`. Una invitación se envía desde el
+    // servidor, así que el navegador de quien la recibe no tiene el «code
+    // verifier» que exige PKCE y Supabase devuelve la sesión en el FRAGMENTO de
+    // la URL — que jamás llega al servidor. Aterriza por eso en una pantalla de
+    // cliente que sí puede leerlo. Ver `INVITE_LANDING_PATH`.
+    const redirectTo = buildInviteRedirectUrl(process.env.NEXT_PUBLIC_APP_URL)
 
     const admin = await createSupabaseAdminClient()
     const { data: invitado, error: errorInvitacion } = await admin.auth.admin.inviteUserByEmail(
@@ -1031,6 +1040,202 @@ export async function createAndInviteUser(
     return avisos.length > 0
       ? { ok: true, userId: nuevoUserId, warning: `La invitación se envió, pero ${avisos.join(' y ')}.` }
       : { ok: true, userId: nuevoUserId }
+  } catch (e) {
+    if (isAuthorizationError(e)) return { ok: false, error: NEW_USER_MESSAGES.permiso }
+    throw e
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ELIMINACIÓN DEFINITIVA DE UNA CUENTA
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface DeleteUserInput {
+  userId: string
+  /** El correo EXACTO de la cuenta, tecleado por quien elimina. */
+  confirmation: string
+}
+
+export type DeleteUserResult =
+  | { ok: true }
+  | { ok: false; error: string; blocks?: string[] }
+
+/**
+ * Elimina una cuenta para siempre.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * ORDEN, Y POR QUÉ ES ESTE
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ *   1. autorizar `platform_admin`
+ *   2. cargar el objetivo DESDE EL SERVIDOR (perfil + correo real)
+ *   3. comprobar la confirmación escrita contra el correo REAL
+ *   4. reunir dependencias
+ *   5. decidir con `evaluateUserDeletion` — si bloquea, no se toca nada
+ *   6. `deleteUser()` — una sola llamada; el resto CASCADEA en la base
+ *   7. auditar
+ *
+ * Del 1 al 5 no se escribe absolutamente nada: un fallo ahí no deja rastro.
+ *
+ * ── Por qué el borrado es UNA sola llamada ───────────────────────────────
+ *
+ * Porque el esquema ya lo resuelve. `profiles.id → auth.users` es CASCADE, y de
+ * `profiles` cuelgan en CASCADE `organization_members` y
+ * `user_market_favorites`. Borrar a mano tabla por tabla sería reimplementar en
+ * TypeScript algo que PostgreSQL hace en una transacción, y añadiría justo el
+ * problema que se quiere evitar: quedarse a medias.
+ *
+ * Lo que NO cascadea —noticias, importaciones, mensajes de soporte— es
+ * `SET NULL`: el registro se conserva y solo pierde el autor. Y lo que
+ * DESTRUIRÍA histórico —tickets de soporte, cotizaciones— está bloqueado en el
+ * paso 5, así que nunca se llega a borrar.
+ *
+ * ── Auth y Postgres no comparten transacción ─────────────────────────────
+ *
+ * No hace falta que la compartan, porque solo hay UNA escritura. `deleteUser()`
+ * o borra la fila de `auth.users` —y entonces la cascada ocurre dentro de la
+ * misma transacción de PostgreSQL— o no la borra y no cambia nada. No existe el
+ * estado «cuenta medio eliminada».
+ *
+ * El único paso posterior es la auditoría, y va después a propósito: registrar
+ * un borrado que luego falla sería peor que registrarlo tarde. Si el registro
+ * fallara, `writeAuditEntry` lo deja en el log del servidor.
+ *
+ * ── El registro sobrevive a la cuenta ────────────────────────────────────
+ *
+ * `admin_audit_log` no tiene claves foráneas (039, deliberado). Por eso, tras
+ * eliminar a alguien, sigue constando quién lo hizo y sobre qué identificador.
+ *
+ * ── El cliente privilegiado ──────────────────────────────────────────────
+ *
+ * Misma contención que la invitación: se crea DESPUÉS de autorizar y de
+ * decidir, se usa solo para `deleteUser`, nunca para leer o escribir tablas, y
+ * no se enumeran cuentas — el objetivo llega por identificador y se relee.
+ */
+export async function deleteUserAccount(input: DeleteUserInput): Promise<DeleteUserResult> {
+  try {
+    // ── 1. Autorización ────────────────────────────────────────────────
+    const { supabase, userId: actorId } = await requirePlatformAdmin('throw')
+
+    const targetUserId = input.userId?.trim()
+    if (!targetUserId) return { ok: false, error: DELETION_MESSAGES.noExiste }
+
+    // ── 2. El objetivo, desde el SERVIDOR ──────────────────────────────
+    //
+    // El identificador viene del formulario, así que nada se da por bueno: el
+    // perfil se relee y el correo sale de `auth.users`, nunca del navegador.
+    const { data: perfil } = await supabase
+      .from('profiles')
+      .select('id, role, status')
+      .eq('id', targetUserId)
+      .maybeSingle()
+
+    if (!perfil) return { ok: false, error: DELETION_MESSAGES.noExiste }
+
+    const admin = await createSupabaseAdminClient()
+    const { data: cuenta, error: errorCuenta } = await admin.auth.admin.getUserById(targetUserId)
+
+    if (errorCuenta || !cuenta?.user?.email) {
+      console.error(
+        `[user-admin] no se pudo resolver la cuenta a eliminar: ${errorCuenta?.name ?? 'sin nombre'}`,
+      )
+      return { ok: false, error: DELETION_MESSAGES.noExiste }
+    }
+
+    // ── 3. Confirmación escrita ────────────────────────────────────────
+    //
+    // Contra el correo REAL leído de Auth, no contra el que pintó la pantalla.
+    if (!isDeletionConfirmed(input.confirmation, cuenta.user.email)) {
+      return { ok: false, error: DELETION_MESSAGES.confirmacion }
+    }
+
+    // ── 4. Dependencias ────────────────────────────────────────────────
+    const [
+      { data: owned },
+      { count: rfqs },
+      { count: tickets },
+      { count: noticias },
+      { count: importaciones },
+      { count: borrados },
+      { count: proveedores },
+      { count: admins },
+    ] = await Promise.all([
+      supabase
+        .from('organization_members')
+        .select('organizations ( name )')
+        .eq('user_id', targetUserId)
+        .eq('org_role', 'owner'),
+      supabase.from('rfqs').select('id', { count: 'exact', head: true }).eq('created_by', targetUserId),
+      supabase.from('support_tickets').select('id', { count: 'exact', head: true }).eq('user_id', targetUserId),
+      supabase.from('news').select('id', { count: 'exact', head: true }).eq('created_by', targetUserId),
+      supabase.from('market_import_batches').select('id', { count: 'exact', head: true }).eq('created_by', targetUserId),
+      supabase.from('market_price_deletion_batches').select('id', { count: 'exact', head: true }).eq('created_by', targetUserId),
+      supabase.from('supplier_update_batches').select('id', { count: 'exact', head: true }).eq('created_by', targetUserId),
+      supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'platform_admin').eq('status', 'active'),
+    ])
+
+    const hechos: UserDeletionFacts = {
+      actorId,
+      targetUserId,
+      targetIsPlatformAdmin: normalizePlatformRole(perfil.role) === 'platform_admin',
+      activeAdminCount: admins ?? 0,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ownedOrganizations: (owned ?? []).map((m: any) => m.organizations?.name ?? 'una organización'),
+      rfqCount: rfqs ?? 0,
+      supportTicketCount: tickets ?? 0,
+      authoredNewsCount: noticias ?? 0,
+      importBatchCount: importaciones ?? 0,
+      deletionBatchCount: borrados ?? 0,
+      supplierBatchCount: proveedores ?? 0,
+    }
+
+    // ── 5. Decisión ────────────────────────────────────────────────────
+    const veredicto = evaluateUserDeletion(hechos)
+    if (!veredicto.deletable) {
+      const motivos = deletionBlockMessages(veredicto, hechos)
+      return { ok: false, error: motivos[0], blocks: motivos }
+    }
+
+    // ══ Única escritura ════════════════════════════════════════════════
+    //
+    // ── 6. Borrar. La cascada la hace PostgreSQL, en su transacción ────
+    const { error: errorBorrado } = await admin.auth.admin.deleteUser(targetUserId)
+
+    if (errorBorrado) {
+      // Puede ser una dependencia que el paso 4 no contemple —si el esquema
+      // crece— o un fallo del servicio. No se filtra el mensaje del proveedor.
+      console.error(
+        `[user-admin] la eliminación de ${targetUserId} falló: ` +
+          `${errorBorrado.name} ${errorBorrado.status ?? ''} · admin=${actorId}`,
+      )
+      return {
+        ok: false,
+        error:
+          errorBorrado.status === 409 || errorBorrado.status === 500
+            ? DELETION_MESSAGES.dependenciaInesperada
+            : DELETION_MESSAGES.generico,
+      }
+    }
+
+    // ── 7. Auditoría ───────────────────────────────────────────────────
+    //
+    // Sin correo: `target_user_id` identifica la cuenta y el correo es un dato
+    // personal que no hace falta conservar indefinidamente para responder a
+    // «quién eliminó qué cuenta y cuándo».
+    await writeAuditEntry(supabase, {
+      actorId,
+      action: 'user.deleted',
+      targetUserId,
+      targetOrganizationId: null,
+      before: {
+        platform_role: normalizePlatformRole(perfil.role),
+        profile_status: perfil.status,
+      },
+      after: null,
+    })
+
+    refrescar(targetUserId, null)
+    return { ok: true }
   } catch (e) {
     if (isAuthorizationError(e)) return { ok: false, error: NEW_USER_MESSAGES.permiso }
     throw e

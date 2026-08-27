@@ -33,6 +33,26 @@ export const SIGNUP_NEXT_PATH = '/app/dashboard'
 /** Destino tras pulsar el enlace de recuperación de contraseña. */
 export const RECOVERY_NEXT_PATH = '/actualizar-password'
 
+/**
+ * Aterrizaje de una INVITACIÓN. No pasa por `/auth/callback`, y es deliberado.
+ *
+ * ── Por qué este flujo necesita otro destino ─────────────────────────────
+ *
+ * `/auth/callback` es un Route Handler: código de SERVIDOR. Sirve para los
+ * enlaces que vuelven con `?code=` (PKCE), que es lo que ocurre cuando la
+ * petición salió del propio navegador —recuperar contraseña, confirmar alta—.
+ *
+ * Una invitación la envía el SERVIDOR con `admin.inviteUserByEmail()`. La
+ * persona invitada nunca ha visitado la aplicación, así que su navegador no
+ * tiene el «code verifier» que exige PKCE, y Supabase devuelve la sesión en el
+ * FRAGMENTO de la URL (`#access_token=…`). El fragmento no se envía al
+ * servidor: el Route Handler no puede verlo ni podrá nunca.
+ *
+ * Por eso la invitación aterriza en una pantalla de CLIENTE. Unificarlo con el
+ * callback sería volver al fallo que se está corrigiendo.
+ */
+export const INVITE_LANDING_PATH = '/auth/invitacion'
+
 // ═══════════════════════════════════════════════════════════════════════════
 // HOSTS QUE NUNCA PUEDEN VIAJAR EN UN ENLACE (044 · hotfix)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -143,4 +163,21 @@ export function buildSignupRedirectUrl(baseUrl: string | null | undefined): stri
 /** Retorno del correo de recuperación de contraseña. */
 export function buildRecoveryRedirectUrl(baseUrl: string | null | undefined): string | null {
   return buildAuthRedirectUrl(baseUrl, RECOVERY_NEXT_PATH)
+}
+
+/**
+ * Retorno del correo de INVITACIÓN.
+ *
+ * A diferencia de los otros dos, NO pasa por `/auth/callback?next=…`: apunta
+ * directamente a la pantalla de cliente que sabe leer el fragmento. Ver
+ * `INVITE_LANDING_PATH`.
+ *
+ * Misma validación de base que el resto: si `NEXT_PUBLIC_APP_URL` no sirve
+ * —`0.0.0.0`, `localhost` en producción, o ausente— devuelve `null` y quien
+ * llama omite `redirectTo`, antes que mandar a nadie a una dirección rota.
+ */
+export function buildInviteRedirectUrl(baseUrl: string | null | undefined): string | null {
+  const base = normalizeBaseUrl(baseUrl)
+  if (!base) return null
+  return `${base}${INVITE_LANDING_PATH}`
 }

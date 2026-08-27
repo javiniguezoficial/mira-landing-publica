@@ -3,11 +3,14 @@ import { notFound } from 'next/navigation'
 import { Building2, ChevronLeft, History, ShieldAlert, UserCog, UserPlus } from 'lucide-react'
 import { requirePlatformAdmin } from '@/lib/auth/guards'
 import {
+  checkUserDeletable,
   countActivePlatformAdmins,
   getAdminUserDetail,
   getUserAuditTrail,
   listAssignableOrganizations,
 } from '@/lib/actions/users'
+import { DangerZoneCard } from '@/components/admin/users/DangerZoneCard'
+import { organizationRoleLabel } from '@/lib/identity'
 import { MiraSectionCard } from '@/components/mira/MiraSectionCard'
 import { MiraStatusBadge } from '@/components/mira/MiraStatusBadge'
 import { UserMembershipsPanel } from '@/components/admin/users/UserMembershipsPanel'
@@ -41,11 +44,15 @@ export default async function UsuarioDetailPage({
   // parcial en lugar de dejarlo enterrado en un log. Ver `createAndInviteUser`.
   const aviso = (await searchParams).aviso?.trim() || null
 
-  const [user, organizations, activeAdminCount, auditoria] = await Promise.all([
+  // El veredicto de eliminación se calcula en SERVIDOR y baja como prop: la
+  // pantalla explica por qué no se puede antes de que nadie pulse nada. La
+  // decisión de verdad la vuelve a tomar la acción con los hechos releídos.
+  const [user, organizations, activeAdminCount, auditoria, borrado] = await Promise.all([
     getAdminUserDetail(id),
     listAssignableOrganizations(),
     countActivePlatformAdmins(),
     getUserAuditTrail(id),
+    checkUserDeletable(id),
   ])
 
   if (!user) notFound()
@@ -199,6 +206,22 @@ export default async function UsuarioDetailPage({
           )}
         </div>
       </MiraSectionCard>
+
+      {/* ── Zona de peligro ────────────────────────────────────────────
+          Al final y en su propia tarjeta: eliminar no es una acción más de
+          la ficha, y es la única que no se puede deshacer. */}
+      <DangerZoneCard
+        userId={user.id}
+        email={user.email}
+        fullName={fullName}
+        organizationName={user.memberships[0]?.organizationName ?? null}
+        organizationRole={
+          user.memberships[0]?.orgRole ? organizationRoleLabel(user.memberships[0].orgRole) : null
+        }
+        blocks={borrado.blocks}
+        warnings={borrado.warnings}
+        isSelf={isSelf}
+      />
     </div>
   )
 }
