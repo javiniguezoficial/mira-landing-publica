@@ -52,10 +52,12 @@ const ACCIONES_ESPERADAS = [
   'updateUserProfileFields',
   'setUserPlatformRole',
   'setUserProfileStatus',
+  // 046 — alta administrativa: crea la cuenta y envía la invitación.
+  'createAndInviteUser',
 ] as const
 
 describe('todas las acciones exigen platform_admin', () => {
-  it('están las ocho', () => {
+  it('están las nueve', () => {
     for (const a of ACCIONES_ESPERADAS) {
       expect(ACCIONES, a).toContain(`export async function ${a}(`)
     }
@@ -86,8 +88,37 @@ describe('todas las acciones exigen platform_admin', () => {
 
   // El cliente privilegiado ignora RLS por completo. Su único uso admitido
   // sigue siendo leer los correos de `auth.users`, que no concede nada.
-  it('ninguna escritura usa el cliente de service_role', () => {
-    expect(sinComentarios(ACCIONES)).not.toContain('createSupabaseAdminClient')
+  // Hasta el alta administrativa, este archivo no tocaba `service_role` en
+  // absoluto y la comprobación era «no aparece». Crear una cuenta en Auth NO se
+  // puede hacer de otra forma: `inviteUserByEmail` es una operación de
+  // administración de Supabase y exige esa clave.
+  //
+  // La propiedad que protege este test sigue siendo la misma —el cliente
+  // privilegiado no debe usarse para saltarse RLS— pero ahora se comprueba de
+  // forma más precisa que «no existe»: se acota DÓNDE y PARA QUÉ.
+  it('el service_role solo se usa para dar de alta en Auth, nunca para escribir en tablas', () => {
+    const codigo = sinComentarios(ACCIONES)
+
+    // Un único punto de uso: el alta administrativa.
+    const usos = (codigo.match(/createSupabaseAdminClient/g) ?? []).length
+    expect(usos, 'import + una sola llamada').toBe(2)
+
+    const alta = codigo.slice(codigo.indexOf('export async function createAndInviteUser'))
+    expect(alta).toContain('createSupabaseAdminClient()')
+    expect(alta).toContain('admin.auth.admin.inviteUserByEmail')
+
+    // Y NUNCA para leer o escribir tablas: eso se salta RLS. El perfil y la
+    // pertenencia se escriben con el cliente de la sesión.
+    expect(codigo).not.toMatch(/\badmin\s*\.\s*from\(/)
+    expect(codigo).not.toContain('admin.rpc(')
+    // Tampoco para enumerar cuentas.
+    expect(codigo).not.toContain('listUsers')
+  })
+
+  it('el cliente privilegiado se crea DESPUÉS de autorizar', () => {
+    const codigo = sinComentarios(ACCIONES)
+    const alta = codigo.slice(codigo.indexOf('export async function createAndInviteUser'))
+    expect(alta.indexOf('requirePlatformAdmin')).toBeLessThan(alta.indexOf('createSupabaseAdminClient()'))
   })
 
   it('el service_role solo se usa para leer correos, en el módulo de lectura', () => {

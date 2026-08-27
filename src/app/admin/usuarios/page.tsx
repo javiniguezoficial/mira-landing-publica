@@ -1,8 +1,10 @@
-import { Users } from 'lucide-react'
+import Link from 'next/link'
+import { UserPlus, Users } from 'lucide-react'
 import { listAdminUsers, listAssignableOrganizations } from '@/lib/actions/users'
 import { UsersTable } from '@/components/admin/users/UsersTable'
 import { UsersFilterBar } from '@/components/admin/users/UsersFilterBar'
 import { MiraPageHeader } from '@/components/mira/MiraPageHeader'
+import { miraBtn } from '@/lib/miraButtons'
 import { hasActiveUserFilters, parseUserListParams } from '@/lib/users/list-params'
 
 export const dynamic = 'force-dynamic'
@@ -28,15 +30,23 @@ export default async function UsuariosPage({
 
   return (
     <div className="w-full space-y-6 p-4 md:p-6 xl:p-8">
-      <MiraPageHeader
-        icon={Users}
-        title="Usuarios"
-        subtitle={
-          hayFiltros
-            ? `${filtered} de ${total} usuario${total !== 1 ? 's' : ''} · filtrando`
-            : `${total} usuario${total !== 1 ? 's' : ''} registrado${total !== 1 ? 's' : ''}`
-        }
-      />
+      {/* El alta administrativa vive en su propia página: el formulario tiene
+          tres bloques y un resumen, y las capacidades dependen de la
+          organización elegida. Ver `/admin/usuarios/nuevo`. */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <MiraPageHeader
+          icon={Users}
+          title="Usuarios"
+          subtitle={
+            hayFiltros
+              ? `${filtered} de ${total} usuario${total !== 1 ? 's' : ''} · filtrando`
+              : `${total} usuario${total !== 1 ? 's' : ''} registrado${total !== 1 ? 's' : ''}`
+          }
+        />
+        <Link href="/admin/usuarios/nuevo" className={miraBtn.primary}>
+          <UserPlus size={14} /> Nuevo usuario
+        </Link>
+      </div>
 
       <UsersFilterBar filters={filters} organizations={organizations} />
 

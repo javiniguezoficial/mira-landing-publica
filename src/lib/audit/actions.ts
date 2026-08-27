@@ -14,6 +14,8 @@ export const ADMIN_AUDIT_ACTIONS = [
   'profile.updated',
   'profile.platform_role_changed',
   'profile.status_changed',
+  /** 046 — cuenta creada e invitada desde el panel de administración. */
+  'user.invited',
 ] as const
 
 export type AdminAuditAction = (typeof ADMIN_AUDIT_ACTIONS)[number]
@@ -25,6 +27,7 @@ export function isAdminAuditAction(raw: unknown): raw is AdminAuditAction {
 /** Etiquetas visibles del histórico. La interfaz nunca muestra el valor técnico. */
 export const ADMIN_AUDIT_ACTION_LABELS: Record<AdminAuditAction, string> = {
   'membership.created': 'Asignado a una organización',
+  'user.invited': 'Cuenta creada e invitada',
   'membership.role_changed': 'Cambio de rol en la organización',
   'membership.status_changed': 'Cambio de estado de la pertenencia',
   'membership.capabilities_changed': 'Cambio de capacidades comerciales',

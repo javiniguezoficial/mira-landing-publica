@@ -21,13 +21,25 @@ import { statusLabel } from '@/lib/identity'
 
 export const dynamic = 'force-dynamic'
 
-export default async function UsuarioDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function UsuarioDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<Record<string, string | undefined>>
+}) {
   // El layout de /admin ya exige `platform_admin`; se repite aquí porque esta
   // página necesita saber QUIÉN es el administrador para poder distinguir su
   // propia cuenta, y porque la defensa en profundidad no depende del layout.
   const { userId: actorId } = await requirePlatformAdmin()
 
   const { id } = await params
+
+  // El alta administrativa redirige aquí. Si algún paso posterior a la
+  // invitación no salió —el teléfono, el rol o la pertenencia—, llega en
+  // `?aviso=` y se enseña arriba del todo. Es lo que hace VISIBLE un estado
+  // parcial en lugar de dejarlo enterrado en un log. Ver `createAndInviteUser`.
+  const aviso = (await searchParams).aviso?.trim() || null
 
   const [user, organizations, activeAdminCount, auditoria] = await Promise.all([
     getAdminUserDetail(id),
@@ -44,6 +56,13 @@ export default async function UsuarioDetailPage({ params }: { params: Promise<{ 
 
   return (
     <div className="w-full max-w-4xl space-y-6 p-4 md:p-6 xl:p-8">
+      {aviso && (
+        <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <ShieldAlert size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+          {aviso}
+        </p>
+      )}
+
       {/* ── Cabecera ── */}
       <div>
         <Link

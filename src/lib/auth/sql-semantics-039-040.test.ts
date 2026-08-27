@@ -63,10 +63,29 @@ describe('registro de auditoría', () => {
     expect(SQL).not.toContain('on delete cascade')
   })
 
+  // La lista sigue siendo cerrada, pero desde 046 vive en DOS migraciones: la
+  // 039 la creó y la 046 la recreó añadiendo `user.invited`. Comprobar solo
+  // contra la 039 haría fallar cualquier ampliación legítima; comprobar contra
+  // ninguna dejaría de detectar una acción escrita a mano en el código.
+  //
+  // Se comprueba contra la lista VIGENTE, que es la de la última migración que
+  // tocó la restricción.
   it('la lista de acciones es cerrada y coincide con la del código', () => {
     expect(SQL).toContain('check (action in (')
+
+    const vigente = ejecutable(migracion('_046_'))
+    expect(vigente).toContain('check (action in (')
+
     for (const accion of ADMIN_AUDIT_ACTIONS) {
-      expect(SQL, accion).toContain(`'${accion}'`)
+      expect(vigente, accion).toContain(`'${accion}'`)
+    }
+  })
+
+  it('la 046 solo AÑADE: no retira ninguna acción que existiera en la 039', () => {
+    const vigente = ejecutable(migracion('_046_'))
+    const original = [...SQL.matchAll(/'([a-z]+\.[a-z_]+)'/g)].map((m) => m[1])
+    for (const accion of new Set(original)) {
+      expect(vigente, accion).toContain(`'${accion}'`)
     }
   })
 

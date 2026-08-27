@@ -60,6 +60,20 @@ import {
   type PlatformRole,
 } from '@/lib/identity'
 import { translateMembershipError, membershipErrorDetail } from '@/lib/auth/member-write'
+import { createSupabaseAdminClient } from '@/lib/supabase/admin'
+import { buildRecoveryRedirectUrl } from '@/lib/auth/redirect-urls'
+import {
+  NEW_USER_MESSAGES,
+  capabilitiesExceedOrganization,
+  normalizeEmail,
+  normalizeName,
+  normalizeNewUserOrgRole,
+  normalizeNewUserPlatformRole,
+  normalizePhone,
+  organizationAcceptsNewMembers,
+  resolveCapabilities,
+  validateNewUser,
+} from '@/lib/auth/new-user'
 
 // ── Resultado ───────────────────────────────────────────────────────────────
 
@@ -716,3 +730,309 @@ export async function setUserProfileStatus(
 
 // Reexport de tipos que la interfaz necesita tipar sin importar el módulo puro.
 export type { AssignableOrgRole, AssignableMembershipStatus }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ALTA ADMINISTRATIVA DE USUARIOS  ·  crear e invitar
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface CreateAndInviteUserInput {
+  firstName: string
+  lastName?: string | null
+  email: string
+  phone?: string | null
+  platformRole: string
+  organizationId?: string | null
+  orgRole?: string | null
+  canBuy?: boolean
+  canSell?: boolean
+}
+
+export type CreateAndInviteUserResult =
+  | { ok: true; userId: string; warning?: string }
+  | { ok: false; error: string }
+
+/**
+ * Crea una cuenta y le envía la invitación de Supabase.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * ORDEN DE ESCRITURA, Y POR QUÉ ES ESTE
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Auth y PostgreSQL son dos sistemas distintos: NO existe una transacción que
+ * abarque a los dos. Da igual cómo se ordene, siempre hay una ventana. Lo que
+ * sí se puede elegir es DÓNDE cae esa ventana y qué queda si se cae dentro.
+ *
+ *   1. autorizar                     ─┐
+ *   2. validar la forma de la entrada │ nada escrito todavía:
+ *   3. leer y validar la organización │ un fallo aquí no deja rastro
+ *   4. comprobar duplicado de correo ─┘
+ *   ────────────────────────────────────────────────────────────────────────
+ *   5. invitar  → Supabase crea auth.users, el trigger `on_auth_user_created`
+ *                 crea `profiles` en la MISMA transacción, y sale el correo
+ *   6. completar el perfil (teléfono, rol de plataforma)
+ *   7. crear la pertenencia
+ *   8. auditar
+ *
+ * Todo lo que puede fallar por datos ocurre ANTES del paso 5. A partir de ahí
+ * solo quedan fallos de infraestructura.
+ *
+ * ── Qué pasa si algo falla después del paso 5 ────────────────────────────
+ *
+ * Falla el paso 6 → la cuenta existe y puede entrar; le falta el teléfono o
+ *                   sigue siendo `user` en vez de administrador. Se AVISA al
+ *                   administrador con el detalle y se arregla desde la ficha.
+ *
+ * Falla el paso 7 → la cuenta existe, sin organización. Se AVISA, y se arregla
+ *                   con «Asignar a organización», que ya existe. Es el estado
+ *                   parcial menos malo posible: la persona puede entrar, y lo
+ *                   que falta se ve en su ficha.
+ *
+ * En los dos casos el resultado es `ok: true` CON `warning`, no un éxito
+ * silencioso ni un error que haga pensar que no se ha creado nada — eso llevaría
+ * a reintentar y a chocar contra el duplicado.
+ *
+ * ── Por qué NO se borra la cuenta para compensar ─────────────────────────
+ *
+ * Porque el correo de invitación YA HA SALIDO en el paso 5: `inviteUserByEmail`
+ * crea y envía en la misma llamada. Borrar la cuenta dejaría un enlace vivo
+ * apuntando a un usuario inexistente, y a alguien con un correo que dice que
+ * tiene acceso a MIRA cuando no lo tiene. Un borrado automático es además la
+ * clase de operación que, con un fallo de lógica, acaba borrando cuentas
+ * legítimas. Se prefiere un estado parcial VISIBLE y reparable a uno destruido.
+ *
+ * ── Por qué la invitación no puede fallar «a medias» ─────────────────────
+ *
+ * `inviteUserByEmail` crea el usuario Y manda el correo. Si el correo no sale,
+ * la llamada devuelve error y NO hay usuario: no existe el caso «cuenta creada
+ * sin invitación». Por eso el envío está en el paso 5 y no al final.
+ *
+ * ── El cliente privilegiado ──────────────────────────────────────────────
+ *
+ * `createSupabaseAdminClient()` usa `SUPABASE_SERVICE_ROLE_KEY`, sin prefijo
+ * `NEXT_PUBLIC_`, así que Next no la incrusta en ningún bundle del navegador.
+ * Este archivo es `'use server'` y ningún componente cliente lo referencia. El
+ * cliente se crea DENTRO de la función, después de autorizar, y no se devuelve.
+ * Su único cometido es dar de alta en Auth: el perfil y la pertenencia se
+ * escriben con el cliente NORMAL, sujeto a RLS.
+ */
+export async function createAndInviteUser(
+  input: CreateAndInviteUserInput,
+): Promise<CreateAndInviteUserResult> {
+  try {
+    // ── 1. Autorización ────────────────────────────────────────────────
+    const { supabase, userId: actorId } = await requirePlatformAdmin('throw')
+
+    // ── 2. Forma de la entrada ─────────────────────────────────────────
+    const platformRole = normalizeNewUserPlatformRole(input.platformRole)
+    if (!platformRole) return { ok: false, error: NEW_USER_MESSAGES.rolPlataforma }
+
+    const organizationId = input.organizationId?.trim() || null
+    const orgRole = organizationId ? normalizeNewUserOrgRole(input.orgRole) : null
+
+    const fallo = validateNewUser({
+      firstName: input.firstName,
+      lastName: input.lastName,
+      email: input.email,
+      phone: input.phone,
+      platformRole,
+      organizationId,
+      orgRole,
+    })
+    if (fallo) return { ok: false, error: fallo }
+
+    const email = normalizeEmail(input.email)
+    const firstName = normalizeName(input.firstName)!
+    const lastName = normalizeName(input.lastName)
+    const phone = normalizePhone(input.phone)
+
+    // ── 3. La organización, contra la BASE ─────────────────────────────
+    //
+    // El `organization_id` llega del formulario, así que aquí no se da NADA por
+    // bueno: se relee la fila, se comprueba que existe, que su estado admite
+    // miembros y que el perfil comercial soporta las capacidades pedidas. Un
+    // identificador manipulado no encuentra fila y se rechaza.
+    let capacidades = { canBuy: false, canSell: false }
+    let organizationName: string | null = null
+
+    if (organizationId) {
+      const { data: org } = await supabase
+        .from('organizations')
+        .select('id, name, status, commercial_profile')
+        .eq('id', organizationId)
+        .maybeSingle()
+
+      if (!org) return { ok: false, error: NEW_USER_MESSAGES.orgNoExiste }
+      if (!organizationAcceptsNewMembers(org.status as string | null)) {
+        return { ok: false, error: NEW_USER_MESSAGES.orgNoAdmite }
+      }
+
+      const perfil = normalizeCommercialProfile(org.commercial_profile)
+
+      // Se pide algo que el perfil no permite → se FALLA, no se recorta en
+      // silencio: quien marcó la casilla tiene que enterarse.
+      if (capabilitiesExceedOrganization(perfil, input)) {
+        return { ok: false, error: NEW_USER_MESSAGES.capacidad }
+      }
+
+      capacidades = resolveCapabilities(perfil, input)
+      organizationName = org.name as string
+    }
+
+    // ── 4. ¿Existe ya esa cuenta? ──────────────────────────────────────
+    //
+    // Antes de crear nada. La RPC de 045 hace una búsqueda EXACTA por correo
+    // completo y solo responde a un administrador: no es una vía de enumeración.
+    const { data: existentes, error: errorBusqueda } = await supabase.rpc(
+      'admin_find_user_by_email',
+      { p_email: email },
+    )
+
+    if (errorBusqueda) {
+      console.error(
+        `[user-admin] la búsqueda por correo falló: ${errorBusqueda.code ?? '?'} ${errorBusqueda.message}`,
+      )
+      return { ok: false, error: NEW_USER_MESSAGES.generico }
+    }
+
+    const existente = Array.isArray(existentes) ? existentes[0] : null
+
+    if (existente?.user_id) {
+      // No se reutiliza la cuenta en silencio: se dice que ya existe y cuál es
+      // el camino correcto, que es el flujo de asignación que ya hay.
+      if (!organizationId) {
+        return { ok: false, error: NEW_USER_MESSAGES.yaExiste }
+      }
+
+      const { data: pertenencia } = await supabase
+        .from('organization_members')
+        .select('id')
+        .eq('organization_id', organizationId)
+        .eq('user_id', existente.user_id as string)
+        .maybeSingle()
+
+      return {
+        ok: false,
+        error: pertenencia
+          ? `${NEW_USER_MESSAGES.yaExiste} Además, esa persona ya pertenece a ${organizationName}.`
+          : `${NEW_USER_MESSAGES.yaExiste} Para añadirla a ${organizationName}, usa «Asignar a organización» desde su ficha.`,
+      }
+    }
+
+    // ══ A partir de aquí SÍ se escribe ═════════════════════════════════
+
+    // ── 5. Invitar. Crea la cuenta, el perfil (trigger) y manda el correo ──
+    //
+    // `redirectTo` sale del helper que se corrigió en el hotfix de Auth: valida
+    // el host y devuelve `null` si la base no es utilizable, en cuyo caso se
+    // omite y Supabase usa su Site URL. Nunca puede colarse `0.0.0.0` ni
+    // `localhost` en producción.
+    //
+    // El destino es el mismo que el de recuperación de contraseña
+    // (`/auth/callback?next=/actualizar-password`): la persona invitada tiene
+    // que ESTABLECER su contraseña, que es exactamente lo que hace esa página.
+    const redirectTo = buildRecoveryRedirectUrl(process.env.NEXT_PUBLIC_APP_URL)
+
+    const admin = await createSupabaseAdminClient()
+    const { data: invitado, error: errorInvitacion } = await admin.auth.admin.inviteUserByEmail(
+      email,
+      {
+        // `first_name` y `last_name` los lee el trigger `handle_new_user` para
+        // rellenar el perfil en la misma transacción que crea la cuenta.
+        data: { first_name: firstName, last_name: lastName },
+        ...(redirectTo ? { redirectTo } : {}),
+      },
+    )
+
+    if (errorInvitacion || !invitado?.user?.id) {
+      // Puede ser un correo ya registrado que la búsqueda no vio —una cuenta de
+      // Auth sin perfil, que no debería existir pero no es imposible—, o un
+      // fallo del servicio. No se filtra el mensaje del proveedor.
+      console.error(
+        `[user-admin] la invitación falló: ${errorInvitacion?.name ?? 'sin nombre'} ` +
+          `${errorInvitacion?.status ?? ''} ${errorInvitacion?.message ?? ''} · admin=${actorId}`,
+      )
+      return {
+        ok: false,
+        error:
+          errorInvitacion?.status === 422
+            ? NEW_USER_MESSAGES.yaExiste
+            : 'No se ha podido enviar la invitación. Comprueba el correo e inténtalo de nuevo.',
+      }
+    }
+
+    const nuevoUserId = invitado.user.id
+    const avisos: string[] = []
+
+    // ── 6. Completar el perfil ─────────────────────────────────────────
+    //
+    // El trigger ya ha creado la fila con el nombre y `role = 'client_member'`,
+    // que `normalizePlatformRole` interpreta como «Usuario». Aquí se fija el rol
+    // de forma explícita —para que el dato no dependa de un valor heredado— y se
+    // guarda el teléfono, que el trigger no conoce.
+    const { error: errorPerfil } = await supabase
+      .from('profiles')
+      .update({ phone, role: platformRole, status: 'active' })
+      .eq('id', nuevoUserId)
+
+    if (errorPerfil) {
+      console.error(
+        `[user-admin] la cuenta ${nuevoUserId} se creó pero su perfil no se completó: ` +
+          `${errorPerfil.code ?? '?'} ${errorPerfil.message} · admin=${actorId}`,
+      )
+      avisos.push('no se pudieron guardar todos los datos del perfil')
+    }
+
+    // ── 7. Pertenencia ─────────────────────────────────────────────────
+    if (organizationId && orgRole) {
+      const { error: errorMiembro } = await supabase.from('organization_members').insert({
+        organization_id: organizationId,
+        user_id: nuevoUserId,
+        org_role: orgRole,
+        role: LEGACY_ROLE_FOR_ASSIGNABLE[orgRole],
+        status: 'active',
+        can_buy: capacidades.canBuy,
+        can_sell: capacidades.canSell,
+        invited_by: actorId,
+      })
+
+      if (errorMiembro) {
+        console.error(
+          `${membershipErrorDetail('alta de usuario nuevo', errorMiembro)} · ` +
+            `cuenta ${nuevoUserId} creada SIN organización, requiere asignación manual · admin=${actorId}`,
+        )
+        avisos.push(
+          `no se pudo asignar a ${organizationName}. Hazlo desde su ficha con «Asignar a organización»`,
+        )
+      }
+    }
+
+    // ── 8. Auditoría ───────────────────────────────────────────────────
+    //
+    // Sin correo, sin teléfono y sin nada que no haga falta para responder a
+    // «¿quién creó esta cuenta, cuándo y con qué permisos?».
+    await writeAuditEntry(supabase, {
+      actorId,
+      action: 'user.invited',
+      targetUserId: nuevoUserId,
+      targetOrganizationId: organizationId,
+      before: null,
+      after: {
+        platform_role: platformRole,
+        profile_status: 'active',
+        org_role: orgRole,
+        can_buy: capacidades.canBuy,
+        can_sell: capacidades.canSell,
+        invited: true,
+      },
+    })
+
+    refrescar(nuevoUserId, organizationId)
+
+    return avisos.length > 0
+      ? { ok: true, userId: nuevoUserId, warning: `La invitación se envió, pero ${avisos.join(' y ')}.` }
+      : { ok: true, userId: nuevoUserId }
+  } catch (e) {
+    if (isAuthorizationError(e)) return { ok: false, error: NEW_USER_MESSAGES.permiso }
+    throw e
+  }
+}
