@@ -89,10 +89,11 @@ describe('capacidades del propietario', () => {
     expect(resolveOwnerCapabilities('seller')).toEqual({ canBuy: false, canSell: true })
   })
 
-  it('buyer_seller NO concede las dos: vender se habilita a mano', () => {
-    // El portal de vendedor no existe todavía; conceder can_sell aquí sería
-    // abrir una capacidad sin superficie que la ejercite.
-    expect(resolveOwnerCapabilities('buyer_seller')).toEqual({ canBuy: true, canSell: false })
+  it('buyer_seller concede LAS DOS (053)', () => {
+    // El bug que arrastraba desde la 026: quien pedía «Compro y vendo» se
+    // quedaba con la mitad. La 053 lo corrigió en SQL y este espejo se había
+    // quedado atrás.
+    expect(resolveOwnerCapabilities('buyer_seller')).toEqual({ canBuy: true, canSell: true })
   })
 
   it('un perfil desconocido no concede nada', () => {
@@ -104,11 +105,17 @@ describe('capacidades del propietario', () => {
 // ── Estado inicial: nunca lo decide el usuario ──────────────────────────────
 
 describe('estado inicial de la empresa', () => {
-  it('desde la landing SIEMPRE nace pendiente', () => {
-    expect(resolveInitialStatus(false)).toBe('pending')
-    // Aunque el navegador intente colar otro estado.
-    expect(resolveInitialStatus(false, 'active')).toBe('pending')
-    expect(resolveInitialStatus(false, 'suspended')).toBe('pending')
+  it('desde la landing nace ACTIVA con el correo confirmado (054)', () => {
+    expect(resolveInitialStatus(false)).toBe('active')
+    // El estado sigue sin decidirlo el usuario: lo que pida el navegador da
+    // igual, porque `solicitado` solo se mira en la rama administrativa.
+    expect(resolveInitialStatus(false, 'suspended')).toBe('active')
+    expect(resolveInitialStatus(false, 'rejected')).toBe('active')
+  })
+
+  it('desde la landing SIN correo confirmado sigue naciendo pendiente', () => {
+    expect(resolveInitialStatus(false, null, false)).toBe('pending')
+    expect(resolveInitialStatus(false, 'active', false)).toBe('pending')
   })
 
   it('8. la administración puede crear ya activa', () => {

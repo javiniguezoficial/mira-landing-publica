@@ -78,15 +78,18 @@ export function validateOrganizationSignup(
  * Capacidades del propietario según el perfil comercial de su empresa.
  *
  * Réplica exacta de la función SQL, y coherente con el techo que impone
- * `enforce_membership_rules`. En `buyer_seller` NO se conceden las dos: vender
- * se habilita a mano cuando exista el portal de vendedor.
+ * `enforce_membership_rules`. La matriz, corregida en la 053:
+ *
+ *   buyer        → comprar ✓ · vender ✗
+ *   seller       → comprar ✗ · vender ✓
+ *   buyer_seller → comprar ✓ · vender ✓
  */
 export function resolveOwnerCapabilities(
   commercialProfile: CommercialProfile | string | null | undefined,
 ): { canBuy: boolean; canSell: boolean } {
   return {
     canBuy: commercialProfile === 'buyer' || commercialProfile === 'buyer_seller',
-    canSell: commercialProfile === 'seller',
+    canSell: commercialProfile === 'seller' || commercialProfile === 'buyer_seller',
   }
 }
 
@@ -105,15 +108,25 @@ export function isValidOrganizationStatus(
 /**
  * Estado con el que nace una empresa según quién la crea.
  *
- * Desde la landing SIEMPRE `pending`: no hay cobro y el acceso da entrada a
- * Market Intelligence y al catálogo de proveedores, así que activa una persona.
- * La administración sí puede crear ya activa.
+ * Desde la landing nace `active` (054): un registro público correcto no espera
+ * a que nadie lo apruebe. La única condición es el correo confirmado; sin él se
+ * cae a `pending` y la activa una persona. La administración conserva su
+ * comportamiento: `pending` salvo que pida explícitamente `active`.
+ *
+ * El estado NUNCA lo decide el usuario: `solicitado` solo se mira en la rama
+ * administrativa.
+ *
+ * `correoConfirmado` tiene valor por defecto porque en el flujo real es
+ * siempre cierto —sin confirmar no hay sesión, y sin sesión la RPC ni arranca—;
+ * el parámetro existe para espejar la guarda explícita que la 054 dejó escrita
+ * en SQL, que es la que manda.
  */
 export function resolveInitialStatus(
   esPlatformAdmin: boolean,
   solicitado?: string | null,
+  correoConfirmado = true,
 ): AdminInitialStatus {
-  if (!esPlatformAdmin) return 'pending'
+  if (!esPlatformAdmin) return correoConfirmado ? 'active' : 'pending'
   return isValidInitialStatus(solicitado) ? solicitado : 'pending'
 }
 
