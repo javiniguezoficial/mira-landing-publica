@@ -7,8 +7,10 @@ import { MiraLogo } from './MiraLogo'
 import { Button } from './Button'
 import { DataAnchor } from './DataAnchor'
 import { createClient } from '@/lib/supabase/client'
+import { completeOrganizationSignup } from '@/lib/actions/onboarding'
+import { needsOnboardingCompletion, type LoginNotice } from '@/lib/auth/signup-recovery'
 
-export const LoginPage = () => {
+export const LoginPage = ({ notice = null }: { notice?: LoginNotice | null }) => {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -30,6 +32,26 @@ export const LoginPage = () => {
     }
 
     const { data: { user } } = await supabase.auth.getUser()
+
+    // ── Alta pendiente del registro público ─────────────────────────────
+    //
+    // Si el callback de confirmación no pudo cerrar el alta (el flow state
+    // PKCE caduca a los pocos minutos y el correo se confirma igual), la
+    // empresa registrada quedó solo en la metadata. Este es el punto de
+    // recuperación: el PRIMER login la materializa. La comprobación es local
+    // —la metadata viaja con la sesión— y la acción es idempotente de verdad
+    // (la RPC devuelve la organización existente y un candado por usuario
+    // serializa cualquier carrera con el callback u otra pestaña), así que
+    // llamarla de más nunca duplica nada.
+    if (needsOnboardingCompletion(user?.user_metadata)) {
+      const resultado = await completeOrganizationSignup()
+      if (resultado.error) {
+        // No se bloquea el acceso: la cuenta es válida y el alta se
+        // reintentará sola en el siguiente login. Solo se deja constancia.
+        console.error('[login] el alta pendiente de la organización no se completó ahora')
+      }
+    }
+
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
@@ -78,6 +100,19 @@ export const LoginPage = () => {
                 Accede a tus mercados, alertas e informes personalizados
               </p>
             </div>
+
+            {notice && (
+              <div
+                role="status"
+                className={
+                  notice.tone === 'info'
+                    ? 'mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800'
+                    : 'mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800'
+                }
+              >
+                {notice.text}
+              </div>
+            )}
 
             <form className="space-y-5" onSubmit={handleSubmit}>
               <div>

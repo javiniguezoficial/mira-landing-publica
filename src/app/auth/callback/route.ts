@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { completeOrganizationSignup } from '@/lib/actions/onboarding'
+import { callbackFailureRedirect } from '@/lib/auth/signup-recovery'
 
 /**
  * `next` viene de la URL, así que puede apuntar a cualquier sitio. Solo se
@@ -119,11 +120,18 @@ export async function GET(request: Request) {
       return redirigirA(next)
     }
 
-    // El detalle se queda en el servidor: a la interfaz solo le llega
-    // `?error=auth`. Sin esto no había forma de distinguir un enlace caducado
-    // de una Site URL mal configurada en Supabase.
+    // El detalle se queda en el servidor. Pero el DESTINO sí distingue: si el
+    // canje murió por el flow state PKCE (caduca a los pocos minutos),
+    // `/verify` ya corrió y el correo QUEDÓ confirmado — decirle a esa persona
+    // que su enlace es inválido sería mentira. Se la manda a iniciar sesión
+    // con un aviso en claro, y el primer login completa el alta pendiente
+    // desde la metadata. Cualquier otro error conserva el `?error=auth` de
+    // siempre.
     console.error(
       `[auth] no se pudo canjear el código del enlace: ${error.name} ${error.status ?? ''} ${error.message}`,
+    )
+    return redirigirAErrorSinFragmento(
+      callbackFailureRedirect((error as { code?: string }).code),
     )
   } else {
     // Llegar aquí SIN `code` significa casi siempre que el enlace del correo no

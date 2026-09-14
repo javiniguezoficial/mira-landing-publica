@@ -1,6 +1,7 @@
 'use server'
 
 import { requireSession } from '@/lib/auth/guards'
+import { ONBOARDING_COMPLETED_KEY } from '@/lib/auth/signup-recovery'
 import { isAuthorizationError } from '@/lib/auth/errors'
 import {
   SIGNUP_MESSAGES,
@@ -69,6 +70,9 @@ export async function completeOrganizationSignup(
     .maybeSingle()
 
   if (yaMiembro?.organization_id) {
+    // También aquí se deja la marca: si el alta se completó por otra vía, el
+    // login deja de llamar a esta acción en cada inicio de sesión.
+    await marcarOnboardingCompletado(supabase)
     return { organizationId: yaMiembro.organization_id as string }
   }
 
@@ -107,5 +111,26 @@ export async function completeOrganizationSignup(
     return { error: translateSignupError(error) }
   }
 
+  await marcarOnboardingCompletado(supabase)
   return { organizationId: data as string }
+}
+
+/**
+ * Deja `onboarding_completed_at` en la metadata de Auth.
+ *
+ * Es lo que permite que el login detecte en un vistazo —sin consultar la
+ * base— si queda un alta a medias (ver `needsOnboardingCompletion`). MEJOR
+ * ESFUERZO a propósito: si esta escritura falla, lo único que pasa es que el
+ * siguiente login vuelve a llamar a esta acción, que es idempotente y saldrá
+ * por la rama de «ya es miembro». Nunca puede dejar nada a medias.
+ */
+async function marcarOnboardingCompletado(
+  supabase: Awaited<ReturnType<typeof requireSession>>['supabase'],
+): Promise<void> {
+  const { error } = await supabase.auth.updateUser({
+    data: { [ONBOARDING_COMPLETED_KEY]: new Date().toISOString() },
+  })
+  if (error) {
+    console.error(`[onboarding] no se pudo marcar la metadata como completada: ${error.name}`)
+  }
 }
