@@ -16,9 +16,9 @@
 //   profiles                       id → users      CASCADE     desaparece
 //   organization_members           user_id         CASCADE     desaparece  ← se quiere
 //   user_market_favorites          user_id         CASCADE     desaparece  ← preferencia
-//   support_tickets                user_id         CASCADE     DESAPARECE  ← histórico ⚠
-//   rfqs                           created_by      NO ACTION   BLOQUEA el borrado ⚠
 //   ─────────────────────────────────────────────────────────────────────────
+//   support_tickets                user_id         SET NULL    se conserva, se desvincula (051)
+//   rfqs                           created_by      SET NULL    se conserva, se desvincula (051)
 //   support_ticket_messages        author_id       SET NULL    se conserva, se desvincula
 //   news                           created_by      SET NULL    se conserva
 //   market_import_batches          created_by      SET NULL    se conserva
@@ -32,19 +32,21 @@
 //   admin_audit_log                actor_id        SIN FK      SOBREVIVE ← deliberado (039)
 //                                  target_user_id  SIN FK      SOBREVIVE
 //
-// ── Las tres conclusiones que gobiernan este archivo ─────────────────────
+// ── Las dos conclusiones que gobiernan este archivo ──────────────────────
 //
-//   1. `support_tickets` es CASCADE. Eliminar una cuenta con tickets BORRARÍA
-//      la conversación de soporte entera, mensajes incluidos. Eso es histórico
-//      y no se destruye: se BLOQUEA.
+//   1. Desde la 051 TODO el histórico es SET NULL: tickets, cotizaciones,
+//      noticias, importaciones… El registro se conserva y solo pierde el
+//      vínculo con la cuenta. La regla de producto es que el histórico jamás
+//      impida liberar una identidad: hoy se elimina usuario@empresa.com y en
+//      seis meses ese correo puede darse de alta como cuenta nueva. Por eso
+//      los antiguos bloqueos «tiene tickets» y «tiene cotizaciones» ya no
+//      existen: ahora son AVISOS, para que quien elimina sepa qué se queda
+//      desvinculado.
 //
-//   2. `rfqs.created_by` es NO ACTION y NOT NULL. La base rechazaría el borrado
-//      con un error de clave ajena. Se comprueba antes para poder explicarlo en
-//      castellano en vez de enseñar un fallo de PostgreSQL.
-//
-//   3. Todo lo demás que importa es SET NULL: el registro se conserva y solo
-//      pierde el vínculo con el autor. Eso NO bloquea, pero se avisa: quien
-//      elimina tiene que saber que seis noticias se van a quedar sin autor.
+//   2. Los únicos bloqueos son los que protegen la PLATAFORMA, no el
+//      histórico: uno mismo, el último administrador activo y la propiedad de
+//      una organización (transferirla es una decisión de negocio, no un efecto
+//      secundario de pulsar «Eliminar»).
 //
 // `admin_audit_log` sin FK es lo que permite que, después de eliminar a
 // alguien, siga constando quién lo hizo y sobre qué identificador.
@@ -64,10 +66,9 @@ export interface UserDeletionFacts {
   activeAdminCount: number
   /** Nombres de las organizaciones donde el objetivo es propietario. */
   ownedOrganizations: string[]
-  /** Cuentas con histórico que se DESTRUIRÍA. */
+  /** Registros que se DESVINCULAN al eliminar. Ninguno bloquea; se avisa. */
   rfqCount: number
   supportTicketCount: number
-  /** Registros que solo se DESVINCULAN. No bloquean; se avisa. */
   authoredNewsCount: number
   importBatchCount: number
   deletionBatchCount: number
@@ -78,8 +79,6 @@ export type DeletionBlockReason =
   | 'SELF'
   | 'LAST_ADMIN'
   | 'ORGANIZATION_OWNER'
-  | 'HAS_RFQS'
-  | 'HAS_SUPPORT_HISTORY'
 
 export interface DeletionVerdict {
   deletable: boolean
@@ -122,12 +121,9 @@ export function evaluateUserDeletion(facts: UserDeletionFacts): DeletionVerdict 
   //    negocio, no un efecto secundario de pulsar «Eliminar».
   if (facts.ownedOrganizations.length > 0) blocks.push('ORGANIZATION_OWNER')
 
-  // 4. RFQs: `rfqs.created_by` es NO ACTION NOT NULL. La base lo rechazaría de
-  //    todos modos; aquí se explica antes y en castellano.
-  if (facts.rfqCount > 0) blocks.push('HAS_RFQS')
-
-  // 5. Soporte: es CASCADE. Eliminar borraría la conversación entera.
-  if (facts.supportTicketCount > 0) blocks.push('HAS_SUPPORT_HISTORY')
+  // El histórico NO bloquea desde la 051: tickets y cotizaciones se conservan
+  // con el vínculo a NULL, igual que las noticias o las importaciones. Aparecen
+  // como avisos para que quien elimina sepa exactamente qué se desvincula.
 
   return { deletable: blocks.length === 0, blocks, warnings: buildWarnings(facts) }
 }
@@ -138,6 +134,16 @@ function buildWarnings(facts: UserDeletionFacts): string[] {
   const linea = (n: number, singular: string, plural: string) =>
     n === 1 ? `1 ${singular}` : `${n} ${plural}`
 
+  if (facts.supportTicketCount > 0) {
+    avisos.push(
+      `${linea(facts.supportTicketCount, 'conversación de soporte se conservará', 'conversaciones de soporte se conservarán')} sin vínculo con la cuenta.`,
+    )
+  }
+  if (facts.rfqCount > 0) {
+    avisos.push(
+      `${linea(facts.rfqCount, 'cotización se conservará', 'cotizaciones se conservarán')} sin creador; su organización las mantiene.`,
+    )
+  }
   if (facts.authoredNewsCount > 0) {
     avisos.push(`${linea(facts.authoredNewsCount, 'noticia', 'noticias')} se quedará sin autor.`)
   }
@@ -183,10 +189,6 @@ export function deletionBlockMessage(
       const empresas = facts.ownedOrganizations.join(', ')
       return `Este usuario es propietario de ${empresas}. Transfiere primero la propiedad antes de eliminarlo.`
     }
-    case 'HAS_RFQS':
-      return 'Este usuario ha creado cotizaciones que deben conservarse. Suspéndelo en lugar de eliminarlo.'
-    case 'HAS_SUPPORT_HISTORY':
-      return 'Este usuario tiene conversaciones de soporte que se perderían. Suspéndelo en lugar de eliminarlo.'
   }
 }
 

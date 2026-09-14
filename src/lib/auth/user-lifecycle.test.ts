@@ -215,22 +215,31 @@ describe('ELIMINAR · lo que lo bloquea', () => {
       .toContain('Acme Distribución S.L.')
   })
 
-  // `rfqs.created_by` es NO ACTION NOT NULL: la base lo rechazaría igualmente.
-  it('con cotizaciones creadas', () => {
-    expect(evaluateUserDeletion({ ...LIMPIA, rfqCount: 1 }).blocks).toContain('HAS_RFQS')
+  // 051 — la regla de producto: el histórico NUNCA bloquea la eliminación.
+  // Tickets y cotizaciones son SET NULL desde esa migración: se conservan
+  // desvinculados y el correo queda libre.
+  it('las cotizaciones ya NO bloquean: avisan', () => {
+    const v = evaluateUserDeletion({ ...LIMPIA, rfqCount: 3 })
+    expect(v.deletable).toBe(true)
+    expect(v.blocks).toEqual([])
+    expect(v.warnings.join(' ')).toContain('3 cotizaciones')
   })
 
-  // `support_tickets.user_id` es CASCADE: borraría la conversación entera.
-  it('con histórico de soporte', () => {
-    expect(evaluateUserDeletion({ ...LIMPIA, supportTicketCount: 1 }).blocks)
-      .toContain('HAS_SUPPORT_HISTORY')
+  it('el histórico de soporte ya NO bloquea: avisa', () => {
+    const v = evaluateUserDeletion({ ...LIMPIA, supportTicketCount: 1 })
+    expect(v.deletable).toBe(true)
+    expect(v.blocks).toEqual([])
+    expect(v.warnings.join(' ')).toContain('1 conversación de soporte')
   })
 
   it('se devuelven TODOS los motivos, no solo el primero', () => {
     const v = evaluateUserDeletion({
       ...LIMPIA, targetUserId: 'admin-1', ownedOrganizations: ['X'], rfqCount: 2, supportTicketCount: 1,
     })
-    expect(v.blocks).toEqual(['SELF', 'ORGANIZATION_OWNER', 'HAS_RFQS', 'HAS_SUPPORT_HISTORY'])
+    // El histórico ya no aparece entre los bloqueos: solo las protecciones de
+    // plataforma. Tickets y cotizaciones bajan a los avisos.
+    expect(v.blocks).toEqual(['SELF', 'ORGANIZATION_OWNER'])
+    expect(v.warnings.join(' ')).toContain('2 cotizaciones')
   })
 })
 
@@ -246,6 +255,19 @@ describe('ELIMINAR · lo que solo se desvincula', () => {
     expect(v.warnings.join(' ')).toContain('764 importaciones')
   })
 
+  it('un usuario con TODO el histórico posible sigue siendo eliminable', () => {
+    const v = evaluateUserDeletion({
+      ...LIMPIA, rfqCount: 5, supportTicketCount: 2, authoredNewsCount: 1,
+      importBatchCount: 3, deletionBatchCount: 1, supplierBatchCount: 1,
+    })
+    expect(v.deletable).toBe(true)
+    expect(v.blocks).toEqual([])
+    expect(v.warnings).toHaveLength(6)
+    // Soporte y cotizaciones van PRIMERO: son lo que más sorprende conservar.
+    expect(v.warnings[0]).toContain('conversaciones de soporte')
+    expect(v.warnings[1]).toContain('cotizaciones')
+  })
+
   it('el singular y el plural concuerdan', () => {
     const v = evaluateUserDeletion({ ...LIMPIA, authoredNewsCount: 1 })
     expect(v.warnings[0]).toContain('1 noticia ')
@@ -254,12 +276,10 @@ describe('ELIMINAR · lo que solo se desvincula', () => {
 
 describe('ELIMINAR · los mensajes', () => {
   it('cada bloqueo dice qué hacer en su lugar', () => {
-    for (const r of ['HAS_RFQS', 'HAS_SUPPORT_HISTORY'] as const) {
-      expect(deletionBlockMessage(r, { ownedOrganizations: [] }).toLowerCase()).toContain('suspénd')
-    }
     expect(deletionBlockMessage('ORGANIZATION_OWNER', { ownedOrganizations: ['X'] }))
       .toContain('Transfiere')
     expect(deletionBlockMessage('LAST_ADMIN', { ownedOrganizations: [] })).toContain('Nombra a otro')
+    expect(deletionBlockMessage('SELF', { ownedOrganizations: [] })).toContain('otro administrador')
   })
 
   it('ningún mensaje filtra SQL', () => {
@@ -356,9 +376,21 @@ describe('deleteUserAccount · contrato', () => {
     expect(sql039).not.toContain('references public.profiles')
   })
 
-  it('no guarda el correo en la auditoría', () => {
+  // 051 — criterio INVERTIDO a propósito. Antes se omitía el correo por
+  // privacidad; desde que el histórico sobrevive con los vínculos a NULL, la
+  // entrada user.deleted es el único sitio donde consta quién era la cuenta.
+  // Sin este snapshot, un ticket huérfano no se puede atribuir nunca más.
+  it('guarda correo y nombre en snapshot, y el recuento de lo desvinculado', () => {
     const bloque = CUERPO.slice(CUERPO.indexOf('writeAuditEntry'))
-    expect(bloque).not.toContain('email')
+    expect(bloque).toContain('email: cuenta.user.email')
+    expect(bloque).toContain('first_name')
+    expect(bloque).toContain('decoupled')
+    expect(bloque).toContain('support_tickets: hechos.supportTicketCount')
+    expect(bloque).toContain('rfqs: hechos.rfqCount')
+  })
+
+  it('verifica tras el borrado que el perfil ya no existe', () => {
+    expect(CUERPO).toMatch(/deleteUser\(targetUserId\)[\s\S]*from\('profiles'\)[\s\S]*maybeSingle\(\)/)
   })
 
   it('no filtra el mensaje del proveedor', () => {

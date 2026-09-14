@@ -1126,7 +1126,7 @@ export async function deleteUserAccount(input: DeleteUserInput): Promise<DeleteU
     // perfil se relee y el correo sale de `auth.users`, nunca del navegador.
     const { data: perfil } = await supabase
       .from('profiles')
-      .select('id, role, status')
+      .select('id, role, status, first_name, last_name')
       .eq('id', targetUserId)
       .maybeSingle()
 
@@ -1217,11 +1217,34 @@ export async function deleteUserAccount(input: DeleteUserInput): Promise<DeleteU
       }
     }
 
-    // ── 7. Auditoría ───────────────────────────────────────────────────
+    // ── 7. Verificar que la cascada hizo su trabajo ────────────────────
     //
-    // Sin correo: `target_user_id` identifica la cuenta y el correo es un dato
-    // personal que no hace falta conservar indefinidamente para responder a
-    // «quién eliminó qué cuenta y cuándo».
+    // `deleteUser` sin error implica que la fila de `auth.users` ya no está y
+    // que la cascada corrió en su transacción. Esta lectura lo comprueba de
+    // verdad en lugar de suponerlo: si el perfil siguiera ahí, algo en el
+    // esquema habría cambiado por debajo y hay que enterarse HOY, no cuando
+    // alguien intente reutilizar el correo.
+    const { data: residuo } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', targetUserId)
+      .maybeSingle()
+
+    if (residuo) {
+      console.error(
+        `[user-admin] VERIFICACIÓN: la cuenta ${targetUserId} salió de Auth pero su perfil ` +
+          `sigue existiendo. Revisar las FK de profiles. · admin=${actorId}`,
+      )
+    }
+
+    // ── 8. Auditoría, con la identidad en SNAPSHOT ─────────────────────
+    //
+    // Desde la 051 el histórico sobrevive con sus vínculos a NULL, así que esta
+    // entrada pasa a ser el ÚNICO sitio donde consta quién era la cuenta: el
+    // correo y el nombre se guardan aquí a propósito —cambio deliberado sobre
+    // el criterio anterior, que los omitía— porque sin ellos un ticket huérfano
+    // no se puede atribuir nunca más. También se anota cuánto histórico quedó
+    // desvinculado, para poder auditar el efecto exacto de cada eliminación.
     await writeAuditEntry(supabase, {
       actorId,
       action: 'user.deleted',
@@ -1230,8 +1253,20 @@ export async function deleteUserAccount(input: DeleteUserInput): Promise<DeleteU
       before: {
         platform_role: normalizePlatformRole(perfil.role),
         profile_status: perfil.status,
+        email: cuenta.user.email,
+        first_name: perfil.first_name ?? null,
+        last_name: perfil.last_name ?? null,
       },
-      after: null,
+      after: {
+        decoupled: {
+          support_tickets: hechos.supportTicketCount,
+          rfqs: hechos.rfqCount,
+          news: hechos.authoredNewsCount,
+          import_batches: hechos.importBatchCount,
+          deletion_batches: hechos.deletionBatchCount,
+          supplier_batches: hechos.supplierBatchCount,
+        },
+      },
     })
 
     refrescar(targetUserId, null)

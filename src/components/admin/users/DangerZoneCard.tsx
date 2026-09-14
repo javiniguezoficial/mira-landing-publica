@@ -125,6 +125,12 @@ export function DangerZoneCard({
           </div>
 
           {warnings.length > 0 && (
+            <p className="text-xs font-semibold text-slate-600">
+              La cuenta se eliminará y el histórico asociado se conservará sin
+              acceso de usuario:
+            </p>
+          )}
+          {warnings.length > 0 && (
             <ul className="space-y-1.5">
               {warnings.map((w, i) => (
                 <li key={i} className="flex items-start gap-2 text-xs text-slate-600">
