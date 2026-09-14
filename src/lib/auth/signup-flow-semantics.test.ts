@@ -60,6 +60,23 @@ describe('login · el primer login completa el alta pendiente', () => {
     expect(s.indexOf('completeOrganizationSignup')).toBeLessThan(s.indexOf('router.push(destination)'))
   })
 
+  it('el gancho va envuelto en try/catch: nada puede congelar el botón', () => {
+    // El QA del 14-09: la Server Action moría en vuelo (el middleware
+    // interceptaba el POST) y el rechazo sin manejar dejaba «Iniciando
+    // sesión…» para siempre. Ahora el tramo posterior al signIn navega
+    // SIEMPRE, con o sin excepción.
+    const s = LOGIN()
+    expect(s).toMatch(/try\s*\{[\s\S]*?completeOrganizationSignup\(\)[\s\S]*?\}\s*catch/)
+    // Y el destino por defecto existe antes del try: la navegación no depende
+    // de que el bloque termine bien.
+    expect(s).toMatch(/let destination = '\/app\/dashboard'[\s\S]*try/)
+  })
+
+  it('el middleware deja pasar los POST de Server Action en /login y /registro', () => {
+    const mw = codigo('lib', 'supabase', 'middleware.ts')
+    expect(mw).toContain("isAuthRoute && user && request.method === 'GET'")
+  })
+
   it('un fallo del alta no bloquea el acceso: se registra y se sigue', () => {
     // La cuenta es válida con o sin organización; el reintento llega solo en
     // el siguiente login. Bloquear aquí dejaría a la persona fuera por un

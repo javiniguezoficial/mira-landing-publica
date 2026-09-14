@@ -31,34 +31,49 @@ export const LoginPage = ({ notice = null }: { notice?: LoginNotice | null }) =>
       return
     }
 
-    const { data: { user } } = await supabase.auth.getUser()
+    // A partir de aquí la sesión EXISTE: pase lo que pase, esta función
+    // termina navegando. Un fallo en el alta pendiente o en la consulta del
+    // rol jamás puede dejar el botón congelado en «Iniciando sesión…» — eso
+    // fue exactamente el QA del 14-09, cuando el middleware interceptaba el
+    // POST de la Server Action y el rechazo sin manejar paraba todo.
+    let destination = '/app/dashboard'
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
 
-    // ── Alta pendiente del registro público ─────────────────────────────
-    //
-    // Si el callback de confirmación no pudo cerrar el alta (el flow state
-    // PKCE caduca a los pocos minutos y el correo se confirma igual), la
-    // empresa registrada quedó solo en la metadata. Este es el punto de
-    // recuperación: el PRIMER login la materializa. La comprobación es local
-    // —la metadata viaja con la sesión— y la acción es idempotente de verdad
-    // (la RPC devuelve la organización existente y un candado por usuario
-    // serializa cualquier carrera con el callback u otra pestaña), así que
-    // llamarla de más nunca duplica nada.
-    if (needsOnboardingCompletion(user?.user_metadata)) {
-      const resultado = await completeOrganizationSignup()
-      if (resultado.error) {
-        // No se bloquea el acceso: la cuenta es válida y el alta se
-        // reintentará sola en el siguiente login. Solo se deja constancia.
-        console.error('[login] el alta pendiente de la organización no se completó ahora')
+      // ── Alta pendiente del registro público ───────────────────────────
+      //
+      // Si el callback de confirmación no pudo cerrar el alta (el flow state
+      // PKCE caduca a los pocos minutos y el correo se confirma igual), la
+      // empresa registrada quedó solo en la metadata. Este es el punto de
+      // recuperación: el PRIMER login la materializa. La comprobación es
+      // local —la metadata viaja con la sesión— y la acción es idempotente
+      // de verdad (la RPC devuelve la organización existente y un candado
+      // por usuario serializa cualquier carrera), así que llamarla de más
+      // nunca duplica nada.
+      if (needsOnboardingCompletion(user?.user_metadata)) {
+        try {
+          const resultado = await completeOrganizationSignup()
+          if (resultado.error) {
+            console.error('[login] el alta pendiente de la organización no se completó ahora')
+          }
+        } catch {
+          // La cuenta es válida con o sin organización: se entra igual y el
+          // alta se reintenta sola en el siguiente login.
+          console.error('[login] el alta pendiente de la organización falló; se continúa')
+        }
       }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user?.id ?? '')
+        .single()
+
+      if (profile?.role === 'platform_admin') destination = '/admin/dashboard'
+    } catch {
+      console.error('[login] no se pudo resolver el destino; se entra al área de cliente')
     }
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user?.id ?? '')
-      .single()
-
-    const destination = profile?.role === 'platform_admin' ? '/admin/dashboard' : '/app/dashboard'
     router.push(destination)
     router.refresh()
   }

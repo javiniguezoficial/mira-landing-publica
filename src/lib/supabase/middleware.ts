@@ -134,8 +134,16 @@ export async function updateSession(request: NextRequest) {
   // Usuario autenticado en /login o /registro → redirigir a su dashboard.
   // Aquí un rol desconocido NO deniega nada: solo elige destino, y el destino
   // seguro es el área de cliente.
+  //
+  // SOLO en navegaciones GET. Un POST a estas rutas es una Server Action de la
+  // propia página —el login llama a `completeOrganizationSignup()` justo
+  // después de `signInWithPassword`, cuando las cookies de sesión YA están
+  // puestas—. Interceptarlo aquí devolvía un 303 a HTML en lugar de la
+  // respuesta de la acción: la acción nunca se ejecutaba y el botón del login
+  // se quedaba congelado en «Iniciando sesión…» (QA real del 14-09). La
+  // experiencia de navegación no cambia: entrar por URL sigue siendo GET.
   const isAuthRoute = pathname === '/login' || pathname === '/registro'
-  if (isAuthRoute && user) {
+  if (isAuthRoute && user && request.method === 'GET') {
     const perfil = await resolveProfile(supabase, user.id)
     const platformRole = perfil?.role ?? null
 

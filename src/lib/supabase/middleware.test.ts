@@ -41,13 +41,13 @@ vi.mock('@supabase/ssr', () => ({
 const { updateSession } = await import('./middleware')
 const { NextRequest } = await import('next/server')
 
-function peticion(path: string) {
-  return new NextRequest(new Request(`http://localhost:3000${path}`))
+function peticion(path: string, method: string = 'GET') {
+  return new NextRequest(new Request(`http://localhost:3000${path}`, { method }))
 }
 
 /** Devuelve el destino de la redirección, o null si deja pasar. */
-async function destinoDe(path: string): Promise<string | null> {
-  const respuesta = await updateSession(peticion(path))
+async function destinoDe(path: string, method: string = 'GET'): Promise<string | null> {
+  const respuesta = await updateSession(peticion(path, method))
   const location = respuesta.headers.get('location')
   return location ? new URL(location).pathname : null
 }
@@ -177,6 +177,38 @@ describe('destino tras autenticarse', () => {
     escenario = { user: ANA, profile: { role: 'user', status: 'active' } }
     expect(await destinoDe('/login')).toBe('/app/dashboard')
     expect(await destinoDe('/app/dashboard')).toBeNull()
+  })
+
+  // La redirección de autenticados en /login y /registro es SOLO para
+  // navegaciones GET. Un POST a esas rutas es una Server Action de la propia
+  // página: el login llama a completeOrganizationSignup() justo después de
+  // signInWithPassword, con las cookies de sesión ya puestas. Interceptarlo
+  // devolvía un 303 a HTML, la acción nunca corría y el botón quedaba
+  // congelado en «Iniciando sesión…» (QA real del 14-09).
+  it('GET /login autenticado → redirige al dashboard', async () => {
+    escenario = { user: ANA, profile: { role: 'user', status: 'active' } }
+    expect(await destinoDe('/login', 'GET')).toBe('/app/dashboard')
+  })
+
+  it('POST /login autenticado (Server Action) → NO se intercepta', async () => {
+    escenario = { user: ANA, profile: { role: 'user', status: 'active' } }
+    expect(await destinoDe('/login', 'POST')).toBeNull()
+  })
+
+  it('GET /registro autenticado → redirige al dashboard', async () => {
+    escenario = { user: ANA, profile: { role: 'user', status: 'active' } }
+    expect(await destinoDe('/registro', 'GET')).toBe('/app/dashboard')
+  })
+
+  it('POST /registro autenticado (Server Action) → NO se intercepta', async () => {
+    escenario = { user: ANA, profile: { role: 'user', status: 'active' } }
+    expect(await destinoDe('/registro', 'POST')).toBeNull()
+  })
+
+  it('los guards de /app y /admin NO distinguen método: un POST anónimo tampoco entra', async () => {
+    escenario = { user: null }
+    expect(await destinoDe('/admin/dashboard', 'POST')).toBe('/login')
+    expect(await destinoDe('/app/dashboard', 'POST')).toBe('/login')
   })
 })
 
